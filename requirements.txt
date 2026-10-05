@@ -1,0 +1,13 @@
+pyspark==4.2.0
+pandas>=2.2,<3.0
+pyarrow>=18
+numpy
+scikit-learn
+mlflow==3.5.1
+sqlalchemy
+psycopg[binary]
+python-dotenv
+pyyaml
+jupyter
+pytest
+

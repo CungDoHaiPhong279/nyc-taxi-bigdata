@@ -1,0 +1,52 @@
+# Secrets and local environment
+.env
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Large or generated data (keep directory placeholders)
+data/raw/**
+!data/raw/**/
+!data/raw/**/.gitkeep
+!data/raw/raw_manifest.json
+data/bronze/**
+!data/bronze/**/
+!data/bronze/**/.gitkeep
+!data/bronze/bronze_manifest.json
+data/silver/**
+!data/silver/**/
+!data/silver/**/.gitkeep
+data/gold/**
+!data/gold/**/
+!data/gold/**/.gitkeep
+
+# Runtime output and model artifacts
+logs/**
+!logs/.gitkeep
+models/**
+!models/.gitkeep
+reports/**
+!reports/.gitkeep
+mlruns/
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+

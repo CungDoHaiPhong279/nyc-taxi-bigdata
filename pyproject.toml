@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nyc-taxi-bigdata"
+version = "0.1.0"
+description = "NYC taxi, weather, and calendar big-data project bootstrap"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

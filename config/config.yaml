@@ -1,0 +1,47 @@
+project:
+  name: nyc-taxi-bigdata
+  app_name: NYC-Taxi-BigData
+  python_version: "3.11"
+
+paths:
+  raw: data/raw
+  bronze: data/bronze
+  silver: data/silver
+  gold: data/gold
+  models: models
+  logs: logs
+
+spark:
+  master: local[*]
+  shuffle_partitions: 8
+  log_level: WARN
+
+database:
+  driver: postgresql+psycopg
+  host: localhost
+  port: 5432
+  name: nyc_taxi
+  user: nyc_taxi
+  password: change_me
+  schema: analytics
+
+mlflow:
+  tracking_uri: http://localhost:5000
+  experiment_name: nyc-taxi-fare-prediction
+
+data_quality:
+  allow_null_target: false
+  min_trip_distance: 0.0
+  max_trip_distance: 200.0
+  min_fare_amount: 0.0
+  max_fare_amount: 1000.0
+
+machine_learning:
+  target: fare_amount
+  train_ratio: 0.8
+  random_seed: 42
+  metrics:
+    - mae
+    - rmse
+    - r2
+
