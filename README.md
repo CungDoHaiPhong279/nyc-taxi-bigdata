@@ -4,9 +4,9 @@ Project cuối kỳ môn **Tích hợp và phân tích dữ liệu lớn**, xây
 pipeline tích hợp dữ liệu chuyến taxi New York với thời tiết, lịch/ngày lễ và
 taxi-zone lookup để hướng tới bài toán dự đoán `fare_amount`.
 
-**Step 1–4 đã hoàn tất:** project có dữ liệu Raw thật cho 01–06/2025,
-9 output Bronze và 9 output Silver đã được kiểm chứng. Gold và model training
-chưa chạy.
+**STEP 1–4.5 đã hoàn tất; STEP 5 đã build Gold:** project có dữ liệu Raw thật
+cho 01–06/2025, 9 output Bronze, 9 output Silver và 6/6 partition Gold được
+kiểm chứng. PostgreSQL load và model training chưa thực hiện.
 
 ## 1. Kiến trúc dự kiến
 
@@ -385,19 +385,84 @@ Toàn bộ 197,119 Taxi rejected rows có lý do chính là `invalid_duration`
 (dropoff không sau pickup). Các giá trị còn nghi vấn nhưng chưa đủ cơ sở loại
 được giữ và thống kê trong manifest.
 
+## Gold Layer
+
+Silver là các dataset đã chuẩn hóa và kiểm tra chất lượng; Gold tích hợp chúng
+thành một bảng chuyến đi phục vụ phân tích. Taxi Silver là bảng gốc. Pickup
+Zone, Dropoff Zone, Calendar và Weather đều được **LEFT JOIN**; chuyến không
+khớp dimension vẫn ở Gold với các cột enrichment là `null` và flag tương ứng
+là `false`. Pipeline phải kiểm tra khóa dimension duy nhất và số dòng không
+tăng sau từng join, không dùng `dropDuplicates` để che lỗi fan-out. **6/6
+partition Gold đã hợp lệ**, tổng **23.886.265** dòng, bằng đúng Taxi Silver;
+không mất dòng và không có fan-out sau các join.
+
+Khóa join: `pickup_location_id` và `dropoff_location_id` lần lượt nối với
+`location_id` của Taxi Zones; `pickup_date` nối với `calendar.date`;
+`pickup_date`/`pickup_hour` nối với `weather_date_nyc`/`weather_hour_nyc`.
+Weather UTC đã được Silver chuyển sang giờ địa phương NYC bằng timezone-aware
+conversion. Việc coi Taxi `timestamp_ntz` là giờ đồng hồ `America/New_York`
+để căn chỉnh là **giả định phân tích của project**, được hỗ trợ bởi kiểm tra
+DST thực nghiệm ở STEP 4.5, **không phải bảo đảm timezone chính thức từ TLC**.
+Gold không đổi Taxi sang UTC hay dùng offset UTC−5 cố định để join. Weather
+nguồn chỉ phủ tới 30/06/2025 23:00 UTC (khoảng 19:00 NYC), nên các chuyến
+cuối ngày 30/06 có thể không match và vẫn phải được giữ, thống kê.
+
+Gold bổ sung `pickup_zone_matched`, `dropoff_zone_matched`,
+`calendar_matched`, `weather_matched` và các cột lineage `_gold_batch_id`,
+`_gold_processed_at`. Chạy theo **tháng file nguồn Taxi** vào
+`data/gold/taxi_enriched/year=2025/month=MM/` (Parquet + Snappy), không
+repartition theo tháng lịch pickup. `data/gold/gold_manifest.json` lưu số dòng,
+match/unmatch, schema, lineage Silver → Gold và trạng thái validation; manifest
+nhỏ có thể commit, Gold Parquet được Git ignore. Gold không thêm quy tắc làm
+sạch Taxi: fare âm, distance bằng 0 và passenger null vẫn được giữ.
+
+Kết quả join trên cả sáu tháng: pickup/dropoff Zone đều **0 unmatched**;
+Calendar **24 unmatched** (21 pickup tháng 12/2024, 3 pickup lịch sử năm
+2007/2009); Weather **20.246 unmatched**, gồm **20.243** chuyến cuối ngày
+30/06 vượt rìa phủ Weather local và **3** pickup lịch sử. Không có khóa Weather
+thiếu bất thường. Tất cả chuyến không match vẫn ở Gold và được ghi trong
+`data/gold/gold_manifest.json`.
+
+Chạy từ thư mục project, kiểm tra tháng 01 trước rồi mới chạy các tháng còn lại:
+
+```powershell
+python scripts/build_gold.py --month 2025-01
+python scripts/build_gold.py --start-month 2025-02 --end-month 2025-06
+python scripts/build_gold.py --all
+python scripts/build_gold.py --month 2025-01 --force
+```
+
+Chạy lại mặc định bỏ qua output đã hợp lệ; `--force` xây dựng lại partition đã
+chọn. Nếu Spark ghi Parquet trên Windows gặp vấn đề với `winutils.exe`, dùng
+Docker Linux với cùng dữ liệu trên host:
+
+```powershell
+docker build -f Dockerfile.spark -t nyc-taxi-spark:step3 .
+docker run --rm --network none --hostname gold-local --add-host gold-local:127.0.0.1 --cpus 4 --memory 8g --mount "type=bind,source=C:\nyc-taxi-bigdata,target=/app" -w /app -e PYTHONPATH=/app/src -e SPARK_LOCAL_IP=127.0.0.1 nyc-taxi-spark:step3 python scripts/build_gold.py --month 2025-01
+```
+
+Gold giữ cả các trường chỉ biết **sau** chuyến đi như thời gian trả khách,
+`payment_type`, `tip_amount`, `tolls_amount`, `total_amount` và quãng đường
+thực đo. Chúng hữu ích cho phân tích nhưng không tự động là predictor hợp lệ
+cho bài toán ước lượng giá cước *trước* chuyến; chọn feature ML là bước riêng.
+
 ## 13. Thiết kế ML dự kiến
 
 Target: `fare_amount`.
 
-Feature dự kiến: `trip_distance`, `passenger_count`, `pickup_hour`, `day_of_week`,
-`month`, `is_weekend`, `is_holiday`, pickup/dropoff location, temperature,
-precipitation, snow và wind speed.
+Feature ứng viên cho **ước lượng trước chuyến đi**: thời gian đón, pickup
+location, dropoff location nếu đã biết trước, thông tin Calendar và thời tiết
+dự báo sẵn tại thời điểm dự đoán. `passenger_count` chỉ dùng nếu thực sự đã biết
+trước chuyến. Thời tiết ERA5 hiện tại phù hợp phân tích lịch sử, không tự coi
+là dữ liệu dự báo có sẵn khi phục vụ mô hình thực tế.
 
 Ba model ứng viên: `LinearRegression`, `RandomForestRegressor` và
 `GradientBoostingRegressor`. Metrics: MAE, RMSE và R².
 
-`total_amount`, `tip_amount` và các thông tin chỉ biết sau chuyến đi không được dùng
-làm feature vì có thể gây data leakage.
+`trip_distance` thực đo, thời gian trả khách, `payment_type`, `total_amount`,
+`tip_amount`, `tolls_amount` và thông tin chỉ biết sau chuyến đi không được dùng
+làm predictor cho bài toán trước chuyến vì có thể gây data leakage. Gold vẫn
+giữ các trường này cho phân tích; tập train và feature selection là bước riêng.
 
 ## 14. Trạng thái triển khai
 
@@ -418,26 +483,28 @@ làm feature vì có thể gây data leakage.
 - PySpark Bronze → Silver cho sáu tháng Taxi, Weather, Taxi Zones và Calendar;
   chuẩn hóa, quality rules, dedupe, timezone-aware weather, holiday enrichment
   và lineage/quality manifest; 9/9 output đã được kiểm chứng trên dữ liệu thật.
+- PySpark Silver → Gold và CLI xử lý theo tháng với LEFT JOIN Taxi Zones,
+  Calendar, Weather; giữ unmatched, kiểm tra fan-out và ghi quality/lineage
+  manifest; 6/6 partition Gold đã được build và đánh dấu `valid` trong
+  `gold_manifest.json`.
 
 ### Chưa triển khai / planned
 
 - Versioning/snapshot dữ liệu nguồn theo nhiều lần cập nhật
-- PySpark ETL Silver → Gold
-- Quy tắc join weather theo thời gian/vị trí
 - Load Gold vào PostgreSQL
 - Train/tune/compare model và ghi MLflow runs/artifacts thật
 - Power BI dashboard
 - Airflow DAG, scheduling, monitoring và deployment production
 
-Các entry point Gold và training chưa triển khai sẽ báo
-`NotImplementedError` rõ ràng thay vì tạo output giả.
+Model training chưa triển khai; các entry point liên quan sẽ báo
+`NotImplementedError` thay vì tạo output giả.
 
 ## 15. Roadmap đề xuất
 
-1. Áp dụng giả định timezone Taxi của STEP 4.5 khi thiết kế Gold; nếu có xác
-   nhận trực tiếp khác về Parquet từ TLC/TSP thì cập nhật policy trước khi chạy.
-2. Thiết kế quy tắc join và xây Gold dataset từ các nguồn Silver.
-3. Load Gold vào PostgreSQL, sau đó xây train/validation pipeline và MLflow
-   experiments; kết nối Power BI khi dữ liệu phân tích đã ổn định.
+1. Kiểm tra Gold manifest và thống kê unmatched/fan-out sau khi build các
+   tháng; nếu TLC/TSP xác nhận khác về timezone Parquet thì đánh giá lại
+   giả định STEP 4.5 và tái xử lý có kiểm soát.
+2. Ở STEP 6, thiết kế data mart phân tích và load Gold vào PostgreSQL.
+3. Sau đó mới xây train/validation pipeline, MLflow experiments và Power BI.
 4. Chỉ sau khi pipeline ổn định mới bổ sung Airflow orchestration.
 

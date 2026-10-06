@@ -1,0 +1,1916 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-10-06T12:25:51.117759+00:00",
+  "datasets": [
+    {
+      "dataset_name": "taxi_2025-01",
+      "dataset": "taxi_enriched",
+      "partition": {
+        "year": 2025,
+        "month": "01"
+      },
+      "source_silver_path": "data/silver/taxi/year=2025/month=01",
+      "gold_path": "data/gold/taxi_enriched/year=2025/month=01",
+      "silver_rows": 3473175,
+      "gold_rows": 3473175,
+      "join_counts": {
+        "pickup_zone": {
+          "matched": 3473175,
+          "unmatched": 0
+        },
+        "dropoff_zone": {
+          "matched": 3473175,
+          "unmatched": 0
+        },
+        "calendar": {
+          "matched": 3473154,
+          "unmatched": 21
+        },
+        "weather": {
+          "matched": 3473175,
+          "unmatched": 0
+        }
+      },
+      "join_stage_counts": {
+        "pickup_zone": {
+          "before": 3473175,
+          "after": 3473175
+        },
+        "dropoff_zone": {
+          "before": 3473175,
+          "after": 3473175
+        },
+        "calendar": {
+          "before": 3473175,
+          "after": 3473175
+        },
+        "weather": {
+          "before": 3473175,
+          "after": 3473175
+        }
+      },
+      "weather_unmatched_reasons": {
+        "out_of_analysis_period": 0,
+        "weather_edge_coverage": 0,
+        "unexpected_missing_weather_key": 0
+      },
+      "weather_local_coverage": {
+        "first_hour": "2024-12-31 19",
+        "last_hour": "2025-06-30 19"
+      },
+      "weather_null_statistics": {
+        "weather_timestamp_utc": 0,
+        "weather_timestamp_nyc": 0,
+        "temperature_2m": 0,
+        "precipitation": 0,
+        "snowfall": 0,
+        "wind_speed_10m": 0,
+        "weather_code": 0
+      },
+      "holiday_trip_count": 180215,
+      "rainy_trip_count": 374189,
+      "dry_trip_count": 3098986,
+      "source_silver_batch_id": "5681279ea2ea47a48988e140a1446e0f",
+      "source_silver_batches": {
+        "taxi": "5681279ea2ea47a48988e140a1446e0f",
+        "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+        "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+        "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+      },
+      "source_lineage": {
+        "raw_path": "data/raw/taxi/yellow_tripdata_2025-01.parquet",
+        "raw_sha256": "9af277e4c0d3f9deb30644da822981e1e7df6af58313170fd3aa8a474485488a",
+        "bronze_path": "data/bronze/taxi/year=2025/month=01",
+        "bronze_batch_id": "372a91efc5a544f69b1aac55a65faf3e",
+        "silver_path": "data/silver/taxi/year=2025/month=01",
+        "silver_batch_id": "5681279ea2ea47a48988e140a1446e0f",
+        "dimension_silver_batches": {
+          "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+          "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+          "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+        }
+      },
+      "gold_batch_id": "4e9696c901524438930b737bbac0aa50",
+      "gold_schema": {
+        "vendor_id": "int",
+        "pickup_datetime_local": "timestamp_ntz",
+        "dropoff_datetime_local": "timestamp_ntz",
+        "passenger_count": "bigint",
+        "trip_distance": "double",
+        "ratecode_id": "bigint",
+        "store_and_fwd_flag": "string",
+        "pickup_location_id": "int",
+        "dropoff_location_id": "int",
+        "payment_type": "bigint",
+        "fare_amount": "double",
+        "extra": "double",
+        "mta_tax": "double",
+        "tip_amount": "double",
+        "tolls_amount": "double",
+        "improvement_surcharge": "double",
+        "total_amount": "double",
+        "congestion_surcharge": "double",
+        "airport_fee": "double",
+        "cbd_congestion_fee": "double",
+        "_ingested_at": "timestamp",
+        "_source_file": "string",
+        "_source_dataset": "string",
+        "_ingestion_batch_id": "string",
+        "_source_year": "int",
+        "_source_month": "int",
+        "pickup_date": "date",
+        "pickup_hour": "int",
+        "pickup_year": "int",
+        "pickup_month": "int",
+        "_silver_batch_id": "string",
+        "_silver_processed_at": "timestamp",
+        "pickup_borough": "string",
+        "pickup_zone": "string",
+        "pickup_service_zone": "string",
+        "pickup_zone_matched": "boolean",
+        "dropoff_borough": "string",
+        "dropoff_zone": "string",
+        "dropoff_service_zone": "string",
+        "dropoff_zone_matched": "boolean",
+        "day_of_week": "int",
+        "is_weekend": "boolean",
+        "is_holiday": "boolean",
+        "holiday_name": "string",
+        "calendar_matched": "boolean",
+        "weather_timestamp_utc": "timestamp",
+        "weather_timestamp_nyc": "timestamp_ntz",
+        "temperature_2m": "double",
+        "precipitation": "double",
+        "snowfall": "double",
+        "wind_speed_10m": "double",
+        "weather_code": "bigint",
+        "weather_matched": "boolean",
+        "weather_unmatched_reason": "string",
+        "_gold_batch_id": "string",
+        "_gold_processed_at": "timestamp"
+      },
+      "processed_at_utc": "2026-10-06T12:21:09.487973+00:00",
+      "validation_status": "valid",
+      "analytical_summaries": {
+        "by_pickup_borough": [
+          {
+            "pickup_borough": "Manhattan",
+            "trips": 3087471
+          },
+          {
+            "pickup_borough": "Queens",
+            "trips": 294857
+          },
+          {
+            "pickup_borough": "Brooklyn",
+            "trips": 66025
+          },
+          {
+            "pickup_borough": "Bronx",
+            "trips": 14720
+          },
+          {
+            "pickup_borough": "Unknown",
+            "trips": 8094
+          },
+          {
+            "pickup_borough": "N/A",
+            "trips": 1379
+          },
+          {
+            "pickup_borough": "EWR",
+            "trips": 376
+          },
+          {
+            "pickup_borough": "Staten Island",
+            "trips": 253
+          }
+        ],
+        "by_pickup_hour": [
+          {
+            "pickup_hour": 0,
+            "trips": 93382
+          },
+          {
+            "pickup_hour": 1,
+            "trips": 64461
+          },
+          {
+            "pickup_hour": 2,
+            "trips": 43907
+          },
+          {
+            "pickup_hour": 3,
+            "trips": 28483
+          },
+          {
+            "pickup_hour": 4,
+            "trips": 20021
+          },
+          {
+            "pickup_hour": 5,
+            "trips": 22540
+          },
+          {
+            "pickup_hour": 6,
+            "trips": 50007
+          },
+          {
+            "pickup_hour": 7,
+            "trips": 102515
+          },
+          {
+            "pickup_hour": 8,
+            "trips": 141196
+          },
+          {
+            "pickup_hour": 9,
+            "trips": 142769
+          },
+          {
+            "pickup_hour": 10,
+            "trips": 148208
+          },
+          {
+            "pickup_hour": 11,
+            "trips": 159994
+          },
+          {
+            "pickup_hour": 12,
+            "trips": 175319
+          },
+          {
+            "pickup_hour": 13,
+            "trips": 186027
+          },
+          {
+            "pickup_hour": 14,
+            "trips": 202185
+          },
+          {
+            "pickup_hour": 15,
+            "trips": 213544
+          },
+          {
+            "pickup_hour": 16,
+            "trips": 216908
+          },
+          {
+            "pickup_hour": 17,
+            "trips": 253347
+          },
+          {
+            "pickup_hour": 18,
+            "trips": 267771
+          },
+          {
+            "pickup_hour": 19,
+            "trips": 220921
+          },
+          {
+            "pickup_hour": 20,
+            "trips": 194896
+          },
+          {
+            "pickup_hour": 21,
+            "trips": 205882
+          },
+          {
+            "pickup_hour": 22,
+            "trips": 182138
+          },
+          {
+            "pickup_hour": 23,
+            "trips": 136754
+          }
+        ],
+        "by_weekend_holiday": [
+          {
+            "is_weekend": false,
+            "is_holiday": true,
+            "trips": 180215
+          },
+          {
+            "is_weekend": null,
+            "is_holiday": null,
+            "trips": 21
+          },
+          {
+            "is_weekend": true,
+            "is_holiday": false,
+            "trips": 878603
+          },
+          {
+            "is_weekend": false,
+            "is_holiday": false,
+            "trips": 2414336
+          }
+        ],
+        "by_precipitation": [
+          {
+            "weather_class": "dry",
+            "trips": 3098986,
+            "average_fare": 17.145095770036587
+          },
+          {
+            "weather_class": "rainy",
+            "trips": 374189,
+            "average_fare": 16.569634649869705
+          }
+        ]
+      },
+      "output_size_bytes": 82819746,
+      "elapsed_seconds": 33.84
+    },
+    {
+      "dataset_name": "taxi_2025-02",
+      "dataset": "taxi_enriched",
+      "partition": {
+        "year": 2025,
+        "month": "02"
+      },
+      "source_silver_path": "data/silver/taxi/year=2025/month=02",
+      "gold_path": "data/gold/taxi_enriched/year=2025/month=02",
+      "silver_rows": 3572379,
+      "gold_rows": 3572379,
+      "join_counts": {
+        "pickup_zone": {
+          "matched": 3572379,
+          "unmatched": 0
+        },
+        "dropoff_zone": {
+          "matched": 3572379,
+          "unmatched": 0
+        },
+        "calendar": {
+          "matched": 3572379,
+          "unmatched": 0
+        },
+        "weather": {
+          "matched": 3572379,
+          "unmatched": 0
+        }
+      },
+      "join_stage_counts": {
+        "pickup_zone": {
+          "before": 3572379,
+          "after": 3572379
+        },
+        "dropoff_zone": {
+          "before": 3572379,
+          "after": 3572379
+        },
+        "calendar": {
+          "before": 3572379,
+          "after": 3572379
+        },
+        "weather": {
+          "before": 3572379,
+          "after": 3572379
+        }
+      },
+      "weather_unmatched_reasons": {
+        "out_of_analysis_period": 0,
+        "weather_edge_coverage": 0,
+        "unexpected_missing_weather_key": 0
+      },
+      "weather_local_coverage": {
+        "first_hour": "2024-12-31 19",
+        "last_hour": "2025-06-30 19"
+      },
+      "weather_null_statistics": {
+        "weather_timestamp_utc": 0,
+        "weather_timestamp_nyc": 0,
+        "temperature_2m": 0,
+        "precipitation": 0,
+        "snowfall": 0,
+        "wind_speed_10m": 0,
+        "weather_code": 0
+      },
+      "holiday_trip_count": 94433,
+      "rainy_trip_count": 653966,
+      "dry_trip_count": 2918413,
+      "source_silver_batch_id": "9f445a85422546cbbb4415f0e5e9f310",
+      "source_silver_batches": {
+        "taxi": "9f445a85422546cbbb4415f0e5e9f310",
+        "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+        "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+        "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+      },
+      "source_lineage": {
+        "raw_path": "data/raw/taxi/yellow_tripdata_2025-02.parquet",
+        "raw_sha256": "037cba555a73663f3a51a2c27816e40e3feb364769942bdf122b9da31e377bd3",
+        "bronze_path": "data/bronze/taxi/year=2025/month=02",
+        "bronze_batch_id": "1aab603f6cd14fd0a31b179770001c06",
+        "silver_path": "data/silver/taxi/year=2025/month=02",
+        "silver_batch_id": "9f445a85422546cbbb4415f0e5e9f310",
+        "dimension_silver_batches": {
+          "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+          "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+          "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+        }
+      },
+      "gold_batch_id": "067059ba205e41d5bf97f03f3311bd61",
+      "gold_schema": {
+        "vendor_id": "int",
+        "pickup_datetime_local": "timestamp_ntz",
+        "dropoff_datetime_local": "timestamp_ntz",
+        "passenger_count": "bigint",
+        "trip_distance": "double",
+        "ratecode_id": "bigint",
+        "store_and_fwd_flag": "string",
+        "pickup_location_id": "int",
+        "dropoff_location_id": "int",
+        "payment_type": "bigint",
+        "fare_amount": "double",
+        "extra": "double",
+        "mta_tax": "double",
+        "tip_amount": "double",
+        "tolls_amount": "double",
+        "improvement_surcharge": "double",
+        "total_amount": "double",
+        "congestion_surcharge": "double",
+        "airport_fee": "double",
+        "cbd_congestion_fee": "double",
+        "_ingested_at": "timestamp",
+        "_source_file": "string",
+        "_source_dataset": "string",
+        "_ingestion_batch_id": "string",
+        "_source_year": "int",
+        "_source_month": "int",
+        "pickup_date": "date",
+        "pickup_hour": "int",
+        "pickup_year": "int",
+        "pickup_month": "int",
+        "_silver_batch_id": "string",
+        "_silver_processed_at": "timestamp",
+        "pickup_borough": "string",
+        "pickup_zone": "string",
+        "pickup_service_zone": "string",
+        "pickup_zone_matched": "boolean",
+        "dropoff_borough": "string",
+        "dropoff_zone": "string",
+        "dropoff_service_zone": "string",
+        "dropoff_zone_matched": "boolean",
+        "day_of_week": "int",
+        "is_weekend": "boolean",
+        "is_holiday": "boolean",
+        "holiday_name": "string",
+        "calendar_matched": "boolean",
+        "weather_timestamp_utc": "timestamp",
+        "weather_timestamp_nyc": "timestamp_ntz",
+        "temperature_2m": "double",
+        "precipitation": "double",
+        "snowfall": "double",
+        "wind_speed_10m": "double",
+        "weather_code": "bigint",
+        "weather_matched": "boolean",
+        "weather_unmatched_reason": "string",
+        "_gold_batch_id": "string",
+        "_gold_processed_at": "timestamp"
+      },
+      "processed_at_utc": "2026-10-06T12:22:21.845311+00:00",
+      "validation_status": "valid",
+      "analytical_summaries": {
+        "by_pickup_borough": [
+          {
+            "pickup_borough": "Manhattan",
+            "trips": 3154008
+          },
+          {
+            "pickup_borough": "Queens",
+            "trips": 290947
+          },
+          {
+            "pickup_borough": "Brooklyn",
+            "trips": 96762
+          },
+          {
+            "pickup_borough": "Bronx",
+            "trips": 21451
+          },
+          {
+            "pickup_borough": "Unknown",
+            "trips": 7432
+          },
+          {
+            "pickup_borough": "N/A",
+            "trips": 1160
+          },
+          {
+            "pickup_borough": "EWR",
+            "trips": 314
+          },
+          {
+            "pickup_borough": "Staten Island",
+            "trips": 305
+          }
+        ],
+        "by_pickup_hour": [
+          {
+            "pickup_hour": 0,
+            "trips": 107464
+          },
+          {
+            "pickup_hour": 1,
+            "trips": 70487
+          },
+          {
+            "pickup_hour": 2,
+            "trips": 47839
+          },
+          {
+            "pickup_hour": 3,
+            "trips": 31215
+          },
+          {
+            "pickup_hour": 4,
+            "trips": 22942
+          },
+          {
+            "pickup_hour": 5,
+            "trips": 24356
+          },
+          {
+            "pickup_hour": 6,
+            "trips": 51244
+          },
+          {
+            "pickup_hour": 7,
+            "trips": 100715
+          },
+          {
+            "pickup_hour": 8,
+            "trips": 140066
+          },
+          {
+            "pickup_hour": 9,
+            "trips": 144926
+          },
+          {
+            "pickup_hour": 10,
+            "trips": 147970
+          },
+          {
+            "pickup_hour": 11,
+            "trips": 156838
+          },
+          {
+            "pickup_hour": 12,
+            "trips": 172839
+          },
+          {
+            "pickup_hour": 13,
+            "trips": 181112
+          },
+          {
+            "pickup_hour": 14,
+            "trips": 193608
+          },
+          {
+            "pickup_hour": 15,
+            "trips": 206186
+          },
+          {
+            "pickup_hour": 16,
+            "trips": 212889
+          },
+          {
+            "pickup_hour": 17,
+            "trips": 247949
+          },
+          {
+            "pickup_hour": 18,
+            "trips": 274003
+          },
+          {
+            "pickup_hour": 19,
+            "trips": 236950
+          },
+          {
+            "pickup_hour": 20,
+            "trips": 215351
+          },
+          {
+            "pickup_hour": 21,
+            "trips": 220339
+          },
+          {
+            "pickup_hour": 22,
+            "trips": 207003
+          },
+          {
+            "pickup_hour": 23,
+            "trips": 158088
+          }
+        ],
+        "by_weekend_holiday": [
+          {
+            "is_weekend": false,
+            "is_holiday": true,
+            "trips": 94433
+          },
+          {
+            "is_weekend": true,
+            "is_holiday": false,
+            "trips": 1053555
+          },
+          {
+            "is_weekend": false,
+            "is_holiday": false,
+            "trips": 2424391
+          }
+        ],
+        "by_precipitation": [
+          {
+            "weather_class": "dry",
+            "trips": 2918413,
+            "average_fare": 16.818395120911
+          },
+          {
+            "weather_class": "rainy",
+            "trips": 653966,
+            "average_fare": 16.449085518207518
+          }
+        ]
+      },
+      "output_size_bytes": 84577924,
+      "elapsed_seconds": 36.99
+    },
+    {
+      "dataset_name": "taxi_2025-03",
+      "dataset": "taxi_enriched",
+      "partition": {
+        "year": 2025,
+        "month": "03"
+      },
+      "source_silver_path": "data/silver/taxi/year=2025/month=03",
+      "gold_path": "data/gold/taxi_enriched/year=2025/month=03",
+      "silver_rows": 4122977,
+      "gold_rows": 4122977,
+      "join_counts": {
+        "pickup_zone": {
+          "matched": 4122977,
+          "unmatched": 0
+        },
+        "dropoff_zone": {
+          "matched": 4122977,
+          "unmatched": 0
+        },
+        "calendar": {
+          "matched": 4122975,
+          "unmatched": 2
+        },
+        "weather": {
+          "matched": 4122975,
+          "unmatched": 2
+        }
+      },
+      "join_stage_counts": {
+        "pickup_zone": {
+          "before": 4122977,
+          "after": 4122977
+        },
+        "dropoff_zone": {
+          "before": 4122977,
+          "after": 4122977
+        },
+        "calendar": {
+          "before": 4122977,
+          "after": 4122977
+        },
+        "weather": {
+          "before": 4122977,
+          "after": 4122977
+        }
+      },
+      "weather_unmatched_reasons": {
+        "out_of_analysis_period": 2,
+        "weather_edge_coverage": 0,
+        "unexpected_missing_weather_key": 0
+      },
+      "weather_local_coverage": {
+        "first_hour": "2024-12-31 19",
+        "last_hour": "2025-06-30 19"
+      },
+      "weather_null_statistics": {
+        "weather_timestamp_utc": 2,
+        "weather_timestamp_nyc": 2,
+        "temperature_2m": 2,
+        "precipitation": 2,
+        "snowfall": 2,
+        "wind_speed_10m": 2,
+        "weather_code": 2
+      },
+      "holiday_trip_count": 0,
+      "rainy_trip_count": 520944,
+      "dry_trip_count": 3602031,
+      "source_silver_batch_id": "454bbf5afb5845cc99adbe4e2acae72a",
+      "source_silver_batches": {
+        "taxi": "454bbf5afb5845cc99adbe4e2acae72a",
+        "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+        "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+        "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+      },
+      "source_lineage": {
+        "raw_path": "data/raw/taxi/yellow_tripdata_2025-03.parquet",
+        "raw_sha256": "20c4b77cce457b7cfdae77c5069ca7dc91c167f876a41467f4502ab69487a186",
+        "bronze_path": "data/bronze/taxi/year=2025/month=03",
+        "bronze_batch_id": "be4a7fcb7c194c579bab647f52804bad",
+        "silver_path": "data/silver/taxi/year=2025/month=03",
+        "silver_batch_id": "454bbf5afb5845cc99adbe4e2acae72a",
+        "dimension_silver_batches": {
+          "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+          "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+          "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+        }
+      },
+      "gold_batch_id": "e0fe67a3934241519c855400afdadb0b",
+      "gold_schema": {
+        "vendor_id": "int",
+        "pickup_datetime_local": "timestamp_ntz",
+        "dropoff_datetime_local": "timestamp_ntz",
+        "passenger_count": "bigint",
+        "trip_distance": "double",
+        "ratecode_id": "bigint",
+        "store_and_fwd_flag": "string",
+        "pickup_location_id": "int",
+        "dropoff_location_id": "int",
+        "payment_type": "bigint",
+        "fare_amount": "double",
+        "extra": "double",
+        "mta_tax": "double",
+        "tip_amount": "double",
+        "tolls_amount": "double",
+        "improvement_surcharge": "double",
+        "total_amount": "double",
+        "congestion_surcharge": "double",
+        "airport_fee": "double",
+        "cbd_congestion_fee": "double",
+        "_ingested_at": "timestamp",
+        "_source_file": "string",
+        "_source_dataset": "string",
+        "_ingestion_batch_id": "string",
+        "_source_year": "int",
+        "_source_month": "int",
+        "pickup_date": "date",
+        "pickup_hour": "int",
+        "pickup_year": "int",
+        "pickup_month": "int",
+        "_silver_batch_id": "string",
+        "_silver_processed_at": "timestamp",
+        "pickup_borough": "string",
+        "pickup_zone": "string",
+        "pickup_service_zone": "string",
+        "pickup_zone_matched": "boolean",
+        "dropoff_borough": "string",
+        "dropoff_zone": "string",
+        "dropoff_service_zone": "string",
+        "dropoff_zone_matched": "boolean",
+        "day_of_week": "int",
+        "is_weekend": "boolean",
+        "is_holiday": "boolean",
+        "holiday_name": "string",
+        "calendar_matched": "boolean",
+        "weather_timestamp_utc": "timestamp",
+        "weather_timestamp_nyc": "timestamp_ntz",
+        "temperature_2m": "double",
+        "precipitation": "double",
+        "snowfall": "double",
+        "wind_speed_10m": "double",
+        "weather_code": "bigint",
+        "weather_matched": "boolean",
+        "weather_unmatched_reason": "string",
+        "_gold_batch_id": "string",
+        "_gold_processed_at": "timestamp"
+      },
+      "processed_at_utc": "2026-10-06T12:22:55.781332+00:00",
+      "validation_status": "valid",
+      "analytical_summaries": {
+        "by_pickup_borough": [
+          {
+            "pickup_borough": "Manhattan",
+            "trips": 3558264
+          },
+          {
+            "pickup_borough": "Queens",
+            "trips": 377575
+          },
+          {
+            "pickup_borough": "Brooklyn",
+            "trips": 143036
+          },
+          {
+            "pickup_borough": "Bronx",
+            "trips": 34185
+          },
+          {
+            "pickup_borough": "Unknown",
+            "trips": 7580
+          },
+          {
+            "pickup_borough": "N/A",
+            "trips": 1544
+          },
+          {
+            "pickup_borough": "Staten Island",
+            "trips": 429
+          },
+          {
+            "pickup_borough": "EWR",
+            "trips": 364
+          }
+        ],
+        "by_pickup_hour": [
+          {
+            "pickup_hour": 0,
+            "trips": 134915
+          },
+          {
+            "pickup_hour": 1,
+            "trips": 88224
+          },
+          {
+            "pickup_hour": 2,
+            "trips": 52247
+          },
+          {
+            "pickup_hour": 3,
+            "trips": 41377
+          },
+          {
+            "pickup_hour": 4,
+            "trips": 33199
+          },
+          {
+            "pickup_hour": 5,
+            "trips": 33292
+          },
+          {
+            "pickup_hour": 6,
+            "trips": 60417
+          },
+          {
+            "pickup_hour": 7,
+            "trips": 112690
+          },
+          {
+            "pickup_hour": 8,
+            "trips": 156848
+          },
+          {
+            "pickup_hour": 9,
+            "trips": 163207
+          },
+          {
+            "pickup_hour": 10,
+            "trips": 166627
+          },
+          {
+            "pickup_hour": 11,
+            "trips": 178564
+          },
+          {
+            "pickup_hour": 12,
+            "trips": 193746
+          },
+          {
+            "pickup_hour": 13,
+            "trips": 205150
+          },
+          {
+            "pickup_hour": 14,
+            "trips": 218478
+          },
+          {
+            "pickup_hour": 15,
+            "trips": 226803
+          },
+          {
+            "pickup_hour": 16,
+            "trips": 236794
+          },
+          {
+            "pickup_hour": 17,
+            "trips": 270429
+          },
+          {
+            "pickup_hour": 18,
+            "trips": 299165
+          },
+          {
+            "pickup_hour": 19,
+            "trips": 281590
+          },
+          {
+            "pickup_hour": 20,
+            "trips": 271951
+          },
+          {
+            "pickup_hour": 21,
+            "trips": 267765
+          },
+          {
+            "pickup_hour": 22,
+            "trips": 244166
+          },
+          {
+            "pickup_hour": 23,
+            "trips": 185333
+          }
+        ],
+        "by_weekend_holiday": [
+          {
+            "is_weekend": null,
+            "is_holiday": null,
+            "trips": 2
+          },
+          {
+            "is_weekend": true,
+            "is_holiday": false,
+            "trips": 1386458
+          },
+          {
+            "is_weekend": false,
+            "is_holiday": false,
+            "trips": 2736517
+          }
+        ],
+        "by_precipitation": [
+          {
+            "weather_class": "dry",
+            "trips": 3602031,
+            "average_fare": 17.708751740337842
+          },
+          {
+            "weather_class": "rainy",
+            "trips": 520944,
+            "average_fare": 18.505931328511235
+          },
+          {
+            "weather_class": "unknown",
+            "trips": 2,
+            "average_fare": 34.85
+          }
+        ]
+      },
+      "output_size_bytes": 97732867,
+      "elapsed_seconds": 29.86
+    },
+    {
+      "dataset_name": "taxi_2025-04",
+      "dataset": "taxi_enriched",
+      "partition": {
+        "year": 2025,
+        "month": "04"
+      },
+      "source_silver_path": "data/silver/taxi/year=2025/month=04",
+      "gold_path": "data/gold/taxi_enriched/year=2025/month=04",
+      "silver_rows": 3935784,
+      "gold_rows": 3935784,
+      "join_counts": {
+        "pickup_zone": {
+          "matched": 3935784,
+          "unmatched": 0
+        },
+        "dropoff_zone": {
+          "matched": 3935784,
+          "unmatched": 0
+        },
+        "calendar": {
+          "matched": 3935784,
+          "unmatched": 0
+        },
+        "weather": {
+          "matched": 3935784,
+          "unmatched": 0
+        }
+      },
+      "join_stage_counts": {
+        "pickup_zone": {
+          "before": 3935784,
+          "after": 3935784
+        },
+        "dropoff_zone": {
+          "before": 3935784,
+          "after": 3935784
+        },
+        "calendar": {
+          "before": 3935784,
+          "after": 3935784
+        },
+        "weather": {
+          "before": 3935784,
+          "after": 3935784
+        }
+      },
+      "weather_unmatched_reasons": {
+        "out_of_analysis_period": 0,
+        "weather_edge_coverage": 0,
+        "unexpected_missing_weather_key": 0
+      },
+      "weather_local_coverage": {
+        "first_hour": "2024-12-31 19",
+        "last_hour": "2025-06-30 19"
+      },
+      "weather_null_statistics": {
+        "weather_timestamp_utc": 0,
+        "weather_timestamp_nyc": 0,
+        "temperature_2m": 0,
+        "precipitation": 0,
+        "snowfall": 0,
+        "wind_speed_10m": 0,
+        "weather_code": 0
+      },
+      "holiday_trip_count": 0,
+      "rainy_trip_count": 749644,
+      "dry_trip_count": 3186140,
+      "source_silver_batch_id": "0682bba74c6d4fb8a381c141005f2df3",
+      "source_silver_batches": {
+        "taxi": "0682bba74c6d4fb8a381c141005f2df3",
+        "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+        "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+        "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+      },
+      "source_lineage": {
+        "raw_path": "data/raw/taxi/yellow_tripdata_2025-04.parquet",
+        "raw_sha256": "6f98938de9380a3f85600533816f0dc0e6d9b5b210e485d623952bac599bbe28",
+        "bronze_path": "data/bronze/taxi/year=2025/month=04",
+        "bronze_batch_id": "0c7e92d1e9a2419faa73948e618ae866",
+        "silver_path": "data/silver/taxi/year=2025/month=04",
+        "silver_batch_id": "0682bba74c6d4fb8a381c141005f2df3",
+        "dimension_silver_batches": {
+          "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+          "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+          "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+        }
+      },
+      "gold_batch_id": "edf3c84e08374f0d8ccadc2674565a29",
+      "gold_schema": {
+        "vendor_id": "int",
+        "pickup_datetime_local": "timestamp_ntz",
+        "dropoff_datetime_local": "timestamp_ntz",
+        "passenger_count": "bigint",
+        "trip_distance": "double",
+        "ratecode_id": "bigint",
+        "store_and_fwd_flag": "string",
+        "pickup_location_id": "int",
+        "dropoff_location_id": "int",
+        "payment_type": "bigint",
+        "fare_amount": "double",
+        "extra": "double",
+        "mta_tax": "double",
+        "tip_amount": "double",
+        "tolls_amount": "double",
+        "improvement_surcharge": "double",
+        "total_amount": "double",
+        "congestion_surcharge": "double",
+        "airport_fee": "double",
+        "cbd_congestion_fee": "double",
+        "_ingested_at": "timestamp",
+        "_source_file": "string",
+        "_source_dataset": "string",
+        "_ingestion_batch_id": "string",
+        "_source_year": "int",
+        "_source_month": "int",
+        "pickup_date": "date",
+        "pickup_hour": "int",
+        "pickup_year": "int",
+        "pickup_month": "int",
+        "_silver_batch_id": "string",
+        "_silver_processed_at": "timestamp",
+        "pickup_borough": "string",
+        "pickup_zone": "string",
+        "pickup_service_zone": "string",
+        "pickup_zone_matched": "boolean",
+        "dropoff_borough": "string",
+        "dropoff_zone": "string",
+        "dropoff_service_zone": "string",
+        "dropoff_zone_matched": "boolean",
+        "day_of_week": "int",
+        "is_weekend": "boolean",
+        "is_holiday": "boolean",
+        "holiday_name": "string",
+        "calendar_matched": "boolean",
+        "weather_timestamp_utc": "timestamp",
+        "weather_timestamp_nyc": "timestamp_ntz",
+        "temperature_2m": "double",
+        "precipitation": "double",
+        "snowfall": "double",
+        "wind_speed_10m": "double",
+        "weather_code": "bigint",
+        "weather_matched": "boolean",
+        "weather_unmatched_reason": "string",
+        "_gold_batch_id": "string",
+        "_gold_processed_at": "timestamp"
+      },
+      "processed_at_utc": "2026-10-06T12:23:28.069988+00:00",
+      "validation_status": "valid",
+      "analytical_summaries": {
+        "by_pickup_borough": [
+          {
+            "pickup_borough": "Manhattan",
+            "trips": 3409692
+          },
+          {
+            "pickup_borough": "Queens",
+            "trips": 360416
+          },
+          {
+            "pickup_borough": "Brooklyn",
+            "trips": 126060
+          },
+          {
+            "pickup_borough": "Bronx",
+            "trips": 29869
+          },
+          {
+            "pickup_borough": "Unknown",
+            "trips": 7300
+          },
+          {
+            "pickup_borough": "N/A",
+            "trips": 1628
+          },
+          {
+            "pickup_borough": "EWR",
+            "trips": 472
+          },
+          {
+            "pickup_borough": "Staten Island",
+            "trips": 347
+          }
+        ],
+        "by_pickup_hour": [
+          {
+            "pickup_hour": 0,
+            "trips": 117059
+          },
+          {
+            "pickup_hour": 1,
+            "trips": 75260
+          },
+          {
+            "pickup_hour": 2,
+            "trips": 51205
+          },
+          {
+            "pickup_hour": 3,
+            "trips": 33253
+          },
+          {
+            "pickup_hour": 4,
+            "trips": 26134
+          },
+          {
+            "pickup_hour": 5,
+            "trips": 29508
+          },
+          {
+            "pickup_hour": 6,
+            "trips": 60443
+          },
+          {
+            "pickup_hour": 7,
+            "trips": 116580
+          },
+          {
+            "pickup_hour": 8,
+            "trips": 157219
+          },
+          {
+            "pickup_hour": 9,
+            "trips": 166096
+          },
+          {
+            "pickup_hour": 10,
+            "trips": 172788
+          },
+          {
+            "pickup_hour": 11,
+            "trips": 185621
+          },
+          {
+            "pickup_hour": 12,
+            "trips": 201330
+          },
+          {
+            "pickup_hour": 13,
+            "trips": 211547
+          },
+          {
+            "pickup_hour": 14,
+            "trips": 226002
+          },
+          {
+            "pickup_hour": 15,
+            "trips": 232344
+          },
+          {
+            "pickup_hour": 16,
+            "trips": 240930
+          },
+          {
+            "pickup_hour": 17,
+            "trips": 268627
+          },
+          {
+            "pickup_hour": 18,
+            "trips": 275975
+          },
+          {
+            "pickup_hour": 19,
+            "trips": 239179
+          },
+          {
+            "pickup_hour": 20,
+            "trips": 220082
+          },
+          {
+            "pickup_hour": 21,
+            "trips": 235247
+          },
+          {
+            "pickup_hour": 22,
+            "trips": 223727
+          },
+          {
+            "pickup_hour": 23,
+            "trips": 169628
+          }
+        ],
+        "by_weekend_holiday": [
+          {
+            "is_weekend": true,
+            "is_holiday": false,
+            "trips": 1075722
+          },
+          {
+            "is_weekend": false,
+            "is_holiday": false,
+            "trips": 2860062
+          }
+        ],
+        "by_precipitation": [
+          {
+            "weather_class": "dry",
+            "trips": 3186140,
+            "average_fare": 18.12695605654551
+          },
+          {
+            "weather_class": "rainy",
+            "trips": 749644,
+            "average_fare": 17.346910960402635
+          }
+        ]
+      },
+      "output_size_bytes": 93776761,
+      "elapsed_seconds": 28.32
+    },
+    {
+      "dataset_name": "taxi_2025-05",
+      "dataset": "taxi_enriched",
+      "partition": {
+        "year": 2025,
+        "month": "05"
+      },
+      "source_silver_path": "data/silver/taxi/year=2025/month=05",
+      "gold_path": "data/gold/taxi_enriched/year=2025/month=05",
+      "silver_rows": 4527573,
+      "gold_rows": 4527573,
+      "join_counts": {
+        "pickup_zone": {
+          "matched": 4527573,
+          "unmatched": 0
+        },
+        "dropoff_zone": {
+          "matched": 4527573,
+          "unmatched": 0
+        },
+        "calendar": {
+          "matched": 4527572,
+          "unmatched": 1
+        },
+        "weather": {
+          "matched": 4527572,
+          "unmatched": 1
+        }
+      },
+      "join_stage_counts": {
+        "pickup_zone": {
+          "before": 4527573,
+          "after": 4527573
+        },
+        "dropoff_zone": {
+          "before": 4527573,
+          "after": 4527573
+        },
+        "calendar": {
+          "before": 4527573,
+          "after": 4527573
+        },
+        "weather": {
+          "before": 4527573,
+          "after": 4527573
+        }
+      },
+      "weather_unmatched_reasons": {
+        "out_of_analysis_period": 1,
+        "weather_edge_coverage": 0,
+        "unexpected_missing_weather_key": 0
+      },
+      "weather_local_coverage": {
+        "first_hour": "2024-12-31 19",
+        "last_hour": "2025-06-30 19"
+      },
+      "weather_null_statistics": {
+        "weather_timestamp_utc": 1,
+        "weather_timestamp_nyc": 1,
+        "temperature_2m": 1,
+        "precipitation": 1,
+        "snowfall": 1,
+        "wind_speed_10m": 1,
+        "weather_code": 1
+      },
+      "holiday_trip_count": 97241,
+      "rainy_trip_count": 1537781,
+      "dry_trip_count": 2989791,
+      "source_silver_batch_id": "83ddf4f23a60431c8ee3ef1fd87fbe20",
+      "source_silver_batches": {
+        "taxi": "83ddf4f23a60431c8ee3ef1fd87fbe20",
+        "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+        "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+        "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+      },
+      "source_lineage": {
+        "raw_path": "data/raw/taxi/yellow_tripdata_2025-05.parquet",
+        "raw_sha256": "7ef46bcd0fceee7f8c0bb38a532be05bceefabb512d4bb0b32a7727dd862b15c",
+        "bronze_path": "data/bronze/taxi/year=2025/month=05",
+        "bronze_batch_id": "5e9082227f9a4e9595d863047c3cab3e",
+        "silver_path": "data/silver/taxi/year=2025/month=05",
+        "silver_batch_id": "83ddf4f23a60431c8ee3ef1fd87fbe20",
+        "dimension_silver_batches": {
+          "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+          "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+          "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+        }
+      },
+      "gold_batch_id": "4eb1d3a9646b4594b33c62d245664faa",
+      "gold_schema": {
+        "vendor_id": "int",
+        "pickup_datetime_local": "timestamp_ntz",
+        "dropoff_datetime_local": "timestamp_ntz",
+        "passenger_count": "bigint",
+        "trip_distance": "double",
+        "ratecode_id": "bigint",
+        "store_and_fwd_flag": "string",
+        "pickup_location_id": "int",
+        "dropoff_location_id": "int",
+        "payment_type": "bigint",
+        "fare_amount": "double",
+        "extra": "double",
+        "mta_tax": "double",
+        "tip_amount": "double",
+        "tolls_amount": "double",
+        "improvement_surcharge": "double",
+        "total_amount": "double",
+        "congestion_surcharge": "double",
+        "airport_fee": "double",
+        "cbd_congestion_fee": "double",
+        "_ingested_at": "timestamp",
+        "_source_file": "string",
+        "_source_dataset": "string",
+        "_ingestion_batch_id": "string",
+        "_source_year": "int",
+        "_source_month": "int",
+        "pickup_date": "date",
+        "pickup_hour": "int",
+        "pickup_year": "int",
+        "pickup_month": "int",
+        "_silver_batch_id": "string",
+        "_silver_processed_at": "timestamp",
+        "pickup_borough": "string",
+        "pickup_zone": "string",
+        "pickup_service_zone": "string",
+        "pickup_zone_matched": "boolean",
+        "dropoff_borough": "string",
+        "dropoff_zone": "string",
+        "dropoff_service_zone": "string",
+        "dropoff_zone_matched": "boolean",
+        "day_of_week": "int",
+        "is_weekend": "boolean",
+        "is_holiday": "boolean",
+        "holiday_name": "string",
+        "calendar_matched": "boolean",
+        "weather_timestamp_utc": "timestamp",
+        "weather_timestamp_nyc": "timestamp_ntz",
+        "temperature_2m": "double",
+        "precipitation": "double",
+        "snowfall": "double",
+        "wind_speed_10m": "double",
+        "weather_code": "bigint",
+        "weather_matched": "boolean",
+        "weather_unmatched_reason": "string",
+        "_gold_batch_id": "string",
+        "_gold_processed_at": "timestamp"
+      },
+      "processed_at_utc": "2026-10-06T12:23:59.612874+00:00",
+      "validation_status": "valid",
+      "analytical_summaries": {
+        "by_pickup_borough": [
+          {
+            "pickup_borough": "Manhattan",
+            "trips": 3847141
+          },
+          {
+            "pickup_borough": "Queens",
+            "trips": 450484
+          },
+          {
+            "pickup_borough": "Brooklyn",
+            "trips": 180715
+          },
+          {
+            "pickup_borough": "Bronx",
+            "trips": 38585
+          },
+          {
+            "pickup_borough": "Unknown",
+            "trips": 7534
+          },
+          {
+            "pickup_borough": "N/A",
+            "trips": 2081
+          },
+          {
+            "pickup_borough": "EWR",
+            "trips": 531
+          },
+          {
+            "pickup_borough": "Staten Island",
+            "trips": 502
+          }
+        ],
+        "by_pickup_hour": [
+          {
+            "pickup_hour": 0,
+            "trips": 147671
+          },
+          {
+            "pickup_hour": 1,
+            "trips": 95494
+          },
+          {
+            "pickup_hour": 2,
+            "trips": 61036
+          },
+          {
+            "pickup_hour": 3,
+            "trips": 40520
+          },
+          {
+            "pickup_hour": 4,
+            "trips": 32592
+          },
+          {
+            "pickup_hour": 5,
+            "trips": 35824
+          },
+          {
+            "pickup_hour": 6,
+            "trips": 69844
+          },
+          {
+            "pickup_hour": 7,
+            "trips": 128134
+          },
+          {
+            "pickup_hour": 8,
+            "trips": 170200
+          },
+          {
+            "pickup_hour": 9,
+            "trips": 182235
+          },
+          {
+            "pickup_hour": 10,
+            "trips": 191219
+          },
+          {
+            "pickup_hour": 11,
+            "trips": 203113
+          },
+          {
+            "pickup_hour": 12,
+            "trips": 222192
+          },
+          {
+            "pickup_hour": 13,
+            "trips": 232502
+          },
+          {
+            "pickup_hour": 14,
+            "trips": 253659
+          },
+          {
+            "pickup_hour": 15,
+            "trips": 265810
+          },
+          {
+            "pickup_hour": 16,
+            "trips": 276334
+          },
+          {
+            "pickup_hour": 17,
+            "trips": 311931
+          },
+          {
+            "pickup_hour": 18,
+            "trips": 324934
+          },
+          {
+            "pickup_hour": 19,
+            "trips": 282034
+          },
+          {
+            "pickup_hour": 20,
+            "trips": 256562
+          },
+          {
+            "pickup_hour": 21,
+            "trips": 264377
+          },
+          {
+            "pickup_hour": 22,
+            "trips": 262721
+          },
+          {
+            "pickup_hour": 23,
+            "trips": 216635
+          }
+        ],
+        "by_weekend_holiday": [
+          {
+            "is_weekend": false,
+            "is_holiday": true,
+            "trips": 97241
+          },
+          {
+            "is_weekend": true,
+            "is_holiday": false,
+            "trips": 1306563
+          },
+          {
+            "is_weekend": false,
+            "is_holiday": false,
+            "trips": 3123768
+          },
+          {
+            "is_weekend": null,
+            "is_holiday": null,
+            "trips": 1
+          }
+        ],
+        "by_precipitation": [
+          {
+            "weather_class": "dry",
+            "trips": 2989791,
+            "average_fare": 18.39280290829772
+          },
+          {
+            "weather_class": "rainy",
+            "trips": 1537781,
+            "average_fare": 18.365167953043446
+          },
+          {
+            "weather_class": "unknown",
+            "trips": 1,
+            "average_fare": 24.0
+          }
+        ]
+      },
+      "output_size_bytes": 107544703,
+      "elapsed_seconds": 32.9
+    },
+    {
+      "dataset_name": "taxi_2025-06",
+      "dataset": "taxi_enriched",
+      "partition": {
+        "year": 2025,
+        "month": "06"
+      },
+      "source_silver_path": "data/silver/taxi/year=2025/month=06",
+      "gold_path": "data/gold/taxi_enriched/year=2025/month=06",
+      "silver_rows": 4254377,
+      "gold_rows": 4254377,
+      "join_counts": {
+        "pickup_zone": {
+          "matched": 4254377,
+          "unmatched": 0
+        },
+        "dropoff_zone": {
+          "matched": 4254377,
+          "unmatched": 0
+        },
+        "calendar": {
+          "matched": 4254377,
+          "unmatched": 0
+        },
+        "weather": {
+          "matched": 4234134,
+          "unmatched": 20243
+        }
+      },
+      "join_stage_counts": {
+        "pickup_zone": {
+          "before": 4254377,
+          "after": 4254377
+        },
+        "dropoff_zone": {
+          "before": 4254377,
+          "after": 4254377
+        },
+        "calendar": {
+          "before": 4254377,
+          "after": 4254377
+        },
+        "weather": {
+          "before": 4254377,
+          "after": 4254377
+        }
+      },
+      "weather_unmatched_reasons": {
+        "out_of_analysis_period": 0,
+        "weather_edge_coverage": 20243,
+        "unexpected_missing_weather_key": 0
+      },
+      "weather_local_coverage": {
+        "first_hour": "2024-12-31 19",
+        "last_hour": "2025-06-30 19"
+      },
+      "weather_null_statistics": {
+        "weather_timestamp_utc": 20243,
+        "weather_timestamp_nyc": 20243,
+        "temperature_2m": 20243,
+        "precipitation": 20243,
+        "snowfall": 20243,
+        "wind_speed_10m": 20243,
+        "weather_code": 20243
+      },
+      "holiday_trip_count": 141610,
+      "rainy_trip_count": 644599,
+      "dry_trip_count": 3589535,
+      "source_silver_batch_id": "668c65c214194255adeb0307109daf0c",
+      "source_silver_batches": {
+        "taxi": "668c65c214194255adeb0307109daf0c",
+        "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+        "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+        "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+      },
+      "source_lineage": {
+        "raw_path": "data/raw/taxi/yellow_tripdata_2025-06.parquet",
+        "raw_sha256": "1bea7f5b09c744414451fa7fef09fbc5a393ffb1621c859be6ba0df23a14e1b6",
+        "bronze_path": "data/bronze/taxi/year=2025/month=06",
+        "bronze_batch_id": "d85d41067daa47e697e71a1d48c2b1f4",
+        "silver_path": "data/silver/taxi/year=2025/month=06",
+        "silver_batch_id": "668c65c214194255adeb0307109daf0c",
+        "dimension_silver_batches": {
+          "taxi-zones": "9bb517149cbe46db91c3b195706b0a58",
+          "calendar": "84d323f1560d4541ab5e1c00a4727a79",
+          "weather": "ab0d2565fb864fd1855f372ad1ba0e45"
+        }
+      },
+      "gold_batch_id": "a1eb7ef553a547e68dc603103faa7a21",
+      "gold_schema": {
+        "vendor_id": "int",
+        "pickup_datetime_local": "timestamp_ntz",
+        "dropoff_datetime_local": "timestamp_ntz",
+        "passenger_count": "bigint",
+        "trip_distance": "double",
+        "ratecode_id": "bigint",
+        "store_and_fwd_flag": "string",
+        "pickup_location_id": "int",
+        "dropoff_location_id": "int",
+        "payment_type": "bigint",
+        "fare_amount": "double",
+        "extra": "double",
+        "mta_tax": "double",
+        "tip_amount": "double",
+        "tolls_amount": "double",
+        "improvement_surcharge": "double",
+        "total_amount": "double",
+        "congestion_surcharge": "double",
+        "airport_fee": "double",
+        "cbd_congestion_fee": "double",
+        "_ingested_at": "timestamp",
+        "_source_file": "string",
+        "_source_dataset": "string",
+        "_ingestion_batch_id": "string",
+        "_source_year": "int",
+        "_source_month": "int",
+        "pickup_date": "date",
+        "pickup_hour": "int",
+        "pickup_year": "int",
+        "pickup_month": "int",
+        "_silver_batch_id": "string",
+        "_silver_processed_at": "timestamp",
+        "pickup_borough": "string",
+        "pickup_zone": "string",
+        "pickup_service_zone": "string",
+        "pickup_zone_matched": "boolean",
+        "dropoff_borough": "string",
+        "dropoff_zone": "string",
+        "dropoff_service_zone": "string",
+        "dropoff_zone_matched": "boolean",
+        "day_of_week": "int",
+        "is_weekend": "boolean",
+        "is_holiday": "boolean",
+        "holiday_name": "string",
+        "calendar_matched": "boolean",
+        "weather_timestamp_utc": "timestamp",
+        "weather_timestamp_nyc": "timestamp_ntz",
+        "temperature_2m": "double",
+        "precipitation": "double",
+        "snowfall": "double",
+        "wind_speed_10m": "double",
+        "weather_code": "bigint",
+        "weather_matched": "boolean",
+        "weather_unmatched_reason": "string",
+        "_gold_batch_id": "string",
+        "_gold_processed_at": "timestamp"
+      },
+      "processed_at_utc": "2026-10-06T12:24:34.677336+00:00",
+      "validation_status": "valid",
+      "analytical_summaries": {
+        "by_pickup_borough": [
+          {
+            "pickup_borough": "Manhattan",
+            "trips": 3585969
+          },
+          {
+            "pickup_borough": "Queens",
+            "trips": 434988
+          },
+          {
+            "pickup_borough": "Brooklyn",
+            "trips": 188148
+          },
+          {
+            "pickup_borough": "Bronx",
+            "trips": 35755
+          },
+          {
+            "pickup_borough": "Unknown",
+            "trips": 6608
+          },
+          {
+            "pickup_borough": "N/A",
+            "trips": 1945
+          },
+          {
+            "pickup_borough": "EWR",
+            "trips": 485
+          },
+          {
+            "pickup_borough": "Staten Island",
+            "trips": 479
+          }
+        ],
+        "by_pickup_hour": [
+          {
+            "pickup_hour": 0,
+            "trips": 150602
+          },
+          {
+            "pickup_hour": 1,
+            "trips": 99940
+          },
+          {
+            "pickup_hour": 2,
+            "trips": 67254
+          },
+          {
+            "pickup_hour": 3,
+            "trips": 45597
+          },
+          {
+            "pickup_hour": 4,
+            "trips": 35346
+          },
+          {
+            "pickup_hour": 5,
+            "trips": 34637
+          },
+          {
+            "pickup_hour": 6,
+            "trips": 65033
+          },
+          {
+            "pickup_hour": 7,
+            "trips": 112872
+          },
+          {
+            "pickup_hour": 8,
+            "trips": 155313
+          },
+          {
+            "pickup_hour": 9,
+            "trips": 168638
+          },
+          {
+            "pickup_hour": 10,
+            "trips": 179994
+          },
+          {
+            "pickup_hour": 11,
+            "trips": 192757
+          },
+          {
+            "pickup_hour": 12,
+            "trips": 212340
+          },
+          {
+            "pickup_hour": 13,
+            "trips": 224705
+          },
+          {
+            "pickup_hour": 14,
+            "trips": 239867
+          },
+          {
+            "pickup_hour": 15,
+            "trips": 247767
+          },
+          {
+            "pickup_hour": 16,
+            "trips": 258164
+          },
+          {
+            "pickup_hour": 17,
+            "trips": 285157
+          },
+          {
+            "pickup_hour": 18,
+            "trips": 298706
+          },
+          {
+            "pickup_hour": 19,
+            "trips": 255789
+          },
+          {
+            "pickup_hour": 20,
+            "trips": 231984
+          },
+          {
+            "pickup_hour": 21,
+            "trips": 251345
+          },
+          {
+            "pickup_hour": 22,
+            "trips": 243681
+          },
+          {
+            "pickup_hour": 23,
+            "trips": 196889
+          }
+        ],
+        "by_weekend_holiday": [
+          {
+            "is_weekend": false,
+            "is_holiday": true,
+            "trips": 141610
+          },
+          {
+            "is_weekend": true,
+            "is_holiday": false,
+            "trips": 1252935
+          },
+          {
+            "is_weekend": false,
+            "is_holiday": false,
+            "trips": 2859832
+          }
+        ],
+        "by_precipitation": [
+          {
+            "weather_class": "dry",
+            "trips": 3589535,
+            "average_fare": 19.051687076460368
+          },
+          {
+            "weather_class": "rainy",
+            "trips": 644599,
+            "average_fare": 18.872639485944116
+          },
+          {
+            "weather_class": "unknown",
+            "trips": 20243,
+            "average_fare": 17.94199673961373
+          }
+        ]
+      },
+      "output_size_bytes": 101525486,
+      "elapsed_seconds": 29.08
+    }
+  ]
+}
