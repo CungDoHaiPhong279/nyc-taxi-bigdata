@@ -4,9 +4,9 @@ Project cuối kỳ môn **Tích hợp và phân tích dữ liệu lớn**, xây
 pipeline tích hợp dữ liệu chuyến taxi New York với thời tiết, lịch/ngày lễ và
 taxi-zone lookup để hướng tới bài toán dự đoán `fare_amount`.
 
-**Step 1–3 đã hoàn tất:** project có cấu trúc, cấu hình, schema, Docker services,
-dữ liệu Raw thật cho 01–06/2025 và 9 output Bronze đã được kiểm chứng. Silver,
-Gold và model training chưa chạy.
+**Step 1–4 đã hoàn tất:** project có dữ liệu Raw thật cho 01–06/2025,
+9 output Bronze và 9 output Silver đã được kiểm chứng. Gold và model training
+chưa chạy.
 
 ## 1. Kiến trúc dự kiến
 
@@ -194,8 +194,8 @@ python scripts/create_calendar.py
 ```
 
 Kết quả: `data/raw/calendar/calendar_2025.csv`, gồm ngày từ `2025-01-01` đến
-`2025-12-31`. `is_holiday` hiện luôn là `False`; tích hợp bộ ngày lễ Hoa Kỳ đáng
-tin cậy là TODO. File CSV sinh ra được `.gitignore` loại khỏi Git.
+`2025-12-31`. `is_holiday` ở Raw luôn là `False`; holiday enrichment được thực
+hiện ở Silver. File CSV sinh ra được `.gitignore` loại khỏi Git.
 
 Có thể truyền range/output khác:
 
@@ -209,10 +209,10 @@ python scripts/create_calendar.py --start 2025-01-01 --end 2025-12-31 --output d
 pytest
 ```
 
-Test gồm smoke test và các unit test offline cho Raw/Bronze, calendar, metadata,
-idempotency và manifest; không cần Spark cluster hay Internet. Trên Windows thiếu
-`winutils.exe`, chỉ integration test ghi Parquet được skip; để chạy đủ 32 test
-đã pass trong Docker image STEP 3, thay phần `python scripts/build_bronze.py ...`
+Test gồm smoke test và các unit test offline cho Raw/Bronze/Silver, calendar,
+metadata, idempotency và manifest; không cần Spark cluster hay Internet. Trên
+Windows thiếu `winutils.exe`, integration test ghi Parquet có thể được skip;
+để chạy đầy đủ trong Docker, thay phần `python scripts/build_bronze.py ...`
 của lệnh `docker run` ở mục Bronze bằng `python -m pytest -q -p no:cacheprovider`.
 
 ## 10. Data Sources
@@ -248,8 +248,9 @@ cho phép Free API dùng cho mục đích phi thương mại; dữ liệu theo C
 cần ghi nguồn. API không cần key cho trường hợp này.
 
 Calendar có thể tái tạo bằng `python scripts/create_calendar.py`; cột `is_holiday`
-hiện luôn là `False`, chưa phải bộ ngày lễ đã xác minh. Kết quả kiểm tra và thông
-tin nguồn được ghi trong `data/raw/raw_manifest.json`; file dữ liệu lớn không commit.
+ở Raw luôn là `False`, còn Silver bổ sung ngày lễ từ lịch OPM. Kết quả kiểm tra
+và thông tin nguồn được ghi trong `data/raw/raw_manifest.json`; file dữ liệu lớn
+không commit.
 
 ## 11. Bronze Layer
 
@@ -304,7 +305,84 @@ Bronze Parquet được Git ignore; manifest nhỏ có thể commit. Cả 9 outp
 kiểm chứng về số dòng Raw/Bronze và cột nguồn: sáu tháng Taxi, weather 4.344
 dòng, taxi zones 265 dòng và calendar 365 dòng.
 
-## 12. Thiết kế ML dự kiến
+## 12. Silver Layer
+
+Silver đọc **Bronze**, không đọc lại Raw. Khác với Bronze giữ nguyên dữ liệu nguồn,
+Silver chuẩn hóa schema, kiểm tra chất lượng, loại bản ghi không hợp lệ và trùng
+lặp; không kết hợp Taxi với Weather, Zones hay Calendar (việc đó thuộc Gold).
+Taxi đổi `VendorID` → `vendor_id`, `PULocationID` → `pickup_location_id`,
+`DOLocationID` → `dropoff_location_id`, `RatecodeID` → `ratecode_id` và tạo
+`pickup_date`/`pickup_hour` từ giờ đón để chuẩn bị khóa thời gian.
+Taxi xử lý từng tháng và ghi Parquet nén Snappy vào
+`data/silver/taxi/year=2025/month=MM/`; Weather theo tháng tại
+`data/silver/weather/year=2025/month=MM/`; Zones và Calendar có thư mục riêng.
+`data/silver/silver_manifest.json` lưu số dòng đầu vào/đầu ra, số rejected,
+duplicates, lý do, schema và lineage Bronze → Silver. Parquet được Git ignore;
+manifest nhỏ có thể commit. Rejected rows chỉ được lưu dưới dạng **số lượng theo
+lý do** trong manifest, không lưu toàn bộ rejected records thành Parquet.
+
+Quy tắc Taxi: loại dòng thiếu timestamp đón/trả, địa điểm đón/trả, quãng đường
+hoặc giá cước; thời gian trả không sau thời gian đón; quãng đường âm; hoặc số
+hành khách âm. Dedupe dựa trên toàn bộ cột nghiệp vụ nguồn, **không** dùng
+ingestion metadata, và giữ một bản theo tiêu chí xác định. Ghi riêng số dòng bị
+loại theo từng lý do và số duplicate. Giá cước âm hoặc bằng 0, quãng đường
+bằng 0 và pickup ngoài tháng file được **giữ lại nhưng thống kê** vì chưa đủ
+cơ sở nghiệp vụ để loại. Không điền khuyết tùy tiện và không cắt outlier bằng
+ngưỡng tùy ý.
+
+Timestamp Taxi trong Bronze là `timestamp_ntz` (giờ đồng hồ không gắn
+timezone). [Data dictionary của NYC TLC](https://www.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_yellow.pdf)
+không xác nhận timezone của hai cột `tpep_*_datetime`; vì vậy Silver giữ nguyên
+giờ local-naive, không tự chuyển sang UTC hay áp offset cố định. `America/New_York`
+là giả định cần xác nhận trước khi ghép Taxi với Weather ở Gold. Weather nguồn là
+UTC/GMT; Silver parse UTC rồi chuyển sang `America/New_York` bằng hàm timezone
+aware để xử lý DST (không dùng UTC−5 cố định).
+
+Calendar Silver bổ sung **11 ngày nghỉ liên bang áp dụng toàn quốc năm 2025**
+theo [lịch US Office of Personnel Management](https://www.opm.gov/policy-data-oversight/pay-leave/federal-holidays/).
+Inauguration Day chỉ áp dụng vùng Washington,
+DC nên không thêm vào lịch NYC. Việc bổ sung là deterministic, không gọi mạng
+khi chạy. Taxi Zones chỉ chuẩn hóa cột/kiểm tra khóa `location_id`, chưa join
+vào Taxi.
+
+Các lệnh CLI chạy từ thư mục project:
+
+```powershell
+python scripts/build_silver.py --dataset taxi --month 2025-01
+python scripts/build_silver.py --dataset taxi --start-month 2025-02 --end-month 2025-06
+python scripts/build_silver.py --dataset weather
+python scripts/build_silver.py --dataset taxi-zones
+python scripts/build_silver.py --dataset calendar
+python scripts/build_silver.py --all
+```
+
+Chạy tháng 01 trước, kiểm tra thống kê chất lượng rồi mới chạy tháng 02–06.
+Chạy lại phải idempotent; dùng `--force` để xây dựng lại partition đã chọn.
+Nếu Windows thiếu `winutils.exe`, tái sử dụng `Dockerfile.spark` của STEP 3 và
+chạy CLI trong Docker Linux, không tải binary không rõ nguồn:
+
+```powershell
+docker build -f Dockerfile.spark -t nyc-taxi-spark:step3 .
+docker run --rm --network none --hostname silver-local --add-host silver-local:127.0.0.1 --cpus 4 --memory 8g --mount "type=bind,source=C:\nyc-taxi-bigdata,target=/app" -w /app -e PYTHONPATH=/app/src -e SPARK_LOCAL_IP=127.0.0.1 nyc-taxi-spark:step3 python scripts/build_silver.py --dataset taxi --month 2025-01
+```
+
+Thay `C:\nyc-taxi-bigdata` bằng đường dẫn project thực tế nếu cần. Lệnh trên
+là ví dụ cho tháng 01.
+
+Đã build và kiểm chứng 9 output Silver trên dữ liệu thật:
+
+| Dataset | Bronze rows | Silver rows | Rejected | Duplicates |
+| --- | ---: | ---: | ---: | ---: |
+| Taxi 01–06/2025 | 24,083,384 | 23,886,265 | 197,119 | 0 |
+| Weather | 4,344 | 4,344 | 0 | 0 |
+| Taxi Zones | 265 | 265 | 0 | 0 |
+| Calendar | 365 | 365 | 0 | 0 |
+
+Toàn bộ 197,119 Taxi rejected rows có lý do chính là `invalid_duration`
+(dropoff không sau pickup). Các giá trị còn nghi vấn nhưng chưa đủ cơ sở loại
+được giữ và thống kê trong manifest.
+
+## 13. Thiết kế ML dự kiến
 
 Target: `fare_amount`.
 
@@ -318,7 +396,7 @@ Ba model ứng viên: `LinearRegression`, `RandomForestRegressor` và
 `total_amount`, `tip_amount` và các thông tin chỉ biết sau chuyến đi không được dùng
 làm feature vì có thể gây data leakage.
 
-## 13. Trạng thái triển khai
+## 14. Trạng thái triển khai
 
 ### Đã triển khai
 
@@ -334,25 +412,29 @@ làm feature vì có thể gây data leakage.
 - PySpark Raw → Bronze cho Taxi, weather, taxi zones và calendar; Parquet Snappy,
   metadata ingestion, validation và manifest truy vết nguồn; 9/9 output đã được
   build và kiểm chứng trên dữ liệu thật.
+- PySpark Bronze → Silver cho sáu tháng Taxi, Weather, Taxi Zones và Calendar;
+  chuẩn hóa, quality rules, dedupe, timezone-aware weather, holiday enrichment
+  và lineage/quality manifest; 9/9 output đã được kiểm chứng trên dữ liệu thật.
 
 ### Chưa triển khai / planned
 
 - Versioning/snapshot dữ liệu nguồn theo nhiều lần cập nhật
-- PySpark ETL Bronze → Silver → Gold và data-quality reporting chi tiết
+- PySpark ETL Silver → Gold
 - Quy tắc join weather theo thời gian/vị trí
 - Load Gold vào PostgreSQL
 - Train/tune/compare model và ghi MLflow runs/artifacts thật
 - Power BI dashboard
 - Airflow DAG, scheduling, monitoring và deployment production
 
-Các entry point Silver/Gold và training chưa triển khai sẽ báo
+Các entry point Gold và training chưa triển khai sẽ báo
 `NotImplementedError` rõ ràng thay vì tạo output giả.
 
-## 14. Roadmap đề xuất
+## 15. Roadmap đề xuất
 
-1. Chốt quy tắc timezone và schema drift khi thiết kế Bronze → Silver.
-2. Viết Silver transformations cùng data-quality tests.
-3. Xây Gold dataset, load PostgreSQL và kết nối Power BI.
-4. Tạo train/validation pipeline, baseline models và MLflow experiments.
-5. Chỉ sau khi pipeline ổn định mới bổ sung Airflow orchestration.
+1. Xác nhận timezone của timestamp Taxi trước khi ghép với Weather ở Gold;
+   hiện TLC chưa công bố timezone trong data dictionary.
+2. Thiết kế quy tắc join và xây Gold dataset từ các nguồn Silver.
+3. Load Gold vào PostgreSQL, sau đó xây train/validation pipeline và MLflow
+   experiments; kết nối Power BI khi dữ liệu phân tích đã ổn định.
+4. Chỉ sau khi pipeline ổn định mới bổ sung Airflow orchestration.
 

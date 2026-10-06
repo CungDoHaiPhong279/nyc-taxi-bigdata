@@ -27,6 +27,7 @@ data/bronze/**
 data/silver/**
 !data/silver/**/
 !data/silver/**/.gitkeep
+!data/silver/silver_manifest.json
 data/gold/**
 !data/gold/**/
 !data/gold/**/.gitkeep
