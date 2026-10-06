@@ -332,11 +332,14 @@ ngưỡng tùy ý.
 
 Timestamp Taxi trong Bronze là `timestamp_ntz` (giờ đồng hồ không gắn
 timezone). [Data dictionary của NYC TLC](https://www.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_yellow.pdf)
-không xác nhận timezone của hai cột `tpep_*_datetime`; vì vậy Silver giữ nguyên
-giờ local-naive, không tự chuyển sang UTC hay áp offset cố định. `America/New_York`
-là giả định cần xác nhận trước khi ghép Taxi với Weather ở Gold. Weather nguồn là
-UTC/GMT; Silver parse UTC rồi chuyển sang `America/New_York` bằng hàm timezone
-aware để xử lý DST (không dùng UTC−5 cố định).
+không xác nhận timezone của hai cột `tpep_*_datetime` trong Parquet công khai;
+vì vậy Silver giữ nguyên giờ local-naive, không tự chuyển sang UTC hay áp offset
+cố định. STEP 4.5 chọn **giả định phân tích** rằng Taxi là giờ đồng hồ
+`America/New_York` để ghép theo giờ địa phương ở Gold: ngày chuyển DST
+09/03/2025 có 0 pickup/dropoff trong Silver lúc 02:xx, nhưng đây không phải
+bảo đảm chính thức của TLC. Xem [báo cáo STEP 4.5](reports/STEP_4_5_FINDINGS.md). Weather
+nguồn UTC/GMT; Silver parse UTC rồi chuyển sang `America/New_York` bằng hàm
+timezone-aware để xử lý DST (không dùng UTC−5 cố định).
 
 Calendar Silver bổ sung **11 ngày nghỉ liên bang áp dụng toàn quốc năm 2025**
 theo [lịch US Office of Personnel Management](https://www.opm.gov/policy-data-oversight/pay-leave/federal-holidays/).
@@ -431,8 +434,8 @@ Các entry point Gold và training chưa triển khai sẽ báo
 
 ## 15. Roadmap đề xuất
 
-1. Xác nhận timezone của timestamp Taxi trước khi ghép với Weather ở Gold;
-   hiện TLC chưa công bố timezone trong data dictionary.
+1. Áp dụng giả định timezone Taxi của STEP 4.5 khi thiết kế Gold; nếu có xác
+   nhận trực tiếp khác về Parquet từ TLC/TSP thì cập nhật policy trước khi chạy.
 2. Thiết kế quy tắc join và xây Gold dataset từ các nguồn Silver.
 3. Load Gold vào PostgreSQL, sau đó xây train/validation pipeline và MLflow
    experiments; kết nối Power BI khi dữ liệu phân tích đã ổn định.

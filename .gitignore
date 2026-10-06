@@ -39,6 +39,8 @@ models/**
 !models/.gitkeep
 reports/**
 !reports/.gitkeep
+!reports/step4_5_profile.json
+!reports/STEP_4_5_FINDINGS.md
 mlruns/
 
 # IDE

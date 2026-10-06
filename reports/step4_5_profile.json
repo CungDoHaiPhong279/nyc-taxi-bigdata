@@ -1,0 +1,1516 @@
+{
+  "schema_version": 1,
+  "scope": "STEP 4.5; Yellow Taxi source partitions 2025-01 through 2025-06",
+  "source_lineage": [
+    {
+      "source_month": "2025-01",
+      "bronze_path": "data/bronze/taxi/year=2025/month=01",
+      "silver_path": "data/silver/taxi/year=2025/month=01",
+      "bronze_batch_id": "372a91efc5a544f69b1aac55a65faf3e",
+      "silver_batch_id": "5681279ea2ea47a48988e140a1446e0f",
+      "raw_sha256": "9af277e4c0d3f9deb30644da822981e1e7df6af58313170fd3aa8a474485488a"
+    },
+    {
+      "source_month": "2025-02",
+      "bronze_path": "data/bronze/taxi/year=2025/month=02",
+      "silver_path": "data/silver/taxi/year=2025/month=02",
+      "bronze_batch_id": "1aab603f6cd14fd0a31b179770001c06",
+      "silver_batch_id": "9f445a85422546cbbb4415f0e5e9f310",
+      "raw_sha256": "037cba555a73663f3a51a2c27816e40e3feb364769942bdf122b9da31e377bd3"
+    },
+    {
+      "source_month": "2025-03",
+      "bronze_path": "data/bronze/taxi/year=2025/month=03",
+      "silver_path": "data/silver/taxi/year=2025/month=03",
+      "bronze_batch_id": "be4a7fcb7c194c579bab647f52804bad",
+      "silver_batch_id": "454bbf5afb5845cc99adbe4e2acae72a",
+      "raw_sha256": "20c4b77cce457b7cfdae77c5069ca7dc91c167f876a41467f4502ab69487a186"
+    },
+    {
+      "source_month": "2025-04",
+      "bronze_path": "data/bronze/taxi/year=2025/month=04",
+      "silver_path": "data/silver/taxi/year=2025/month=04",
+      "bronze_batch_id": "0c7e92d1e9a2419faa73948e618ae866",
+      "silver_batch_id": "0682bba74c6d4fb8a381c141005f2df3",
+      "raw_sha256": "6f98938de9380a3f85600533816f0dc0e6d9b5b210e485d623952bac599bbe28"
+    },
+    {
+      "source_month": "2025-05",
+      "bronze_path": "data/bronze/taxi/year=2025/month=05",
+      "silver_path": "data/silver/taxi/year=2025/month=05",
+      "bronze_batch_id": "5e9082227f9a4e9595d863047c3cab3e",
+      "silver_batch_id": "83ddf4f23a60431c8ee3ef1fd87fbe20",
+      "raw_sha256": "7ef46bcd0fceee7f8c0bb38a532be05bceefabb512d4bb0b32a7727dd862b15c"
+    },
+    {
+      "source_month": "2025-06",
+      "bronze_path": "data/bronze/taxi/year=2025/month=06",
+      "silver_path": "data/silver/taxi/year=2025/month=06",
+      "bronze_batch_id": "d85d41067daa47e697e71a1d48c2b1f4",
+      "silver_batch_id": "668c65c214194255adeb0307109daf0c",
+      "raw_sha256": "1bea7f5b09c744414451fa7fef09fbc5a393ffb1621c859be6ba0df23a14e1b6"
+    }
+  ],
+  "timezone": {
+    "official_evidence": {
+      "published_parquet_timezone_explicit": false,
+      "conclusion": "Official TLC documentation reviewed does not explicitly specify the timezone of tpep_* fields in the published 2025 Parquet.",
+      "sources": [
+        {
+          "title": "NYC TLC Yellow Taxi Data Dictionary, 2025-03-18",
+          "url": "https://www.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_yellow.pdf",
+          "finding": "Defines pickup/dropoff as meter engaged/disengaged time; no timezone stated.",
+          "scope": "published trip-record fields"
+        },
+        {
+          "title": "NYC TLC Trip Records User Guide and Trip Record Data page",
+          "url": "https://www.nyc.gov/assets/tlc/downloads/pdf/trip_record_user_guide.pdf",
+          "related_url": "https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page",
+          "finding": "Describe trip-record provenance and publication, not the Parquet timestamp timezone.",
+          "scope": "published dataset documentation"
+        },
+        {
+          "title": "NYC TLC Technology System Provider Rules, section 66-24(f)(3)",
+          "url": "https://www.nyc.gov/assets/tlc/downloads/pdf/technology_system_provider_rules_03_29.pdf",
+          "finding": "Provider-submitted Trip Data times are required in Eastern Standard Time.",
+          "scope": "provider transmission rule, not proof of published Parquet encoding"
+        },
+        {
+          "title": "NYC TLC Industry Notice 05-11",
+          "url": "https://www.nyc.gov/assets/tlc/downloads/pdf/archived_industry_notices/industry_notice_05_11.pdf",
+          "finding": "Taximeters were instructed to adjust when daylight saving time began.",
+          "scope": "meter behavior; does not specify public Parquet conversion"
+        }
+      ],
+      "tsp_specs_workbook": "Linked by TLC but not readable in this environment; no claim drawn from it."
+    },
+    "empirical_evidence": {
+      "taxi_timestamp_type": "timestamp_ntz",
+      "time_distribution_ref": "taxi_time_distribution",
+      "dst_spring_forward_ref": "dst_sanity_check",
+      "spring_forward_2025_03_09_pickup_hour_02": 0,
+      "spring_forward_2025_03_09_dropoff_hour_02": 0,
+      "supports_local_wall_clock": true,
+      "interpretation": "The missing 02:00 hour supports a New York local wall-clock interpretation; it is not an official guarantee."
+    },
+    "decision": {
+      "case": "B",
+      "status": "adopted_project_assumption",
+      "assumption": "Taxi pickup/dropoff timestamps are treated as America/New_York local wall-clock times for Gold temporal alignment."
+    },
+    "confidence": "moderate_high_for_analytical_assumption_not_official_guarantee",
+    "caveats": [
+      "The TSP rule uses the term Eastern Standard Time but does not establish a fixed UTC-5 offset in the public 2025 Parquet.",
+      "A missing DST hour is empirical evidence, not proof for every vendor or every date.",
+      "Repeated local 01:00 at the November fall-back is ambiguous, but November is outside the Jan-Jun Taxi scope.",
+      "Do not convert Taxi NTZ wall-clock values to UTC without a separately documented disambiguation rule."
+    ]
+  },
+  "taxi_time_distribution": {
+    "rows": 23886265,
+    "pickup_hour_00_to_23": {
+      "00": 751093,
+      "01": 493866,
+      "02": 323488,
+      "03": 220445,
+      "04": 170234,
+      "05": 180157,
+      "06": 356988,
+      "07": 673506,
+      "08": 920842,
+      "09": 967871,
+      "10": 1006806,
+      "11": 1076887,
+      "12": 1177766,
+      "13": 1241043,
+      "14": 1333799,
+      "15": 1392454,
+      "16": 1442019,
+      "17": 1637440,
+      "18": 1740554,
+      "19": 1516463,
+      "20": 1390826,
+      "21": 1444955,
+      "22": 1363436,
+      "23": 1063327
+    },
+    "pickup_day_of_week": {
+      "Sunday": 3169495,
+      "Monday": 2844453,
+      "Tuesday": 3184675,
+      "Wednesday": 3549209,
+      "Thursday": 3752715,
+      "Friday": 3601377,
+      "Saturday": 3784341
+    },
+    "day_of_week_definition": "Calendar weekday of pickup_date, Sunday through Saturday.",
+    "by_source_month": [
+      {
+        "source_month": "2025-01",
+        "silver_rows": 3473175,
+        "pickup_hour_00_to_23": {
+          "00": 93382,
+          "01": 64461,
+          "02": 43907,
+          "03": 28483,
+          "04": 20021,
+          "05": 22540,
+          "06": 50007,
+          "07": 102515,
+          "08": 141196,
+          "09": 142769,
+          "10": 148208,
+          "11": 159994,
+          "12": 175319,
+          "13": 186027,
+          "14": 202185,
+          "15": 213544,
+          "16": 216908,
+          "17": 253347,
+          "18": 267771,
+          "19": 220921,
+          "20": 194896,
+          "21": 205882,
+          "22": 182138,
+          "23": 136754
+        },
+        "pickup_day_of_week": {
+          "Sunday": 402395,
+          "Monday": 363584,
+          "Tuesday": 453714,
+          "Wednesday": 577000,
+          "Thursday": 613848,
+          "Friday": 586426,
+          "Saturday": 476208
+        },
+        "pickup_calendar_month": {
+          "2024-12": 21,
+          "2025-01": 3473153,
+          "2025-02": 1
+        }
+      },
+      {
+        "source_month": "2025-02",
+        "silver_rows": 3572379,
+        "pickup_hour_00_to_23": {
+          "00": 107464,
+          "01": 70487,
+          "02": 47839,
+          "03": 31215,
+          "04": 22942,
+          "05": 24356,
+          "06": 51244,
+          "07": 100715,
+          "08": 140066,
+          "09": 144926,
+          "10": 147970,
+          "11": 156838,
+          "12": 172839,
+          "13": 181112,
+          "14": 193608,
+          "15": 206186,
+          "16": 212889,
+          "17": 247949,
+          "18": 274003,
+          "19": 236950,
+          "20": 215351,
+          "21": 220339,
+          "22": 207003,
+          "23": 158088
+        },
+        "pickup_day_of_week": {
+          "Sunday": 469158,
+          "Monday": 398267,
+          "Tuesday": 477787,
+          "Wednesday": 509135,
+          "Thursday": 554309,
+          "Friday": 579326,
+          "Saturday": 584397
+        },
+        "pickup_calendar_month": {
+          "2025-01": 30,
+          "2025-02": 3572348,
+          "2025-03": 1
+        }
+      },
+      {
+        "source_month": "2025-03",
+        "silver_rows": 4122977,
+        "pickup_hour_00_to_23": {
+          "00": 134915,
+          "01": 88224,
+          "02": 52247,
+          "03": 41377,
+          "04": 33199,
+          "05": 33292,
+          "06": 60417,
+          "07": 112690,
+          "08": 156848,
+          "09": 163207,
+          "10": 166627,
+          "11": 178564,
+          "12": 193746,
+          "13": 205150,
+          "14": 218478,
+          "15": 226803,
+          "16": 236794,
+          "17": 270429,
+          "18": 299165,
+          "19": 281590,
+          "20": 271951,
+          "21": 267765,
+          "22": 244166,
+          "23": 185333
+        },
+        "pickup_day_of_week": {
+          "Sunday": 619946,
+          "Monday": 552213,
+          "Tuesday": 493971,
+          "Wednesday": 543715,
+          "Thursday": 595911,
+          "Friday": 550709,
+          "Saturday": 766512
+        },
+        "pickup_calendar_month": {
+          "2007-12": 1,
+          "2009-01": 1,
+          "2025-02": 29,
+          "2025-03": 4122944,
+          "2025-04": 2
+        }
+      },
+      {
+        "source_month": "2025-04",
+        "silver_rows": 3935784,
+        "pickup_hour_00_to_23": {
+          "00": 117059,
+          "01": 75260,
+          "02": 51205,
+          "03": 33253,
+          "04": 26134,
+          "05": 29508,
+          "06": 60443,
+          "07": 116580,
+          "08": 157219,
+          "09": 166096,
+          "10": 172788,
+          "11": 185621,
+          "12": 201330,
+          "13": 211547,
+          "14": 226002,
+          "15": 232344,
+          "16": 240930,
+          "17": 268627,
+          "18": 275975,
+          "19": 239179,
+          "20": 220082,
+          "21": 235247,
+          "22": 223727,
+          "23": 169628
+        },
+        "pickup_day_of_week": {
+          "Sunday": 485453,
+          "Monday": 429353,
+          "Tuesday": 628290,
+          "Wednesday": 678996,
+          "Thursday": 565147,
+          "Friday": 558276,
+          "Saturday": 590269
+        },
+        "pickup_calendar_month": {
+          "2025-03": 4,
+          "2025-04": 3935777,
+          "2025-05": 3
+        }
+      },
+      {
+        "source_month": "2025-05",
+        "silver_rows": 4527573,
+        "pickup_hour_00_to_23": {
+          "00": 147671,
+          "01": 95494,
+          "02": 61036,
+          "03": 40520,
+          "04": 32592,
+          "05": 35824,
+          "06": 69844,
+          "07": 128134,
+          "08": 170200,
+          "09": 182235,
+          "10": 191219,
+          "11": 203113,
+          "12": 222192,
+          "13": 232502,
+          "14": 253659,
+          "15": 265810,
+          "16": 276334,
+          "17": 311931,
+          "18": 324934,
+          "19": 282034,
+          "20": 256562,
+          "21": 264377,
+          "22": 262721,
+          "23": 216635
+        },
+        "pickup_day_of_week": {
+          "Sunday": 540573,
+          "Monday": 493191,
+          "Tuesday": 564204,
+          "Wednesday": 624385,
+          "Thursday": 792496,
+          "Friday": 746734,
+          "Saturday": 765990
+        },
+        "pickup_calendar_month": {
+          "2009-01": 1,
+          "2025-04": 20,
+          "2025-05": 4527549,
+          "2025-06": 3
+        }
+      },
+      {
+        "source_month": "2025-06",
+        "silver_rows": 4254377,
+        "pickup_hour_00_to_23": {
+          "00": 150602,
+          "01": 99940,
+          "02": 67254,
+          "03": 45597,
+          "04": 35346,
+          "05": 34637,
+          "06": 65033,
+          "07": 112872,
+          "08": 155313,
+          "09": 168638,
+          "10": 179994,
+          "11": 192757,
+          "12": 212340,
+          "13": 224705,
+          "14": 239867,
+          "15": 247767,
+          "16": 258164,
+          "17": 285157,
+          "18": 298706,
+          "19": 255789,
+          "20": 231984,
+          "21": 251345,
+          "22": 243681,
+          "23": 196889
+        },
+        "pickup_day_of_week": {
+          "Sunday": 651970,
+          "Monday": 607845,
+          "Tuesday": 566709,
+          "Wednesday": 615978,
+          "Thursday": 631004,
+          "Friday": 579906,
+          "Saturday": 600965
+        },
+        "pickup_calendar_month": {
+          "2025-05": 20,
+          "2025-06": 4254357
+        }
+      }
+    ],
+    "by_pickup_calendar_month": {
+      "2007-12": 1,
+      "2009-01": 2,
+      "2024-12": 21,
+      "2025-01": 3473183,
+      "2025-02": 3572378,
+      "2025-03": 4122949,
+      "2025-04": 3935799,
+      "2025-05": 4527572,
+      "2025-06": 4254360
+    },
+    "month_definition": "Source month is the TLC file partition; pickup calendar month comes from the retained timestamp and may differ."
+  },
+  "dst_sanity_check": {
+    "timezone_under_test": "America/New_York",
+    "source_partition": "2025-03",
+    "local_calendar_days": {
+      "2025-03-08": {
+        "pickup_hour_counts": {
+          "00": 8026,
+          "01": 6330,
+          "02": 4167,
+          "03": 2872,
+          "04": 1752
+        },
+        "dropoff_hour_counts": {
+          "00": 8463,
+          "01": 6759,
+          "02": 4628,
+          "03": 3007,
+          "04": 1994
+        }
+      },
+      "2025-03-09": {
+        "pickup_hour_counts": {
+          "00": 9528,
+          "01": 7864,
+          "02": 0,
+          "03": 6178,
+          "04": 3914
+        },
+        "dropoff_hour_counts": {
+          "00": 10005,
+          "01": 8352,
+          "02": 0,
+          "03": 6463,
+          "04": 4406
+        }
+      },
+      "2025-03-10": {
+        "pickup_hour_counts": {
+          "00": 1512,
+          "01": 662,
+          "02": 327,
+          "03": 279,
+          "04": 368
+        },
+        "dropoff_hour_counts": {
+          "00": 1755,
+          "01": 771,
+          "02": 424,
+          "03": 289,
+          "04": 302
+        }
+      }
+    },
+    "interpretation_limit": "Empirical sanity check, not an official TLC timezone guarantee."
+  },
+  "invalid_duration": {
+    "total": 197119,
+    "equal_timestamp": 196326,
+    "negative_duration": 793,
+    "bronze_rows": 24083384,
+    "rate_pct_of_bronze_rows": 0.818485,
+    "by_month": [
+      {
+        "source_month": "2025-01",
+        "bronze_rows": 3475226,
+        "equal_timestamp": 1927,
+        "negative_duration": 124,
+        "total": 2051,
+        "rate_pct_of_bronze_rows": 0.059018,
+        "by_vendor": {
+          "2": {
+            "equal_timestamp": 76,
+            "negative_duration": 0,
+            "total": 76,
+            "bronze_rows": 2719860,
+            "rate_pct_of_bronze_vendor_rows": 0.002794
+          },
+          "1": {
+            "equal_timestamp": 640,
+            "negative_duration": 6,
+            "total": 646,
+            "bronze_rows": 753671,
+            "rate_pct_of_bronze_vendor_rows": 0.085714
+          },
+          "7": {
+            "equal_timestamp": 1206,
+            "negative_duration": 0,
+            "total": 1206,
+            "bronze_rows": 1206,
+            "rate_pct_of_bronze_vendor_rows": 100.0
+          },
+          "6": {
+            "equal_timestamp": 5,
+            "negative_duration": 118,
+            "total": 123,
+            "bronze_rows": 489,
+            "rate_pct_of_bronze_vendor_rows": 25.153374
+          }
+        },
+        "by_payment_type": {
+          "3": {
+            "equal_timestamp": 57,
+            "negative_duration": 0,
+            "total": 57
+          },
+          "1": {
+            "equal_timestamp": 1226,
+            "negative_duration": 6,
+            "total": 1232
+          },
+          "4": {
+            "equal_timestamp": 8,
+            "negative_duration": 0,
+            "total": 8
+          },
+          "2": {
+            "equal_timestamp": 535,
+            "negative_duration": 0,
+            "total": 535
+          },
+          "0": {
+            "equal_timestamp": 101,
+            "negative_duration": 118,
+            "total": 219
+          }
+        },
+        "by_ratecode_id": {
+          "1": {
+            "equal_timestamp": 1583,
+            "negative_duration": 1,
+            "total": 1584
+          },
+          "2": {
+            "equal_timestamp": 22,
+            "negative_duration": 0,
+            "total": 22
+          },
+          "99": {
+            "equal_timestamp": 169,
+            "negative_duration": 5,
+            "total": 174
+          },
+          "5": {
+            "equal_timestamp": 51,
+            "negative_duration": 0,
+            "total": 51
+          },
+          "4": {
+            "equal_timestamp": 1,
+            "negative_duration": 0,
+            "total": 1
+          },
+          "null": {
+            "equal_timestamp": 101,
+            "negative_duration": 118,
+            "total": 219
+          }
+        }
+      },
+      {
+        "source_month": "2025-02",
+        "bronze_rows": 3577543,
+        "equal_timestamp": 5071,
+        "negative_duration": 93,
+        "total": 5164,
+        "rate_pct_of_bronze_rows": 0.144345,
+        "by_vendor": {
+          "1": {
+            "equal_timestamp": 573,
+            "negative_duration": 12,
+            "total": 585,
+            "bronze_rows": 754990,
+            "rate_pct_of_bronze_vendor_rows": 0.077484
+          },
+          "2": {
+            "equal_timestamp": 71,
+            "negative_duration": 0,
+            "total": 71,
+            "bronze_rows": 2817803,
+            "rate_pct_of_bronze_vendor_rows": 0.00252
+          },
+          "7": {
+            "equal_timestamp": 4420,
+            "negative_duration": 0,
+            "total": 4420,
+            "bronze_rows": 4420,
+            "rate_pct_of_bronze_vendor_rows": 100.0
+          },
+          "6": {
+            "equal_timestamp": 7,
+            "negative_duration": 81,
+            "total": 88,
+            "bronze_rows": 330,
+            "rate_pct_of_bronze_vendor_rows": 26.666667
+          }
+        },
+        "by_payment_type": {
+          "2": {
+            "equal_timestamp": 808,
+            "negative_duration": 0,
+            "total": 808
+          },
+          "1": {
+            "equal_timestamp": 3968,
+            "negative_duration": 12,
+            "total": 3980
+          },
+          "4": {
+            "equal_timestamp": 11,
+            "negative_duration": 0,
+            "total": 11
+          },
+          "3": {
+            "equal_timestamp": 192,
+            "negative_duration": 0,
+            "total": 192
+          },
+          "0": {
+            "equal_timestamp": 92,
+            "negative_duration": 81,
+            "total": 173
+          }
+        },
+        "by_ratecode_id": {
+          "3": {
+            "equal_timestamp": 11,
+            "negative_duration": 0,
+            "total": 11
+          },
+          "1": {
+            "equal_timestamp": 4683,
+            "negative_duration": 0,
+            "total": 4683
+          },
+          "99": {
+            "equal_timestamp": 155,
+            "negative_duration": 12,
+            "total": 167
+          },
+          "5": {
+            "equal_timestamp": 64,
+            "negative_duration": 0,
+            "total": 64
+          },
+          "4": {
+            "equal_timestamp": 3,
+            "negative_duration": 0,
+            "total": 3
+          },
+          "2": {
+            "equal_timestamp": 63,
+            "negative_duration": 0,
+            "total": 63
+          },
+          "null": {
+            "equal_timestamp": 92,
+            "negative_duration": 81,
+            "total": 173
+          }
+        }
+      },
+      {
+        "source_month": "2025-03",
+        "bronze_rows": 4145257,
+        "equal_timestamp": 22199,
+        "negative_duration": 81,
+        "total": 22280,
+        "rate_pct_of_bronze_rows": 0.537482,
+        "by_vendor": {
+          "2": {
+            "equal_timestamp": 93,
+            "negative_duration": 0,
+            "total": 93,
+            "bronze_rows": 3289048,
+            "rate_pct_of_bronze_vendor_rows": 0.002828
+          },
+          "1": {
+            "equal_timestamp": 622,
+            "negative_duration": 8,
+            "total": 630,
+            "bronze_rows": 834394,
+            "rate_pct_of_bronze_vendor_rows": 0.075504
+          },
+          "7": {
+            "equal_timestamp": 21481,
+            "negative_duration": 0,
+            "total": 21481,
+            "bronze_rows": 21481,
+            "rate_pct_of_bronze_vendor_rows": 100.0
+          },
+          "6": {
+            "equal_timestamp": 3,
+            "negative_duration": 73,
+            "total": 76,
+            "bronze_rows": 334,
+            "rate_pct_of_bronze_vendor_rows": 22.754491
+          }
+        },
+        "by_payment_type": {
+          "3": {
+            "equal_timestamp": 246,
+            "negative_duration": 0,
+            "total": 246
+          },
+          "4": {
+            "equal_timestamp": 78,
+            "negative_duration": 0,
+            "total": 78
+          },
+          "1": {
+            "equal_timestamp": 18744,
+            "negative_duration": 8,
+            "total": 18752
+          },
+          "2": {
+            "equal_timestamp": 3025,
+            "negative_duration": 0,
+            "total": 3025
+          },
+          "0": {
+            "equal_timestamp": 106,
+            "negative_duration": 73,
+            "total": 179
+          }
+        },
+        "by_ratecode_id": {
+          "1": {
+            "equal_timestamp": 21394,
+            "negative_duration": 0,
+            "total": 21394
+          },
+          "5": {
+            "equal_timestamp": 144,
+            "negative_duration": 0,
+            "total": 144
+          },
+          "99": {
+            "equal_timestamp": 130,
+            "negative_duration": 8,
+            "total": 138
+          },
+          "4": {
+            "equal_timestamp": 37,
+            "negative_duration": 0,
+            "total": 37
+          },
+          "2": {
+            "equal_timestamp": 366,
+            "negative_duration": 0,
+            "total": 366
+          },
+          "3": {
+            "equal_timestamp": 22,
+            "negative_duration": 0,
+            "total": 22
+          },
+          "null": {
+            "equal_timestamp": 106,
+            "negative_duration": 73,
+            "total": 179
+          }
+        }
+      },
+      {
+        "source_month": "2025-04",
+        "bronze_rows": 3970553,
+        "equal_timestamp": 34606,
+        "negative_duration": 163,
+        "total": 34769,
+        "rate_pct_of_bronze_rows": 0.875671,
+        "by_vendor": {
+          "1": {
+            "equal_timestamp": 656,
+            "negative_duration": 10,
+            "total": 666,
+            "bronze_rows": 800747,
+            "rate_pct_of_bronze_vendor_rows": 0.083172
+          },
+          "2": {
+            "equal_timestamp": 99,
+            "negative_duration": 0,
+            "total": 99,
+            "bronze_rows": 3135417,
+            "rate_pct_of_bronze_vendor_rows": 0.003157
+          },
+          "7": {
+            "equal_timestamp": 33844,
+            "negative_duration": 0,
+            "total": 33844,
+            "bronze_rows": 33844,
+            "rate_pct_of_bronze_vendor_rows": 100.0
+          },
+          "6": {
+            "equal_timestamp": 7,
+            "negative_duration": 153,
+            "total": 160,
+            "bronze_rows": 545,
+            "rate_pct_of_bronze_vendor_rows": 29.357798
+          }
+        },
+        "by_payment_type": {
+          "3": {
+            "equal_timestamp": 366,
+            "negative_duration": 0,
+            "total": 366
+          },
+          "2": {
+            "equal_timestamp": 4602,
+            "negative_duration": 1,
+            "total": 4603
+          },
+          "4": {
+            "equal_timestamp": 174,
+            "negative_duration": 0,
+            "total": 174
+          },
+          "1": {
+            "equal_timestamp": 29356,
+            "negative_duration": 9,
+            "total": 29365
+          },
+          "0": {
+            "equal_timestamp": 108,
+            "negative_duration": 153,
+            "total": 261
+          }
+        },
+        "by_ratecode_id": {
+          "1": {
+            "equal_timestamp": 33449,
+            "negative_duration": 1,
+            "total": 33450
+          },
+          "3": {
+            "equal_timestamp": 59,
+            "negative_duration": 0,
+            "total": 59
+          },
+          "5": {
+            "equal_timestamp": 178,
+            "negative_duration": 0,
+            "total": 178
+          },
+          "4": {
+            "equal_timestamp": 44,
+            "negative_duration": 0,
+            "total": 44
+          },
+          "99": {
+            "equal_timestamp": 151,
+            "negative_duration": 9,
+            "total": 160
+          },
+          "2": {
+            "equal_timestamp": 617,
+            "negative_duration": 0,
+            "total": 617
+          },
+          "null": {
+            "equal_timestamp": 108,
+            "negative_duration": 153,
+            "total": 261
+          }
+        }
+      },
+      {
+        "source_month": "2025-05",
+        "bronze_rows": 4591845,
+        "equal_timestamp": 64171,
+        "negative_duration": 101,
+        "total": 64272,
+        "rate_pct_of_bronze_rows": 1.399699,
+        "by_vendor": {
+          "1": {
+            "equal_timestamp": 778,
+            "negative_duration": 7,
+            "total": 785,
+            "bronze_rows": 889031,
+            "rate_pct_of_bronze_vendor_rows": 0.088298
+          },
+          "2": {
+            "equal_timestamp": 127,
+            "negative_duration": 0,
+            "total": 127,
+            "bronze_rows": 3639117,
+            "rate_pct_of_bronze_vendor_rows": 0.00349
+          },
+          "7": {
+            "equal_timestamp": 63261,
+            "negative_duration": 0,
+            "total": 63261,
+            "bronze_rows": 63261,
+            "rate_pct_of_bronze_vendor_rows": 100.0
+          },
+          "6": {
+            "equal_timestamp": 5,
+            "negative_duration": 94,
+            "total": 99,
+            "bronze_rows": 436,
+            "rate_pct_of_bronze_vendor_rows": 22.706422
+          }
+        },
+        "by_payment_type": {
+          "4": {
+            "equal_timestamp": 246,
+            "negative_duration": 0,
+            "total": 246
+          },
+          "3": {
+            "equal_timestamp": 635,
+            "negative_duration": 1,
+            "total": 636
+          },
+          "1": {
+            "equal_timestamp": 54774,
+            "negative_duration": 6,
+            "total": 54780
+          },
+          "2": {
+            "equal_timestamp": 8380,
+            "negative_duration": 0,
+            "total": 8380
+          },
+          "0": {
+            "equal_timestamp": 136,
+            "negative_duration": 94,
+            "total": 230
+          }
+        },
+        "by_ratecode_id": {
+          "5": {
+            "equal_timestamp": 315,
+            "negative_duration": 0,
+            "total": 315
+          },
+          "1": {
+            "equal_timestamp": 62241,
+            "negative_duration": 0,
+            "total": 62241
+          },
+          "3": {
+            "equal_timestamp": 85,
+            "negative_duration": 0,
+            "total": 85
+          },
+          "4": {
+            "equal_timestamp": 73,
+            "negative_duration": 0,
+            "total": 73
+          },
+          "99": {
+            "equal_timestamp": 281,
+            "negative_duration": 7,
+            "total": 288
+          },
+          "2": {
+            "equal_timestamp": 1040,
+            "negative_duration": 0,
+            "total": 1040
+          },
+          "null": {
+            "equal_timestamp": 136,
+            "negative_duration": 94,
+            "total": 230
+          }
+        }
+      },
+      {
+        "source_month": "2025-06",
+        "bronze_rows": 4322960,
+        "equal_timestamp": 68352,
+        "negative_duration": 231,
+        "total": 68583,
+        "rate_pct_of_bronze_rows": 1.586482,
+        "by_vendor": {
+          "2": {
+            "equal_timestamp": 59,
+            "negative_duration": 0,
+            "total": 59,
+            "bronze_rows": 3423020,
+            "rate_pct_of_bronze_vendor_rows": 0.001724
+          },
+          "6": {
+            "equal_timestamp": 6,
+            "negative_duration": 230,
+            "total": 236,
+            "bronze_rows": 1516,
+            "rate_pct_of_bronze_vendor_rows": 15.567282
+          },
+          "1": {
+            "equal_timestamp": 714,
+            "negative_duration": 1,
+            "total": 715,
+            "bronze_rows": 830851,
+            "rate_pct_of_bronze_vendor_rows": 0.086056
+          },
+          "7": {
+            "equal_timestamp": 67573,
+            "negative_duration": 0,
+            "total": 67573,
+            "bronze_rows": 67573,
+            "rate_pct_of_bronze_vendor_rows": 100.0
+          }
+        },
+        "by_payment_type": {
+          "0": {
+            "equal_timestamp": 76,
+            "negative_duration": 230,
+            "total": 306
+          },
+          "1": {
+            "equal_timestamp": 58198,
+            "negative_duration": 1,
+            "total": 58199
+          },
+          "3": {
+            "equal_timestamp": 583,
+            "negative_duration": 0,
+            "total": 583
+          },
+          "4": {
+            "equal_timestamp": 328,
+            "negative_duration": 0,
+            "total": 328
+          },
+          "2": {
+            "equal_timestamp": 9166,
+            "negative_duration": 0,
+            "total": 9166
+          },
+          "5": {
+            "equal_timestamp": 1,
+            "negative_duration": 0,
+            "total": 1
+          }
+        },
+        "by_ratecode_id": {
+          "null": {
+            "equal_timestamp": 76,
+            "negative_duration": 230,
+            "total": 306
+          },
+          "2": {
+            "equal_timestamp": 1064,
+            "negative_duration": 0,
+            "total": 1064
+          },
+          "1": {
+            "equal_timestamp": 66349,
+            "negative_duration": 0,
+            "total": 66349
+          },
+          "99": {
+            "equal_timestamp": 261,
+            "negative_duration": 1,
+            "total": 262
+          },
+          "4": {
+            "equal_timestamp": 108,
+            "negative_duration": 0,
+            "total": 108
+          },
+          "5": {
+            "equal_timestamp": 410,
+            "negative_duration": 0,
+            "total": 410
+          },
+          "3": {
+            "equal_timestamp": 84,
+            "negative_duration": 0,
+            "total": 84
+          }
+        }
+      }
+    ],
+    "by_vendor": {
+      "1": {
+        "equal_timestamp": 3983,
+        "negative_duration": 44,
+        "total": 4027,
+        "bronze_rows": 4863684,
+        "rate_pct_of_bronze_vendor_rows": 0.082797
+      },
+      "2": {
+        "equal_timestamp": 525,
+        "negative_duration": 0,
+        "total": 525,
+        "bronze_rows": 19024265,
+        "rate_pct_of_bronze_vendor_rows": 0.00276
+      },
+      "6": {
+        "equal_timestamp": 33,
+        "negative_duration": 749,
+        "total": 782,
+        "bronze_rows": 3650,
+        "rate_pct_of_bronze_vendor_rows": 21.424658
+      },
+      "7": {
+        "equal_timestamp": 191785,
+        "negative_duration": 0,
+        "total": 191785,
+        "bronze_rows": 191785,
+        "rate_pct_of_bronze_vendor_rows": 100.0
+      }
+    },
+    "by_payment_type": {
+      "0": {
+        "equal_timestamp": 619,
+        "negative_duration": 749,
+        "total": 1368
+      },
+      "1": {
+        "equal_timestamp": 166266,
+        "negative_duration": 42,
+        "total": 166308
+      },
+      "2": {
+        "equal_timestamp": 26516,
+        "negative_duration": 1,
+        "total": 26517
+      },
+      "3": {
+        "equal_timestamp": 2079,
+        "negative_duration": 1,
+        "total": 2080
+      },
+      "4": {
+        "equal_timestamp": 845,
+        "negative_duration": 0,
+        "total": 845
+      },
+      "5": {
+        "equal_timestamp": 1,
+        "negative_duration": 0,
+        "total": 1
+      }
+    },
+    "by_ratecode_id": {
+      "1": {
+        "equal_timestamp": 189699,
+        "negative_duration": 2,
+        "total": 189701
+      },
+      "2": {
+        "equal_timestamp": 3172,
+        "negative_duration": 0,
+        "total": 3172
+      },
+      "3": {
+        "equal_timestamp": 261,
+        "negative_duration": 0,
+        "total": 261
+      },
+      "4": {
+        "equal_timestamp": 266,
+        "negative_duration": 0,
+        "total": 266
+      },
+      "5": {
+        "equal_timestamp": 1162,
+        "negative_duration": 0,
+        "total": 1162
+      },
+      "99": {
+        "equal_timestamp": 1147,
+        "negative_duration": 42,
+        "total": 1189
+      },
+      "null": {
+        "equal_timestamp": 619,
+        "negative_duration": 749,
+        "total": 1368
+      }
+    },
+    "month_definition": "The month is the Bronze source partition, not the event month."
+  },
+  "negative_fare": {
+    "total": 1322979,
+    "silver_rows": 23886265,
+    "rate_pct_of_silver_rows": 5.53866,
+    "by_month": [
+      {
+        "source_month": "2025-01",
+        "silver_rows": 3473175,
+        "count": 144107,
+        "rate_pct_of_silver_rows": 4.149143
+      },
+      {
+        "source_month": "2025-02",
+        "silver_rows": 3572379,
+        "count": 182645,
+        "rate_pct_of_silver_rows": 5.112699
+      },
+      {
+        "source_month": "2025-03",
+        "silver_rows": 4122977,
+        "count": 208716,
+        "rate_pct_of_silver_rows": 5.062264
+      },
+      {
+        "source_month": "2025-04",
+        "silver_rows": 3935784,
+        "count": 186709,
+        "rate_pct_of_silver_rows": 4.743883
+      },
+      {
+        "source_month": "2025-05",
+        "silver_rows": 4527573,
+        "count": 325250,
+        "rate_pct_of_silver_rows": 7.18376
+      },
+      {
+        "source_month": "2025-06",
+        "silver_rows": 4254377,
+        "count": 275552,
+        "rate_pct_of_silver_rows": 6.476906
+      }
+    ],
+    "by_vendor": {
+      "2": 1322979
+    },
+    "by_payment_type": {
+      "0": {
+        "count": 917296,
+        "label": "Flex Fare"
+      },
+      "1": {
+        "count": 351,
+        "label": "Credit card"
+      },
+      "2": {
+        "count": 96344,
+        "label": "Cash"
+      },
+      "3": {
+        "count": 52024,
+        "label": "No charge"
+      },
+      "4": {
+        "count": 256964,
+        "label": "Dispute"
+      },
+      "5": {
+        "count": 0,
+        "label": "Unknown"
+      },
+      "6": {
+        "count": 0,
+        "label": "Voided trip"
+      }
+    },
+    "by_ratecode_id": {
+      "1": 358638,
+      "2": 26149,
+      "3": 6453,
+      "4": 3288,
+      "5": 11154,
+      "6": 1,
+      "null": 917296
+    },
+    "statistics": {
+      "rows": 1322979,
+      "fare_amount": {
+        "nonnull_rows": 1322979,
+        "min": -1807.6,
+        "max": -0.01,
+        "mean": -10.0995,
+        "approx_quantiles": {
+          "p01": -74.8,
+          "p10": -20.5,
+          "p50": -4.75,
+          "p90": -1.5,
+          "p99": -0.76
+        }
+      },
+      "trip_distance": {
+        "nonnull_rows": 1322979,
+        "min": 0.0,
+        "max": 320136.29,
+        "mean": 15.4016,
+        "approx_quantiles": {
+          "p01": 0.0,
+          "p10": 0.01,
+          "p50": 2.08,
+          "p90": 7.96,
+          "p99": 18.63
+        }
+      },
+      "total_amount": {
+        "nonnull_rows": 1322979,
+        "min": -1832.85,
+        "max": 101.53,
+        "mean": -6.0767,
+        "approx_quantiles": {
+          "p01": -88.44,
+          "p10": -25.55,
+          "p50": 2.96,
+          "p90": 6.72,
+          "p99": 12.78
+        }
+      }
+    },
+    "month_definition": "The month is the Silver source partition, not the event month."
+  },
+  "zero_distance": {
+    "total": 655348,
+    "rate_pct_of_silver_rows": 2.743619,
+    "by_month": [
+      {
+        "source_month": "2025-01",
+        "count": 90201
+      },
+      {
+        "source_month": "2025-02",
+        "count": 99105
+      },
+      {
+        "source_month": "2025-03",
+        "count": 102960
+      },
+      {
+        "source_month": "2025-04",
+        "count": 90602
+      },
+      {
+        "source_month": "2025-05",
+        "count": 139598
+      },
+      {
+        "source_month": "2025-06",
+        "count": 132882
+      }
+    ],
+    "by_vendor": {
+      "1": 84166,
+      "2": 571182,
+      "6": 0
+    }
+  },
+  "passenger_count": {
+    "null": 5417233,
+    "zero": 137707,
+    "null_rate_pct_of_silver_rows": 22.67928,
+    "zero_rate_pct_of_silver_rows": 0.576511,
+    "by_month": [
+      {
+        "source_month": "2025-01",
+        "null": 539930,
+        "zero": 24465
+      },
+      {
+        "source_month": "2025-02",
+        "null": 806764,
+        "zero": 21585
+      },
+      {
+        "source_month": "2025-03",
+        "null": 916484,
+        "zero": 22570
+      },
+      {
+        "source_month": "2025-04",
+        "null": 745469,
+        "zero": 22918
+      },
+      {
+        "source_month": "2025-05",
+        "null": 1195946,
+        "zero": 23659
+      },
+      {
+        "source_month": "2025-06",
+        "null": 1212640,
+        "zero": 22510
+      }
+    ],
+    "by_vendor": {
+      "1": {
+        "null": 780145,
+        "zero": 135497
+      },
+      "2": {
+        "null": 4634220,
+        "zero": 2210
+      },
+      "6": {
+        "null": 2868,
+        "zero": 0
+      }
+    }
+  },
+  "zero_fare": {
+    "total": 9726,
+    "by_month": [
+      {
+        "source_month": "2025-01",
+        "count": 1355
+      },
+      {
+        "source_month": "2025-02",
+        "count": 1401
+      },
+      {
+        "source_month": "2025-03",
+        "count": 1607
+      },
+      {
+        "source_month": "2025-04",
+        "count": 1380
+      },
+      {
+        "source_month": "2025-05",
+        "count": 2067
+      },
+      {
+        "source_month": "2025-06",
+        "count": 1916
+      }
+    ]
+  },
+  "pickup_outside_source_month": {
+    "total": 137,
+    "by_source_month": [
+      {
+        "source_month": "2025-01",
+        "count": 22
+      },
+      {
+        "source_month": "2025-02",
+        "count": 31
+      },
+      {
+        "source_month": "2025-03",
+        "count": 33
+      },
+      {
+        "source_month": "2025-04",
+        "count": 7
+      },
+      {
+        "source_month": "2025-05",
+        "count": 24
+      },
+      {
+        "source_month": "2025-06",
+        "count": 20
+      }
+    ],
+    "outside_2025_01_to_06_calendar_month": {
+      "total": 24,
+      "by_pickup_calendar_month": {
+        "2007-12": 1,
+        "2009-01": 2,
+        "2024-12": 21
+      }
+    },
+    "handling": "Preserved in Silver; report unmatched temporal keys explicitly in Gold."
+  },
+  "gold_recommendation": {
+    "status": "ready_with_caveats",
+    "temporal_policy": "Join Taxi pickup_date/pickup_hour to Weather weather_date_nyc/weather_hour_nyc as local wall-clock keys; do not convert Taxi to UTC for this hourly join.",
+    "unmatched_policy": "Retain and count unmatched temporal keys; never silently drop trips.",
+    "coverage_caveats": [
+      "Weather Jan-Jun UTC coverage ends at 2025-06-30 19:00 New York local time.",
+      "Source-month pickups outside Jan-Jun or outside their file month require explicit handling.",
+      "Vendor 7 trips rejected by Silver have no representation in accepted Gold Taxi records."
+    ],
+    "join_executed": false
+  },
+  "ml_target_recommendation": {
+    "status": "recommend_exclude_nonpositive_target_in_future_ml_only",
+    "target": "fare_amount",
+    "future_training_filter": "fare_amount > 0",
+    "exclude_fare_amount_lte_zero_rows": 1332705,
+    "exclude_rate_pct_of_silver_rows": 5.579378,
+    "remaining_candidate_rows_before_other_ml_rules": 22553560,
+    "reason": "Nonpositive fare does not represent a positive pre-trip fare target; review the observed vendor and payment-type breakdowns in this report. This is a model-selection policy, not a Silver cleaning rule.",
+    "gold_analytical_policy": "Keep all Silver fare values and label anomalies.",
+    "avoid_pretrip_predictor_leakage": [
+      "total_amount",
+      "tip_amount",
+      "tolls_amount",
+      "payment_type",
+      "trip_distance",
+      "dropoff_datetime_local"
+    ],
+    "distance_caveat": "Recorded trip_distance is known after the trip; a separately available pre-trip route estimate would be a different feature."
+  }
+}
