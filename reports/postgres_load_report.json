@@ -1,0 +1,303 @@
+{
+  "schema_version": 2,
+  "generated_at_utc": "2026-10-09T15:47:25.659224+00:00",
+  "validation_status": "valid",
+  "dimension_counts": {
+    "location": 265,
+    "calendar": 365,
+    "weather": 4344
+  },
+  "calendar_holiday_count": 11,
+  "fact_summary": {
+    "total_trips": 23886265,
+    "calendar_null_fk": 24,
+    "weather_null_fk": 20246,
+    "pickup_location_null_fk": 0,
+    "dropoff_location_null_fk": 0,
+    "pickup_location_missing_fk": 0,
+    "dropoff_location_missing_fk": 0
+  },
+  "per_month_counts": {
+    "2025-01": 3473175,
+    "2025-02": 3572379,
+    "2025-03": 4122977,
+    "2025-04": 3935784,
+    "2025-05": 4527573,
+    "2025-06": 4254377
+  },
+  "load_log": [
+    {
+      "dataset": "fact_trip",
+      "source_year": 2025,
+      "source_month": 1,
+      "gold_batch_id": "4e9696c901524438930b737bbac0aa50",
+      "source_row_count": 3473175,
+      "loaded_row_count": 3473175,
+      "started_at": "2026-10-09T12:11:22.104257+00:00",
+      "completed_at": "2026-10-09T12:22:56.460435+00:00",
+      "status": "loaded",
+      "elapsed_seconds": 694.356178
+    },
+    {
+      "dataset": "fact_trip",
+      "source_year": 2025,
+      "source_month": 2,
+      "gold_batch_id": "067059ba205e41d5bf97f03f3311bd61",
+      "source_row_count": 3572379,
+      "loaded_row_count": 3572379,
+      "started_at": "2026-10-09T12:23:39.728087+00:00",
+      "completed_at": "2026-10-09T12:36:27.871321+00:00",
+      "status": "loaded",
+      "elapsed_seconds": 768.143234
+    },
+    {
+      "dataset": "fact_trip",
+      "source_year": 2025,
+      "source_month": 3,
+      "gold_batch_id": "e0fe67a3934241519c855400afdadb0b",
+      "source_row_count": 4122977,
+      "loaded_row_count": 4122977,
+      "started_at": "2026-10-09T12:36:27.909360+00:00",
+      "completed_at": "2026-10-09T12:51:32.337595+00:00",
+      "status": "loaded",
+      "elapsed_seconds": 904.428235
+    },
+    {
+      "dataset": "fact_trip",
+      "source_year": 2025,
+      "source_month": 4,
+      "gold_batch_id": "edf3c84e08374f0d8ccadc2674565a29",
+      "source_row_count": 3935784,
+      "loaded_row_count": 3935784,
+      "started_at": "2026-10-09T12:51:32.360284+00:00",
+      "completed_at": "2026-10-09T13:05:36.018941+00:00",
+      "status": "loaded",
+      "elapsed_seconds": 843.658657
+    },
+    {
+      "dataset": "fact_trip",
+      "source_year": 2025,
+      "source_month": 5,
+      "gold_batch_id": "4eb1d3a9646b4594b33c62d245664faa",
+      "source_row_count": 4527573,
+      "loaded_row_count": 4527573,
+      "started_at": "2026-10-09T13:05:36.038265+00:00",
+      "completed_at": "2026-10-09T13:22:07.639981+00:00",
+      "status": "loaded",
+      "elapsed_seconds": 991.601716
+    },
+    {
+      "dataset": "fact_trip",
+      "source_year": 2025,
+      "source_month": 6,
+      "gold_batch_id": "a1eb7ef553a547e68dc603103faa7a21",
+      "source_row_count": 4254377,
+      "loaded_row_count": 4254377,
+      "started_at": "2026-10-09T13:22:07.663525+00:00",
+      "completed_at": "2026-10-09T13:38:29.726595+00:00",
+      "status": "loaded",
+      "elapsed_seconds": 982.06307
+    }
+  ],
+  "gold_batch_lineage": {
+    "taxi_2025-01": "4e9696c901524438930b737bbac0aa50",
+    "taxi_2025-02": "067059ba205e41d5bf97f03f3311bd61",
+    "taxi_2025-03": "e0fe67a3934241519c855400afdadb0b",
+    "taxi_2025-04": "edf3c84e08374f0d8ccadc2674565a29",
+    "taxi_2025-05": "4eb1d3a9646b4594b33c62d245664faa",
+    "taxi_2025-06": "a1eb7ef553a547e68dc603103faa7a21"
+  },
+  "indexes": [
+    "dim_calendar_pkey",
+    "dim_location_pkey",
+    "dim_weather_local_hour_idx",
+    "dim_weather_pkey",
+    "dim_weather_weather_timestamp_utc_key",
+    "etl_load_log_pkey",
+    "fact_trip_calendar_date_idx",
+    "fact_trip_dropoff_location_idx",
+    "fact_trip_pickup_datetime_idx",
+    "fact_trip_pickup_hour_idx",
+    "fact_trip_pickup_location_idx",
+    "fact_trip_pkey",
+    "fact_trip_source_month_idx",
+    "fact_trip_weather_idx"
+  ],
+  "view_trip_enriched_present": true,
+  "table_size_bytes": {
+    "fact_bytes": 10795352064,
+    "weather_bytes": 819200
+  },
+  "sanity_queries": {
+    "by_pickup_borough": [
+      {
+        "borough": "Manhattan",
+        "trips": 20642545
+      },
+      {
+        "borough": "Queens",
+        "trips": 2209267
+      },
+      {
+        "borough": "Brooklyn",
+        "trips": 800746
+      },
+      {
+        "borough": "Bronx",
+        "trips": 174565
+      },
+      {
+        "borough": "Unknown",
+        "trips": 44548
+      },
+      {
+        "borough": "N/A",
+        "trips": 9737
+      },
+      {
+        "borough": "EWR",
+        "trips": 2542
+      },
+      {
+        "borough": "Staten Island",
+        "trips": 2315
+      }
+    ],
+    "by_pickup_hour": [
+      {
+        "pickup_hour": 0,
+        "trips": 751093
+      },
+      {
+        "pickup_hour": 1,
+        "trips": 493866
+      },
+      {
+        "pickup_hour": 2,
+        "trips": 323488
+      },
+      {
+        "pickup_hour": 3,
+        "trips": 220445
+      },
+      {
+        "pickup_hour": 4,
+        "trips": 170234
+      },
+      {
+        "pickup_hour": 5,
+        "trips": 180157
+      },
+      {
+        "pickup_hour": 6,
+        "trips": 356988
+      },
+      {
+        "pickup_hour": 7,
+        "trips": 673506
+      },
+      {
+        "pickup_hour": 8,
+        "trips": 920842
+      },
+      {
+        "pickup_hour": 9,
+        "trips": 967871
+      },
+      {
+        "pickup_hour": 10,
+        "trips": 1006806
+      },
+      {
+        "pickup_hour": 11,
+        "trips": 1076887
+      },
+      {
+        "pickup_hour": 12,
+        "trips": 1177766
+      },
+      {
+        "pickup_hour": 13,
+        "trips": 1241043
+      },
+      {
+        "pickup_hour": 14,
+        "trips": 1333799
+      },
+      {
+        "pickup_hour": 15,
+        "trips": 1392454
+      },
+      {
+        "pickup_hour": 16,
+        "trips": 1442019
+      },
+      {
+        "pickup_hour": 17,
+        "trips": 1637440
+      },
+      {
+        "pickup_hour": 18,
+        "trips": 1740554
+      },
+      {
+        "pickup_hour": 19,
+        "trips": 1516463
+      },
+      {
+        "pickup_hour": 20,
+        "trips": 1390826
+      },
+      {
+        "pickup_hour": 21,
+        "trips": 1444955
+      },
+      {
+        "pickup_hour": 22,
+        "trips": 1363436
+      },
+      {
+        "pickup_hour": 23,
+        "trips": 1063327
+      }
+    ],
+    "by_holiday": [
+      {
+        "is_holiday": false,
+        "trips": 23372742
+      },
+      {
+        "is_holiday": true,
+        "trips": 513499
+      },
+      {
+        "is_holiday": null,
+        "trips": 24
+      }
+    ],
+    "by_weather_match": [
+      {
+        "weather_matched": false,
+        "trips": 20246
+      },
+      {
+        "weather_matched": true,
+        "trips": 23866019
+      }
+    ],
+    "by_rain": [
+      {
+        "weather_class": "dry",
+        "trips": 19384896
+      },
+      {
+        "weather_class": "rainy",
+        "trips": 4481123
+      },
+      {
+        "weather_class": "unknown",
+        "trips": 20246
+      }
+    ]
+  }
+}

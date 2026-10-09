@@ -4,11 +4,12 @@ Project cuối kỳ môn **Tích hợp và phân tích dữ liệu lớn**, xây
 pipeline tích hợp dữ liệu chuyến taxi New York với thời tiết, lịch/ngày lễ và
 taxi-zone lookup để hướng tới bài toán dự đoán `fare_amount`.
 
-**STEP 1–4.5 đã hoàn tất; STEP 5 đã build Gold:** project có dữ liệu Raw thật
-cho 01–06/2025, 9 output Bronze, 9 output Silver và 6/6 partition Gold được
-kiểm chứng. PostgreSQL load và model training chưa thực hiện.
+**STEP 1–6 đã hoàn tất:** project có dữ liệu Raw thật cho 01–06/2025, 9 output
+Bronze, 9 output Silver, 6/6 partition Gold và PostgreSQL analytical data mart
+đã nạp, kiểm chứng 23.886.265 chuyến. Model training và Power BI dashboard
+chưa thực hiện.
 
-## 1. Kiến trúc dự kiến
+## 1. Kiến trúc hiện tại và định hướng
 
 ```text
 NYC Taxi + Weather + Calendar/Holiday + Taxi Zone Lookup
@@ -19,11 +20,11 @@ NYC Taxi + Weather + Calendar/Holiday + Taxi Zone Lookup
                             |
               Bronze -> Silver -> Gold
                             |
-                       PostgreSQL
+                 PostgreSQL (STEP 6)
                             |
-                  ML + MLflow tracking
+               ML + MLflow (dự kiến)
                             |
-                        Power BI
+                   Power BI (đề xuất)
 
                  Airflow orchestration (sau này)
 ```
@@ -144,7 +145,8 @@ docker compose ps
 ```
 
 PostgreSQL chạy tại `localhost:5432`. Trong lần tạo volume đầu tiên, container tự
-chạy các file trong `sql/` để tạo schema `analytics` và bốn bảng ban đầu.
+chạy các file trong `sql/` để tạo schema `analytics`. Các file này không chạy
+lại khi volume đã tồn tại; loader kiểm tra compatibility trước khi nạp dữ liệu.
 
 Kiểm tra PostgreSQL:
 
@@ -210,7 +212,13 @@ pytest
 ```
 
 Test gồm smoke test và các unit test offline cho Raw/Bronze/Silver, calendar,
-metadata, idempotency và manifest; không cần Spark cluster hay Internet. Trên
+metadata, idempotency, manifest và PostgreSQL loader; mặc định không kết nối
+production database. Integration test PostgreSQL chỉ chạy khi thiết lập rõ
+`NYC_TAXI_RUN_POSTGRES_INTEGRATION=1` và `NYC_TAXI_TEST_POSTGRES_URL` trỏ tới
+database thử nghiệm riêng có tên chứa `_test`, chưa có schema `analytics`;
+fixture nhỏ được rollback cuối test. Ví dụ đặt URL test trong biến môi trường
+rồi chạy `pytest -q tests/test_postgres_integration.py`; không dùng database
+production. Trên
 Windows thiếu `winutils.exe`, integration test ghi Parquet có thể được skip;
 để chạy đầy đủ trong Docker, thay phần `python scripts/build_bronze.py ...`
 của lệnh `docker run` ở mục Bronze bằng `python -m pytest -q -p no:cacheprovider`.
@@ -446,6 +454,68 @@ Gold giữ cả các trường chỉ biết **sau** chuyến đi như thời gia
 thực đo. Chúng hữu ích cho phân tích nhưng không tự động là predictor hợp lệ
 cho bài toán ước lượng giá cước *trước* chuyến; chọn feature ML là bước riêng.
 
+## PostgreSQL Analytical Data Mart
+
+STEP 6 nạp Gold Parquet vào PostgreSQL 16 qua PyArrow đọc theo batch và Psycopg
+`COPY`, theo từng tháng nguồn Taxi. Loader không đọc toàn bộ 23,9 triệu dòng vào
+RAM hoặc dùng ORM insert từng dòng. Schema `analytics` gồm `dim_location`
+(Silver Taxi Zones), `dim_calendar` (Silver Calendar), `dim_weather` (Silver
+Weather), `fact_trip` (Gold) và `etl_load_log`. `fact_trip.trip_id` là khóa thay
+thế do PostgreSQL sinh, vì nguồn TLC không có trip ID tự nhiên ổn định.
+`payment_type` giữ mã số; `pickup_date` gốc được lưu riêng. Khóa ngoại
+`calendar_date_id` và `weather_id` cho phép `NULL`, giữ nguyên 24 chuyến ngoài
+Calendar 2025 và 20.246 chuyến không khớp Weather. Weather được định danh duy
+nhất theo timestamp UTC; cặp ngày/giờ NYC chỉ được đánh index, không ép unique
+để không phá vỡ dữ liệu khi có giờ lặp vào mùa thu do DST.
+
+Từ thư mục project, thiết lập thông tin kết nối trong `.env` theo
+`.env.example` (không commit mật khẩu) rồi khởi động và kiểm tra dịch vụ:
+
+```powershell
+docker compose up -d
+docker compose ps
+python scripts/load_postgres.py --dimensions
+python scripts/load_postgres.py --month 2025-01
+python scripts/load_postgres.py --start-month 2025-02 --end-month 2025-06
+python scripts/load_postgres.py --all
+```
+
+Windows kết nối qua `localhost:5432` theo cấu hình mặc định; tên database,
+user, port và password lấy từ `.env`/config, không hard-code trong loader.
+Lệnh `--all` sẽ nạp hoặc kiểm tra dimensions rồi xử lý các tháng 01–06/2025.
+Mặc định partition đã nạp cùng Gold batch ID và số dòng sẽ được bỏ qua.
+`--month 2025-01 --force` thay thế đúng partition tháng 01 trong một transaction:
+xóa các dòng của tháng đó, `COPY` lại, cập nhật load log rồi commit; lỗi sẽ
+rollback. Không dùng `docker compose down -v` vì lệnh đó xóa dữ liệu volume.
+Chỉ `sql/01_create_schema.sql` và `sql/02_create_tables.sql` ở thư mục gốc
+`sql/` tự chạy lúc PostgreSQL tạo volume mới. Script migration trong
+`sql/migrations/` và index/view sau load trong `sql/postload/` không tự chạy;
+loader kiểm tra schema hiện hữu và không âm thầm xóa hoặc sửa dữ liệu. Nếu đang giữ schema
+skeleton cũ, cần xem lỗi compatibility và quyết định backup/migration trước
+khi dùng tùy chọn phá hủy `--recreate-schema`; không dùng cờ này theo mặc định.
+
+Để xác nhận mà không tải toàn bộ fact về terminal, chạy validator/report CLI
+và các SQL aggregate nhỏ:
+
+```powershell
+python scripts/load_postgres.py --validate
+docker compose exec postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT source_year, source_month, count(*) FROM analytics.fact_trip GROUP BY 1, 2 ORDER BY 1, 2"'
+docker compose exec postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) AS trips, count(*) FILTER (WHERE calendar_date_id IS NULL) AS calendar_nulls, count(*) FILTER (WHERE weather_id IS NULL) AS weather_nulls FROM analytics.fact_trip"'
+```
+
+Các biến `POSTGRES_USER`/`POSTGRES_DB` trong ví dụ SQL được container lấy từ
+Compose/.env. Kết quả đã kiểm chứng trên cả sáu tháng: dimensions
+265 / 365 / 4.344 dòng, fact 23.886.265 dòng; Calendar FK `NULL` 24, Weather
+FK `NULL` 20.246, Pickup/Dropoff Location FK thiếu 0. Sáu load log có trạng thái
+`loaded`; `reports/postgres_load_report.json` ghi tóm tắt validation,
+thời gian nạp và Gold batch lineage nhưng không chứa secret. Index phân tích
+không thiết yếu được tạo sau bulk load bằng `--create-indexes`; lệnh này cũng
+tạo `analytics.vw_trip_enriched` từ `sql/postload/create_views.sql`. Đây chỉ là
+SQL view, không sao chép 23,9 triệu dòng.
+Power BI ở bước sau có thể kết nối trực tiếp tới star schema với host
+`localhost`, port `5432` và database/user trong `.env`; dashboard chưa thuộc
+STEP 6.
+
 ## 13. Thiết kế ML dự kiến
 
 Target: `fare_amount`.
@@ -487,11 +557,15 @@ giữ các trường này cho phân tích; tập train và feature selection là
   Calendar, Weather; giữ unmatched, kiểm tra fan-out và ghi quality/lineage
   manifest; 6/6 partition Gold đã được build và đánh dấu `valid` trong
   `gold_manifest.json`.
+- Gold → PostgreSQL 16 bằng PyArrow batch + Psycopg `COPY` theo từng tháng,
+  schema `analytics` gồm ba dimension, `fact_trip` và `etl_load_log`; 6/6 tháng
+  đã nạp, 23.886.265 fact rows bằng Gold, không mất dòng ở Calendar/Weather
+  nullable FK. Index và SQL view không materialize đã được tạo; report có trạng
+  thái `valid` tại `reports/postgres_load_report.json`.
 
 ### Chưa triển khai / planned
 
 - Versioning/snapshot dữ liệu nguồn theo nhiều lần cập nhật
-- Load Gold vào PostgreSQL
 - Train/tune/compare model và ghi MLflow runs/artifacts thật
 - Power BI dashboard
 - Airflow DAG, scheduling, monitoring và deployment production
@@ -501,10 +575,12 @@ Model training chưa triển khai; các entry point liên quan sẽ báo
 
 ## 15. Roadmap đề xuất
 
-1. Kiểm tra Gold manifest và thống kê unmatched/fan-out sau khi build các
-   tháng; nếu TLC/TSP xác nhận khác về timezone Parquet thì đánh giá lại
-   giả định STEP 4.5 và tái xử lý có kiểm soát.
-2. Ở STEP 6, thiết kế data mart phân tích và load Gold vào PostgreSQL.
-3. Sau đó mới xây train/validation pipeline, MLflow experiments và Power BI.
+1. Giữ khả năng kiểm tra lineage Gold → PostgreSQL và reload từng tháng khi
+   Gold batch ID thay đổi; nếu TLC/TSP xác nhận khác về timezone Parquet thì
+   đánh giá lại giả định STEP 4.5 và tái xử lý có kiểm soát.
+2. **Đề xuất STEP 7:** xây Power BI analytical dashboard kết nối star schema
+   PostgreSQL; chưa triển khai dashboard trong STEP 6.
+3. Xây train/validation pipeline và MLflow experiments ở giai đoạn riêng sau
+   khi chốt feature, tránh leakage từ các trường hậu chuyến.
 4. Chỉ sau khi pipeline ổn định mới bổ sung Airflow orchestration.
 

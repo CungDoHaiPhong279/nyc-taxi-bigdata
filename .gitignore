@@ -42,6 +42,7 @@ reports/**
 !reports/.gitkeep
 !reports/step4_5_profile.json
 !reports/STEP_4_5_FINDINGS.md
+!reports/postgres_load_report.json
 mlruns/
 
 # IDE
