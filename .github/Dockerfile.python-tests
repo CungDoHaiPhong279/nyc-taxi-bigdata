@@ -1,0 +1,25 @@
+# Local clean-environment equivalent of the Python CI job; never a worker image.
+FROM python:3.11.17-slim-bookworm
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+    POSTGRES_HOST=postgres \
+    POSTGRES_PORT=5432 \
+    POSTGRES_DB=nyc_taxi_ci \
+    POSTGRES_USER=ci_user \
+    POSTGRES_PASSWORD=ci_dummy_only \
+    MLFLOW_TRACKING_URI=http://mlflow:5000
+WORKDIR /app
+COPY requirements-ci.txt requirements-dashboard.txt ./
+RUN python -m pip install --no-cache-dir pip==24.0 \
+    && python -m pip install --no-cache-dir -r requirements-ci.txt \
+    && python -m pip check
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+COPY tests/ ./tests/
+COPY dashboard/app.py ./dashboard/app.py
+COPY config/config.yaml ./config/config.yaml
+COPY sql/ ./sql/
+# Only empty runtime directories: no local data, credentials or PBIX is copied.
+RUN mkdir -p data/raw data/bronze data/silver data/gold logs models reports
+CMD ["python", "scripts/ci_python.py"]

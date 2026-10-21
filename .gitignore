@@ -1,5 +1,6 @@
 # Secrets and local environment
 .env
+.sandbox/
 .venv/
 venv/
 

@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  # Public dummy values only. No repository/environment secrets are referenced.
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: nyc_taxi_ci
+  POSTGRES_USER: ci_user
+  POSTGRES_PASSWORD: ci_dummy_only
+  P61_POSTGRES_PASSWORD: ci_fixture_only
+  MLFLOW_TRACKING_URI: http://mlflow:5000
+
+jobs:
+  python-unit:
+    name: Python offline unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11.17"
+      - name: Install only the CI dependencies in a fresh venv
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/nyc-ci-python"
+          "$RUNNER_TEMP/nyc-ci-python/bin/python" -m pip install pip==24.0
+          "$RUNNER_TEMP/nyc-ci-python/bin/python" -m pip install -r requirements-ci.txt
+          "$RUNNER_TEMP/nyc-ci-python/bin/python" -m pip check
+      - name: Check discovery and run the classified offline suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/nyc-ci-python/bin/python" scripts/ci_python.py --collect-only
+          "$RUNNER_TEMP/nyc-ci-python/bin/python" scripts/ci_python.py
+
+  powershell-mocks:
+    name: PowerShell 5.1 mock tests
+    runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Download the exact Pester module to a temporary directory
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $archive = Join-Path $env:RUNNER_TEMP 'Pester.4.10.1.zip'
+          Invoke-WebRequest -UseBasicParsing -TimeoutSec 120 -Uri 'https://www.powershellgallery.com/api/v2/package/Pester/4.10.1' -OutFile $archive
+          $expected = '898210E1A30C52CD46BA317C2278A9324345214213AA2F7D6B7DFA7B98F37AC9'
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $expected) {
+            throw 'Pester 4.10.1 download SHA256 mismatch.'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $env:RUNNER_TEMP 'nyc-pester')
+      - name: Parse scripts and run every Pester mock suite
+        run: |
+          & .\scripts\ci_pester.ps1 -ModulePath (Join-Path $env:RUNNER_TEMP 'nyc-pester/Pester.psd1')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  compose-and-dashboard:
+    name: Compose validation and dashboard packaging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11.17"
+      - name: Validate workflow with actionlint 1.7.12
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --max-time 120 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          mkdir "$RUNNER_TEMP/nyc-actionlint"
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP/nyc-actionlint"
+          # Syntax/type checks; optional host shellcheck/pyflakes are not relied on.
+          "$RUNNER_TEMP/nyc-actionlint/actionlint" -shellcheck= -pyflakes= .github/workflows/ci.yml
+      - name: Validate all Compose override/profile combinations with Compose 2.40.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --max-time 120 \
+            https://github.com/docker/compose/releases/download/v2.40.0/docker-compose-linux-x86_64 \
+            --output "$RUNNER_TEMP/nyc-compose"
+          echo "bd5835ccbbf06a42dcb5294c65e34a4634b34447afb9ed6fc7adf18a000e0f99  $RUNNER_TEMP/nyc-compose" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/nyc-compose"
+          python scripts/ci_validate_compose.py --compose-binary "$RUNNER_TEMP/nyc-compose"
+      - name: Build the dashboard image only (no push or services)
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: docker build --target dashboard --progress=plain -f Dockerfile.dashboard -t nyc-taxi-dashboard:ci .
+      - name: Check packaged dashboard dependencies and imports without network
+        run: |
+          docker run --rm --network none --read-only nyc-taxi-dashboard:ci python -m pip check
+          docker run --rm --network none --read-only nyc-taxi-dashboard:ci python -c "import streamlit; from nyc_taxi.dashboard import queries"

@@ -1,0 +1,59 @@
+# Compose >=2.24.4 (custom !override/!reset merge tags).
+# Used WITH docker-compose.yml, never as a replacement production stack.
+name: nyc-taxi-bootstrap-test
+
+services:
+  postgres:
+    container_name: nyc-taxi-bootstrap-test-postgres
+    restart: "no"
+    ports: !reset []
+    environment:
+      POSTGRES_DB: nyc_taxi_bootstrap_test
+      POSTGRES_USER: bootstrap_test
+      POSTGRES_PASSWORD: ${P61_POSTGRES_PASSWORD:?Run prepare_bootstrap_test.ps1 first}
+    volumes: !override
+      - postgres-data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+
+  mlflow:
+    container_name: nyc-taxi-bootstrap-test-mlflow
+    restart: "no"
+    ports: !reset []
+    volumes: !override
+      - mlflow-data:/mlflow
+
+  dashboard:
+    profiles: ["ui-test"]
+    restart: "no"
+    ports: !reset []
+    environment:
+      POSTGRES_DB: nyc_taxi_bootstrap_test
+      POSTGRES_USER: bootstrap_test
+      POSTGRES_PASSWORD: ${P61_POSTGRES_PASSWORD:?Run prepare_bootstrap_test.ps1 first}
+
+  worker:
+    # Reuse the local P2 runtime; production Dockerfile/image remain untouched.
+    build:
+      dockerfile: Dockerfile.bootstrap-test
+    image: nyc-taxi-worker:p6-test
+    environment:
+      POSTGRES_DB: nyc_taxi_bootstrap_test
+      POSTGRES_USER: bootstrap_test
+      POSTGRES_PASSWORD: ${P61_POSTGRES_PASSWORD:?Run prepare_bootstrap_test.ps1 first}
+    volumes: !override
+      - ./.sandbox/bootstrap-test/data:/app/data
+      - ./.sandbox/bootstrap-test/logs:/app/logs
+      - ./.sandbox/bootstrap-test/models:/app/models
+      - ./.sandbox/bootstrap-test/reports:/app/reports
+
+volumes:
+  postgres-data:
+    name: nyc-taxi-bootstrap-test_postgres-data
+  mlflow-data:
+    name: nyc-taxi-bootstrap-test_mlflow-data
+
+networks:
+  default:
+    name: nyc-taxi-bootstrap-test_default

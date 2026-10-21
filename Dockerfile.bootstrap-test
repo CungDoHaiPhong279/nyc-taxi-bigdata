@@ -1,0 +1,15 @@
+# Refresh code on the already verified, local P2 runtime; never retag that image.
+# No downloads or dependency upgrades. Changed dependency inputs MUST fail.
+FROM nyc-taxi-worker:p2
+
+WORKDIR /app
+COPY requirements.txt pyproject.toml /tmp/bootstrap-inputs/
+RUN python -B -c "from pathlib import Path; import sys; names = ('requirements.txt', 'pyproject.toml'); sys.exit(0 if all((Path('/app') / n).read_bytes() == (Path('/tmp/bootstrap-inputs') / n).read_bytes() for n in names) else 'Dependency inputs differ from the verified P2 base; use a separately reviewed full build')" \
+    && python -m pip check
+
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+COPY config/config.yaml ./config/config.yaml
+COPY sql/ ./sql/
+COPY tests/ ./tests/
+COPY README.md ./README.md

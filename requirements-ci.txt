@@ -1,0 +1,5 @@
+# Deliberately excludes the Spark/Java/MLflow training runtime.
+# Dashboard AppTest and offline Arrow/loader tests require these real imports.
+-r requirements-dashboard.txt
+pytest==9.1.1
+pyarrow==21.0.0

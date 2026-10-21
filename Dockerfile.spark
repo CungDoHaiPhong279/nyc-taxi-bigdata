@@ -1,17 +1,35 @@
 FROM python:3.11-slim-bookworm
 
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+    PYTHONPATH=/app/src \
+    PYTHONDONTWRITEBYTECODE=1
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-
-RUN python -m pip install --no-cache-dir \
-    pyspark==4.2.0 \
-    'pyarrow>=18' \
-    PyYAML \
-    python-dotenv
-
-RUN python -m pip install --no-cache-dir pytest
-
 WORKDIR /app
+
+# Install the project's existing runtime/test requirements, including Psycopg
+# for the PostgreSQL loader. Keep the source below /app so config.py can find
+# /app/config/config.yaml when imported.
+COPY requirements.txt requirements-worker-constraints.txt pyproject.toml README.md ./
+# pip 24 connection retries do not retry an entire truncated response. Retry the
+# install at most three times; every attempt keeps PyPI hash verification on.
+RUN attempt=1; \
+    until python -m pip install --no-cache-dir --timeout 120 --retries 5 -r requirements.txt -c requirements-worker-constraints.txt; do \
+        if [ "$attempt" -ge 3 ]; then exit 1; fi; \
+        echo "Dependency install failed; retrying attempt $((attempt + 1))/3." >&2; \
+        sleep "$((attempt * 5))"; \
+        attempt=$((attempt + 1)); \
+    done \
+    && python -m pip check
+
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+COPY config/config.yaml ./config/config.yaml
+COPY sql/ ./sql/
+COPY tests/ ./tests/
+
+RUN python -m pip install --no-cache-dir --no-deps -e . \
+    && mkdir -p data/raw data/bronze data/silver data/gold logs models reports

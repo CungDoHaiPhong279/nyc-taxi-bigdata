@@ -1,0 +1,7 @@
+# Apply after docker-compose.bootstrap-test.yml for the clean-build worker only.
+# PostgreSQL, MLflow and runtime isolation settings remain unchanged.
+services:
+  worker:
+    image: nyc-taxi-worker:p6-clean
+    build:
+      dockerfile: Dockerfile.spark

@@ -1,0 +1,5 @@
+# Preserve the P6.1 runtime versions that otherwise drift on a fresh resolution.
+# Keep the primary requirements unchanged; this is not a complete dependency lock.
+certifi==2026.10.18
+fastapi==0.148.0
+wcwidth==0.9.2

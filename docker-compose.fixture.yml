@@ -1,0 +1,14 @@
+# Apply only after the bootstrap-test and clean-worker overrides.
+# No service lifecycle, persistent volume, project or network changes.
+services:
+  worker:
+    cpus: 1.0
+    mem_limit: 1536m
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:ActiveProcessorCount=1"
+      PYSPARK_SUBMIT_ARGS: "--driver-memory 512m --conf spark.ui.enabled=false pyspark-shell"
+    volumes: !override
+      - ./.sandbox/bootstrap-test/p63-fixture/data:/app/data
+      - ./.sandbox/bootstrap-test/p63-fixture/logs:/app/logs
+      - ./.sandbox/bootstrap-test/p63-fixture/models:/app/models
+      - ./.sandbox/bootstrap-test/p63-fixture/reports:/app/reports

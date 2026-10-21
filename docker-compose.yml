@@ -43,6 +43,50 @@ services:
       timeout: 5s
       retries: 5
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: nyc-taxi-dashboard:p4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8501:8501"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-nyc_taxi}
+      POSTGRES_USER: ${POSTGRES_USER:-nyc_taxi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    profiles: ["jobs"]
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    image: nyc-taxi-worker:p2
+    restart: "no"
+    command: ["python", "scripts/check_worker_services.py"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-nyc_taxi}
+      POSTGRES_USER: ${POSTGRES_USER:-nyc_taxi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./models:/app/models
+      - ./reports:/app/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   mlflow-data:
