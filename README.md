@@ -875,6 +875,19 @@ SQL opt-in không chạy. Pester 4.10.1 **204/204 PASS**, đủ bảy suites off
 nhánh stopped/missing/drift/timeout không được thử bằng cách dừng services thật.
 Chưa kiểm chứng browser thật hay GitHub Actions remote. Xem [ML P5 REPORT](reports/ML_P5_REPORT.md).
 
+### ML P6: bàn giao và CI remote
+
+Phần ML P1–P5 đã được commit/push trên `main` ở
+`afbf22c4886e10aaf6a81fe6221b2807154362c9`. [CI remote40001163976](https://github.com/CungDoHaiPhong279/nyc-taxi-bigdata/actions/runs/40001163976)
+**PASS cả ba jobs** Python offline, PowerShell mocks và Compose/dashboard packaging.
+Các ghi chú “chưa remote” ở reports P1–P5 là trạng thái lịch sử tại thời điểm đó.
+Không có training/evaluation/ETL trong CI; không thiết lập auto-merge/required checks.
+Commit bổ sung tài liệu bàn giao được kiểm CI riêng; xem SHA/run chính xác trong
+báo cáo bàn giao của lượt P6, không lấy run của SHA khác để xác nhận HEAD mới.
+Xem [checklist](reports/PROJECT_HANDOFF_CHECKLIST.md) và [ML P6 REPORT](reports/ML_P6_REPORT.md).
+Model bundle hiện chỉ từ chủ MLflow/backup của đúng runs; chưa có nơi phân phối
+công khai được xác nhận, không tự có sau clone hoặc được upload trong P6.
+
 ## 14. Trạng thái triển khai
 
 Danh sách bên dưới giữ **mốc STEP 6 ban đầu** để đối chiếu lịch sử. Pilot Spark

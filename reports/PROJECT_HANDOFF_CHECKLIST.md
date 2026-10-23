@@ -15,11 +15,10 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
 | Frozen inference | [Model card](ML_P3_MODEL_CARD.md), [P4](ML_P4_REPORT.md)/[P5](ML_P5_REPORT.md): API8/8 + AppTest/API3/3 parity0USD, đúng preprocessing/model, no latest/fallback; demo lịch sử2025 theo distance, không routing/báo giá hiện tại. |
 | Startup có inference | P5 hai lượt healthy reuse giữ IDs/StartedAt; artifacts/full hash/drift/ready guard. Stopped/missing/timeout kiểm bằng mock; không dừng services thật. |
 | CI local | P5 Python380PASS/1SQLdeselected, web93PASS/1SQLdeselected, Pester204PASS, Compose14PASS/actionlintPASS; offline, không fitted artifacts/Spark/training mặc định. |
+| CI remote phần ML | Commit **`afbf22c4886e10aaf6a81fe6221b2807154362c9`**, push `main`: [run40001163976](https://github.com/CungDoHaiPhong279/nyc-taxi-bigdata/actions/runs/40001163976) **SUCCESS**, cả3jobs Python/Pester/Compose+dashboard. Đây là bằng chứng remote, không suy từ local; commit cập nhật tài liệu được theo dõi CI riêng. |
 
 ## Chưa kiểm chứng
 
-- CI remote cho commit ML P6: chờ push và xác nhận từng job đúng SHA; kết quả
-  sẽ được ghi bổ sung sau lượt chạy thực tế, không lấy local PASS thay remote.
 - Bootstrap tường minh đủ sáu tháng từ clone mới: chưa chạy end-to-end acquisition
   qua mạng → toàn ETL → nạp DB mới bằng script. P6.3 chỉ fixture nhỏ, không acquisition.
 - Browser render thật của trang inference: đã AppTest/API/HTTP, chưa browser thật.
