@@ -23,12 +23,20 @@ TEST_FILES = (
     "tests/test_dashboard_app.py",
     "tests/test_ci_compose.py",
     "tests/test_ci_python.py",
+    "tests/test_ml_pilot_tracking.py",
+    "tests/test_ml_pilot_diagnostics.py",
+    "tests/test_ml_holdout_contract.py",
+    "tests/test_ml_inference.py",
+    "tests/test_dashboard_prediction.py",
 )
 EXCLUDED_TEST_FILES = {
     "tests/test_bronze.py": "Spark/JVM tests remain outside the lightweight CI profile",
     "tests/test_silver.py": "Spark/JVM tests remain outside the lightweight CI profile",
     "tests/test_gold.py": "Spark/JVM tests remain outside the lightweight CI profile",
     "tests/test_postgres_integration.py": "requires an explicitly isolated, writable PostgreSQL database",
+    "tests/test_ml_pilot_data.py": "tiny Spark/JVM ML fixture tests run separately in the worker; not ETL",
+    "tests/test_ml_pilot_model.py": "tiny Spark/JVM ML fixture tests run separately in the worker; not ETL",
+    "tests/test_ml_holdout_metrics.py": "tiny Spark/JVM frozen-holdout metric fixture tests run separately in the worker; no fit or ETL",
 }
 DESELECTED_TEST = (
     "tests/test_dashboard_queries.py::"

@@ -15,8 +15,10 @@ try {
         'bootstrap.Tests.ps1'
         'environment.Tests.ps1'
         'fixture_pipeline.Tests.ps1'
+        'model_artifacts.Tests.ps1'
         'p62.Tests.ps1'
         'start.Tests.ps1'
+        'start_inference.Tests.ps1'
     )
     $testsRoot = Join-Path $projectRoot 'tests'
     $testFiles = @(Get-ChildItem -LiteralPath $testsRoot -Filter '*.Tests.ps1' -File -Recurse | Sort-Object FullName)

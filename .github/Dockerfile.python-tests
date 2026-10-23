@@ -19,6 +19,7 @@ COPY scripts/ ./scripts/
 COPY tests/ ./tests/
 COPY dashboard/app.py ./dashboard/app.py
 COPY config/config.yaml ./config/config.yaml
+COPY config/ml_serving_parity.json ./config/ml_serving_parity.json
 COPY sql/ ./sql/
 # Only empty runtime directories: no local data, credentials or PBIX is copied.
 RUN mkdir -p data/raw data/bronze data/silver data/gold logs models reports

@@ -1,4 +1,4 @@
-"""Streamlit entry point: historical PostgreSQL analytics only."""
+"""Historical PostgreSQL analytics and an explicit, separate fare-estimate page."""
 
 from __future__ import annotations
 
@@ -18,8 +18,13 @@ def load_dashboard(months: tuple[str, ...], boroughs: tuple[str, ...]) -> dict:
 
 def main() -> None:
     st.set_page_config(page_title="NYC Taxi Analytics", page_icon="🚕", layout="wide")
+    page = st.sidebar.radio("Trang", ("Phân tích lịch sử", "Ước tính cước"), key="dashboard_page")
+    if page == "Ước tính cước":
+        from nyc_taxi.dashboard.fare_page import render_page
+        render_page()
+        return
     st.title("NYC Taxi Analytics")
-    st.caption("Dashboard lịch sử · PostgreSQL · Chưa có mô hình dự đoán")
+    st.caption("Dashboard lịch sử · PostgreSQL · Ước tính mô hình nằm ở trang riêng, không thay thế số liệu thực tế")
     st.markdown(
         "`fare_amount` là **cước cơ bản, đơn vị USD**, không phải `total_amount`. "
         "`trip_distance` có đơn vị **mile**. Giá trị fare **âm và 0 vẫn được giữ** "

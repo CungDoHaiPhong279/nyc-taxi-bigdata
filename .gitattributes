@@ -1,0 +1,12 @@
+# Frozen model provenance is byte-based. Preserve the evaluated LF inputs on
+# Windows checkout as well as in Docker; never rewrite model locks to match CRLF.
+/.gitattributes text eol=lf
+/pyproject.toml text eol=lf
+/requirements.txt text eol=lf
+/requirements-worker-constraints.txt text eol=lf
+/src/nyc_taxi/etl/silver.py text eol=lf
+/src/nyc_taxi/ml/pilot.py text eol=lf
+/src/nyc_taxi/ml/pilot_data.py text eol=lf
+/src/nyc_taxi/ml/pilot_model.py text eol=lf
+/src/nyc_taxi/ml/pilot_tracking.py text eol=lf
+/reports/ml_p1_profile.json text eol=lf

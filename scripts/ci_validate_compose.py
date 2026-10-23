@@ -21,6 +21,19 @@ COMPOSE_FILES = (
     "docker-compose.bootstrap-test.yml",
     "docker-compose.bootstrap-clean.yml",
     "docker-compose.fixture.yml",
+    "docker-compose.ml-pilot.yml",
+    "docker-compose.ml-holdout.yml",
+    "docker-compose.inference.yml",
+)
+COMPOSE_VARIANTS = (
+    ("base", COMPOSE_FILES[:1]),
+    ("bootstrap-test", COMPOSE_FILES[:2]),
+    ("clean-worker", COMPOSE_FILES[:3]),
+    ("fixture", COMPOSE_FILES[:4]),
+    # ML targets the existing main services, not the bootstrap-test override chain.
+    ("ml-pilot", (COMPOSE_FILES[0], COMPOSE_FILES[4])),
+    ("ml-holdout", (COMPOSE_FILES[0], COMPOSE_FILES[4], COMPOSE_FILES[5])),
+    ("inference", (COMPOSE_FILES[0], COMPOSE_FILES[6])),
 )
 MIN_COMPOSE_VERSION = (2, 24, 4)
 COMMAND_TIMEOUT_SECONDS = 60
@@ -32,6 +45,7 @@ CI_VALUES = {
     "POSTGRES_PASSWORD": "ci_dummy_only",
     "P61_POSTGRES_PASSWORD": "ci_fixture_only",
     "MLFLOW_TRACKING_URI": "http://mlflow:5000",
+    "MLP2_TRACKING_URI": "http://172.18.0.99:5000",
 }
 
 # Keep only process/CLI-discovery essentials, not arbitrary host credentials,
@@ -88,7 +102,7 @@ def _run(
 
 
 def validate_compose(project_root: Path, compose_command: list[str]) -> int:
-    """Check four override combinations with default and all profiles (8 checks)."""
+    """Check seven override combinations with default and all profiles (14 checks)."""
     with tempfile.TemporaryDirectory(prefix="nyc-taxi-ci-compose-") as temporary:
         project_directory = Path(temporary)
         for filename in COMPOSE_FILES:
@@ -118,15 +132,14 @@ def validate_compose(project_root: Path, compose_command: list[str]) -> int:
         print(f"Compose version: {'.'.join(map(str, version))}")
 
         completed = 0
-        labels = ("base", "bootstrap-test", "clean-worker", "fixture")
-        for count, label in enumerate(labels, start=1):
+        for label, filenames in COMPOSE_VARIANTS:
             command = [
                 *compose_command,
                 "--env-file", str(dummy_env),
                 "--project-directory", str(project_directory),
                 "--project-name", "nyc-taxi-ci",
             ]
-            for filename in COMPOSE_FILES[:count]:
+            for filename in filenames:
                 command.extend(["-f", str(project_directory / filename)])
             for all_profiles in (False, True):
                 profile_arguments = ["--profile", "*"] if all_profiles else []

@@ -27,7 +27,8 @@ CMD ["python", "-m", "streamlit", "run", "dashboard/app.py", "--server.address=0
 FROM runtime AS test
 USER root
 RUN python -m pip install --no-cache-dir pytest==9.1.1
-COPY tests/test_dashboard_queries.py tests/test_dashboard_app.py ./tests/
+COPY tests/test_dashboard_queries.py tests/test_dashboard_app.py tests/test_dashboard_prediction.py ./tests/
+COPY scripts/check_fare_ui.py scripts/check_fare_inference.py ./scripts/
 USER 10001:10001
 
 FROM runtime AS dashboard

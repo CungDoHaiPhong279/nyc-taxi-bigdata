@@ -31,7 +31,7 @@ def success(command, **kwargs):
     return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
 
 
-def test_validates_eight_combinations_without_reading_secrets(project, monkeypatch, capsys):
+def test_validates_fourteen_combinations_without_reading_secrets(project, monkeypatch, capsys):
     calls = []
     real_read_text = Path.read_text
 
@@ -51,6 +51,10 @@ def test_validates_eight_combinations_without_reading_secrets(project, monkeypat
         assert kwargs["env"]["COMPOSE_DISABLE_ENV_FILE"] == "1"
         assert kwargs["env"]["POSTGRES_PASSWORD"] == "ci_dummy_only"
         assert kwargs["env"]["P61_POSTGRES_PASSWORD"] == "ci_fixture_only"
+        assert kwargs["env"]["MLP2_TRACKING_URI"] == "http://172.18.0.99:5000"
+        assert "MLP2_WORKER_IMAGE" not in kwargs["env"]
+        assert "MLP2_RUNTIME_DIR" not in kwargs["env"]
+        assert "MLP2_SPARK_LOCAL_DIRS" not in kwargs["env"]
         assert "DOCKER_HOST" not in kwargs["env"]
         assert "COMPOSE_FILE" not in kwargs["env"]
         assert "UNRELATED_PERSONAL_TOKEN" not in kwargs["env"]
@@ -60,13 +64,26 @@ def test_validates_eight_combinations_without_reading_secrets(project, monkeypat
     monkeypatch.setattr(Path, "read_text", guarded_read)
     monkeypatch.setenv("POSTGRES_PASSWORD", "private_database_sentinel")
     monkeypatch.setenv("P61_POSTGRES_PASSWORD", "private_fixture_sentinel")
+    monkeypatch.setenv("MLP2_TRACKING_URI", "http://private_mlflow_sentinel:5000")
+    monkeypatch.setenv("MLP2_WORKER_IMAGE", "private_image_sentinel")
+    monkeypatch.setenv("MLP2_RUNTIME_DIR", "private_runtime_sentinel")
+    monkeypatch.setenv("MLP2_SPARK_LOCAL_DIRS", "private_spark_sentinel")
     monkeypatch.setenv("DOCKER_HOST", "tcp://private_host:2375")
     monkeypatch.setenv("COMPOSE_FILE", "private-compose.yml")
     monkeypatch.setenv("UNRELATED_PERSONAL_TOKEN", "private_token_sentinel")
     monkeypatch.setattr(ci.subprocess, "run", run)
 
     assert ci.main(["--project-root", str(project)]) == 0
-    assert len(calls) == 9  # version + eight quiet validations
+    assert len(calls) == 15  # version + fourteen quiet validations
+    expected_variants = (
+        ("docker-compose.yml",),
+        ("docker-compose.yml", "docker-compose.bootstrap-test.yml"),
+        ("docker-compose.yml", "docker-compose.bootstrap-test.yml", "docker-compose.bootstrap-clean.yml"),
+        ("docker-compose.yml", "docker-compose.bootstrap-test.yml", "docker-compose.bootstrap-clean.yml", "docker-compose.fixture.yml"),
+        ("docker-compose.yml", "docker-compose.ml-pilot.yml"),
+        ("docker-compose.yml", "docker-compose.ml-pilot.yml", "docker-compose.ml-holdout.yml"),
+        ("docker-compose.yml", "docker-compose.inference.yml"),
+    )
     for index, (command, directory) in enumerate(calls[1:]):
         assert command[:2] == ["docker", "compose"]
         assert command[-2:] == ["config", "--quiet"]
@@ -75,13 +92,18 @@ def test_validates_eight_combinations_without_reading_secrets(project, monkeypat
         assert command[command.index("--project-directory") + 1] == str(directory)
         assert command[command.index("--project-name") + 1] == "nyc-taxi-ci"
         files = [command[i + 1] for i, value in enumerate(command) if value == "-f"]
-        assert files == [str(directory / name) for name in ci.COMPOSE_FILES[:index // 2 + 1]]
+        assert files == [str(directory / name) for name in expected_variants[index // 2]]
+        if index >= 8:
+            assert len(files) == (3 if 10 <= index < 12 else 2)
+            assert all("bootstrap" not in file and "fixture" not in file for file in files)
+        if index >= 12:
+            assert all("ml-pilot" not in file and "ml-holdout" not in file for file in files)
         assert ("--profile" in command) == bool(index % 2)
         if index % 2:
             assert command[command.index("--profile") + 1] == "*"
     assert all(not directory.exists() for _, directory in calls)
     output = capsys.readouterr()
-    assert "8 checks" in output.out
+    assert "14 checks" in output.out
     assert "sentinel" not in output.out + output.err
 
 
@@ -163,6 +185,6 @@ def test_missing_override_fails_before_running_compose(project, monkeypatch):
 def test_default_root_is_derived_from_script_not_cwd(tmp_path, monkeypatch):
     received = []
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(ci, "validate_compose", lambda root, command: received.append((root, command)) or 8)
+    monkeypatch.setattr(ci, "validate_compose", lambda root, command: received.append((root, command)) or 14)
     assert ci.main([]) == 0
     assert received == [(SCRIPT.parents[1], ["docker", "compose"])]

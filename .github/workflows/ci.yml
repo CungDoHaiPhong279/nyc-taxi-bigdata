@@ -120,4 +120,4 @@ jobs:
       - name: Check packaged dashboard dependencies and imports without network
         run: |
           docker run --rm --network none --read-only nyc-taxi-dashboard:ci python -m pip check
-          docker run --rm --network none --read-only nyc-taxi-dashboard:ci python -c "import streamlit; from nyc_taxi.dashboard import queries"
+          docker run --rm --network none --read-only nyc-taxi-dashboard:ci python -c "import streamlit; from nyc_taxi.dashboard import queries, prediction, fare_page"

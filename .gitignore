@@ -45,6 +45,16 @@ reports/**
 !reports/step4_5_profile.json
 !reports/STEP_4_5_FINDINGS.md
 !reports/postgres_load_report.json
+!reports/ML_P1_DESIGN.md
+!reports/ML_P2_REPORT.md
+!reports/ML_P2_1_REPORT.md
+!reports/ML_P3_REPORT.md
+!reports/ML_P3_MODEL_CARD.md
+!reports/ML_P4_REPORT.md
+!reports/ML_P5_REPORT.md
+!reports/ml_p1_profile.json
+!reports/PROJECT_HANDOFF_CHECKLIST.md
+!reports/ML_P6_REPORT.md
 mlruns/
 
 # IDE

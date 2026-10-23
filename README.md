@@ -6,8 +6,11 @@ taxi-zone lookup để hướng tới bài toán dự đoán `fare_amount`.
 
 **STEP 1–6 đã hoàn tất:** project có dữ liệu Raw thật cho 01–06/2025, 9 output
 Bronze, 9 output Silver, 6/6 partition Gold và PostgreSQL analytical data mart
-đã nạp, kiểm chứng 23.886.265 chuyến. Model training và Power BI dashboard
-chưa thực hiện.
+đã nạp, kiểm chứng 23.886.265 chuyến. Pilot Spark GBT/MLflow, June holdout và
+demo Streamlit/inference đã kiểm chứng ở ML P2.1–P5. PBIX có trong repo; bản
+đang sửa được giữ riêng, không xác nhận nội dung Power BI bằng audit ML này.
+Xem [checklist bàn giao](reports/PROJECT_HANDOFF_CHECKLIST.md) để phân biệt phần
+đã đạt, chưa kiểm chứng, chưa triển khai và nâng cao.
 
 ## 1. Kiến trúc hiện tại và định hướng
 
@@ -20,13 +23,15 @@ NYC Taxi + Weather + Calendar/Holiday + Taxi Zone Lookup
                             |
               Bronze -> Silver -> Gold
                             |
-                 PostgreSQL (STEP 6)
-                            |
-               ML + MLflow (dự kiến)
-                            |
-                   Power BI (đề xuất)
+             +--------------+-------------------+
+             |                                  |
+       PostgreSQL                         Spark ML + MLflow
+             |                                  |
+     +-------+--------+                   Frozen inference
+     |                |                         |
+ Power BI/PBIX   Streamlit analytics      Streamlit fare demo
 
-                 Airflow orchestration (sau này)
+              Airflow (chưa triển khai)
 ```
 
 Vai trò các tầng dữ liệu:
@@ -82,7 +87,7 @@ chỉ dùng để giữ lại cấu trúc thư mục rỗng.
 
 - Python 3.11, PySpark, Pandas, PyArrow, NumPy
 - PostgreSQL, SQLAlchemy và Psycopg 3
-- Scikit-learn và MLflow
+- MLflow; pilot dùng Spark ML, scikit-learn còn ở scaffold cũ
 - Docker Compose, Jupyter, pytest
 - Power BI ở giai đoạn trực quan hóa
 
@@ -95,7 +100,8 @@ bị pin cứng ở bước bootstrap.
 
 ## 4. Điều kiện cần
 
-Trên Windows cần cài:
+Với Docker worker/inference, host cần Docker Desktop, Compose, Git và PowerShell;
+không cần Python/Java/Spark trên host. Danh sách sau dành cho cách chạy local cũ:
 
 - Python 3.11 (kiểm tra bằng `python --version`)
 - Java/JDK 17 trở lên cho PySpark hiện hành; đặt `JAVA_HOME`
@@ -516,7 +522,10 @@ Power BI ở bước sau có thể kết nối trực tiếp tới star schema v
 `localhost`, port `5432` và database/user trong `.env`; dashboard chưa thuộc
 STEP 6.
 
-## 13. Thiết kế ML dự kiến
+## 13. Thiết kế ML và pilot đã kiểm chứng
+
+Ý tưởng before-trip bên dưới là mốc STEP 6, **không phải contract serving hiện tại**.
+Pilot distance-conditioned đã triển khai nằm ở các mục ML P1–P5 tiếp theo.
 
 Target: `fare_amount`.
 
@@ -534,7 +543,343 @@ Ba model ứng viên: `LinearRegression`, `RandomForestRegressor` và
 làm predictor cho bài toán trước chuyến vì có thể gây data leakage. Gold vẫn
 giữ các trường này cho phân tích; tập train và feature selection là bước riêng.
 
+### ML P1 → ML P2: pilot distance-conditioned, chạy tường minh
+
+Thiết kế/cohort đã khảo sát nằm ở `reports/ML_P1_DESIGN.md` và
+`reports/ml_p1_profile.json`. CLI khảo sát theo dõi bằng Git là
+`scripts/profile_ml_data.py`; bản gốc `reports/ml_p1_profile.py` chỉ được giữ
+local, không nằm trong clone. Đây không phải pipeline huấn luyện production. Mã ML chính
+hiện nằm trong `src/nyc_taxi/ml/pilot*.py`, với CLI `scripts/train_pilot.py`;
+các scaffold ML cũ không phải entry point của pilot mới.
+
+CLI khảo sát có thể theo dõi bằng Git: `scripts/profile_ml_data.py`, bản sao
+nguyên byte của script P1; bản gốc trong `reports/` được giữ nguyên. CLI này
+không tham gia pilot. `reports/ml_p1_profile.json` là aggregate 36.272 bytes,
+được Git theo dõi riêng từ ML P6 và dùng làm **freeze contract**; không tự ghi đè
+hoặc tái sinh nó trong pilot. CLI khảo sát chỉ in progress/aggregate ra stdout.
+Sau khi build/hash image chứa CLI mới, có thể tái hiện trong worker:
+
+```powershell
+docker run --rm --pull never --network none --read-only --cpus 1 --memory 1g nyc-taxi-worker:ml-p2 python -I -B scripts/profile_ml_data.py --self-test
+$goldDirectory = (Resolve-Path -LiteralPath .\data\gold).Path
+docker run --rm --pull never --network none --read-only --cpus 1 --memory 1g --mount "type=bind,source=$goldDirectory,target=/gold,readonly" nyc-taxi-worker:ml-p2 python -I -B scripts/profile_ml_data.py --gold-root /gold
+```
+
+Bản CLI mới đã PASS cú pháp AST, đối chiếu byte/hash và `--self-test` trong
+image refresh; chưa khảo sát lại Gold bằng đường dẫn mới (không cần quét lặp).
+
+Pilot có contract riêng so với ý tưởng before-trip ở trên: ước tính **cước cơ
+bản dương `fare_amount` (USD)** cho standard-rate, có điều kiện theo distance
+người dùng cung cấp (mile). Distance thực đo trong Gold chỉ là proxy lịch sử,
+không phải routing/ETA hoặc bằng chứng độ chính xác trước chuyến. Cohort giữ
+fare >0, ratecode=1, PU/DO IDs 1–263 và distance 0–200 mile; không cap fare,
+không dùng charges, payment, actual duration hay weather reanalysis làm feature.
+
+Giữ đủ sáu nguồn Gold để kiểm tra lineage, dedup/group overlap rồi lấy sample
+**1% cố định, seed 42** theo journey-group hash. Split theo **actual pickup**:
+Jan–Apr train, May validation; **June UNEVALUATED** (chỉ audit/split/sample
+counts, không prediction/metrics/chọn model). Một baseline median và một GBT
+cố định, không grid/CV hoặc tự đổi sample/filter/tham số để cải thiện kết quả.
+
+Từ PowerShell tại project root, không cần Python/Java trên host:
+
+```powershell
+# PLAN/preflight; không build, tạo artifact directory hoặc chạy training.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_ml_pilot.ps1
+
+# Build code-refresh riêng từ nyc-taxi-worker:p6-clean đã kiểm chứng.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_ml_pilot.ps1 -Build
+
+# Chỉ chạy các tests ML fixture/mock trong worker; không train dữ liệu thật.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_ml_pilot.ps1 -TestOnly
+
+# Artifact probe → đúng một pilot → model reload trong worker mới.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_ml_pilot.ps1 -Execute
+```
+
+`-Build` dùng `Dockerfile.ml`, kiểm tra dependency inputs khớp base và `pip check`,
+không cài/nâng dependencies; **đây không phải clean dependency build mới**.
+Tag `nyc-taxi-worker:ml-p2` riêng, không ghi đè `p2`/`p6-clean`; trước các job có
+hash code/CLI/config và image identity checks. Worker COPY code, không mount repo.
+Các lệnh tests/execute cần các services hiện tại healthy và đủ tài nguyên;
+script không bật/restart/recreate PostgreSQL, MLflow hoặc dashboard.
+Override ML được driver validate riêng bằng `config --quiet` và đã thêm vào
+helper CI (10 tổ hợp); CI không build worker ML hoặc chạy pilot.
+
+`docker-compose.ml-pilot.yml` chỉ dùng cho one-off worker thuộc profile `jobs`,
+`run --rm --no-deps --pull never`. Gold và P1 profile được mount **read-only**;
+Outputs/shuffle ML nằm riêng tại `models/ml-p2/20261022-pilot01/` (`/ml-output`);
+temp ngắn hạn/pytest dùng `/tmp` riêng trong container (tránh lỗi anonymous
+temporary file trên Windows bind mount), tự mất khi one-off container kết thúc.
+Worker chỉ gắn subpath `artifacts/ml-p2-20261022` của **volume MLflow cũ** tại
+`/mlflow/artifacts/ml-p2-20261022`, không mount SQLite hay toàn bộ volume vào
+worker. Experiment/probe/training run riêng; không sửa database PostgreSQL.
+
+MLflow 3.5.1 hiện chặn Host DNS `mlflow` ở API dù `/health` đạt, và proxy default
+`/mlartifacts` không nằm trong persistent volume. Driver dùng private IP đã đối
+chiếu ownership/network **chỉ cho job**, giữ nguyên Compose/server security;
+artifact routing dùng file URI + shared subpath, không tuyên bố HTTP proxy
+persistence. Probe phải đối chiếu SHA256 từ download riêng và file trên server;
+không restart server để thử persistence.
+
+Giới hạn riêng pilot: **2 CPU / 3 GiB**, Spark `local[2]`, JVM **1.536 MiB**,
+shuffle 8, UI off, timeout training **30 phút**; không đổi Spark/global config.
+Output cố định có ownership/training-start marker; khi lỗi/OOM/timeout phải đọc
+report và dừng review, không tự xóa marker, retry/tune hay tăng budget. Không
+promote/register model, sửa dashboard/Power BI, chạy ETL/loader hoặc full bootstrap.
+
+**Kết quả ML P2 ngày 2026-10-22: pilot CHƯA PASS.** 81 ML tests, 91 helper/tracking
+tests (có 47 tracking tests trùng giữa hai lượt), 10 Compose checks, `pip check`
+và self-test survey PASS. Artifact probe + fresh-worker download + server SHA256
+PASS, nhưng pilot dừng exit **124** ở deadline **1.800 giây** trong kiểm tra giao
+tập. Cohort khớp P1, dedup loại 0 dòng; **chưa có overlap/sample counts cuối,
+baseline, GBT, MAE/RMSE/R² hoặc model reload verification**. Không tự retry/tune.
+Chi tiết và run IDs: [ML P2 REPORT](reports/ML_P2_REPORT.md). Đọc thêm
+`training_report.json`, `artifact_probe.json`, `final_tracking_audit.json`,
+`code_identity.json` và console logs trong runtime trên. June chưa được đánh giá.
+Marker cố ý chặn chạy lại/ghi đè cùng attempt; bước tiếp cần review chi phí
+preparation/shuffle và thiết kế attempt mới, không xóa marker để chạy lại ngầm.
+Clean build P6.2 và fixture ETL P6.3 PASS không thay thế kiểm chứng training.
+
+### ML P2.1: sample trước shuffle, attempt mới độc lập
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run_ml_pilot.ps1 -Attempt p21
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run_ml_pilot.ps1 -Attempt p21 -Build -TestOnly
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run_ml_pilot.ps1 -Attempt p21 -Execute
+```
+
+Mặc định `-Attempt p2` vẫn giữ đường chạy cũ. P2.1 dùng tag riêng
+`nyc-taxi-worker:ml-p21`, output `models/ml-p2/20261023-pilot02/`, không ghi đè
+attempt P2 hoặc tự bỏ marker. Giữ 2 CPU/3 GiB, JVM 1.536 MiB, timeout 1.800 giây;
+Spark shuffle/temp P2.1 dùng `/tmp/ml-p21-spark` riêng trong container, không phải
+Windows bind mount. Các kết quả, plans và event logs nằm trong output mới.
+
+Cohort, canonical identities, seed 42, hash 1%, split và GBT không đổi.
+Business-key equality kéo theo journey-key equality, nên mọi duplicate cùng
+business key có cùng quyết định lấy mẫu: `dedup(sample(C)) = sample(dedup(C))`,
+kể cả chọn source canonical. Group hash được tính trước; business SHA/format
+20 trường chỉ tính cho survivors. Full Gold chỉ cần aggregate waterfall/split
+counts rồi lượt đọc sampling; không cache/sort toàn cohort. Dedup và temporal/
+overlap guards vẫn chạy, nhưng **phạm vi overlap là mẫu mô hình (gồm June keys)**,
+không phải kiểm chứng lại full-cohort overlap. June không predict/metrics.
+
+Attempt mới lưu timing riêng cho profile, sampling/materialize, dedup và overlap,
+plans cũ được dựng lại bằng EXPLAIN **không action**; plans/event logs mới giữ
+task/shuffle/spill metrics để chẩn đoán. Attempt cũ không có event log nên chưa
+đủ bằng chứng quy timeout riêng cho skew hoặc Windows I/O. Chỉ kết luận kết quả
+training và reload sau khi đọc artifacts/run thực tế; tests không thay thế pilot.
+
+Kết quả thực tế P2.1 (2026-10-23): preparation đã hoàn tất; sample train /
+validation / June = **110.356 / 29.979 / 27.310**, dedup loại 0, business và
+journey overlap đều 0 **trên sample**. GBT P2 fit 35,331 giây; report elapsed
+281,965 giây, Docker pilot wall 300,23 giây; peak cgroup 1,705 GiB/3 GiB.
+Validation MAE baseline **7,887 USD** → GBT **2,415 USD** (giảm **69,38%**).
+Model round-trip cùng worker và fresh worker đều khớp 16 predictions (max diff 0,
+tolerance 1e-9). Run `d2772f1904d7472490a73b0ac1c0c5d4` FINISHED; June chưa
+predict/metrics, model không được promote. Sampling cố định không chọn các fare
+>1.000 USD trong train/validation lần này; không suy rộng hiệu quả cho rare tails.
+Parser event log được bổ sung hỗ trợ single-file `local-*`; chỉ reparse log đã
+lưu sau training, không chạy lại model. Bản đầy đủ là
+`execution_diagnostics_reparsed.json` (bản `execution_diagnostics.json` ban đầu
+được giữ để truy vết lỗi layout). Xem [ML P2.1 REPORT](reports/ML_P2_1_REPORT.md)
+để phân biệt scope/timing cũ–mới và trạng thái diagnostics.
+
+### ML P3: June holdout của ứng viên đã khóa
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/evaluate_holdout.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/evaluate_holdout.ps1 -Build -TestOnly
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/evaluate_holdout.ps1 -Execute
+```
+
+PLAN mặc định; `-Execute` chỉ đánh giá run training cố định
+`d2772f1904d7472490a73b0ac1c0c5d4`, không fit/tuning hoặc promote model.
+Worker riêng `nyc-taxi-worker:ml-p3-20261023`, 2 CPU/3 GiB (heap 1.536 MiB),
+`run --rm --no-deps`, không mount repo/source. Gold, P1 profile, zone CSV và
+training output đều read-only; chỉ ghi runtime riêng
+`models/ml-p3/20261023-june01/` và evaluation run/artifacts MLflow mới.
+Marker attempt chặn tự đánh giá lại/ghi đè cùng output; các lệnh trên mô tả
+quy trình một lần, không phải hướng dẫn retry sau khi đã xem June.
+
+Chương trình so SHA256 toàn bộ model artifact với bản P2.1, baseline/feature
+contract và hashes code cohort/identity/feature/holiday trước khi đọc June.
+Không còn file sample P2.1: tái tạo đúng seed 42/hash 1%/dedup, đối chiếu lineage
+Gold, counts cả ba split và overlap trên mẫu, rồi khóa fingerprint trước predict.
+P2.1 chưa có fingerprint lưu sẵn để đối chiếu byte-wise; không gọi kiểm tra này
+là full-cohort overlap. `candidate_lock.json`/`sample_lock.json` ghi bằng create-new.
+
+Hai mô hình dùng cùng June rows; không clip hoặc bỏ prediction lỗi. Metrics và
+distance/zero-distance/borough/fare slices aggregate trong Spark, chỉ trả kết quả
+nhỏ. Quantiles dùng `percentile_approx`, accuracy 100.000, sai số rank 1e-5,
+không phải sai số USD hay median nội suy. Nhóm n<100 ghi bằng chứng hạn chế;
+nonfinite/overflow làm evaluation fail thay vì chỉ tính trên dòng hữu hạn.
+Xem [ML P3 REPORT](reports/ML_P3_REPORT.md) và
+[model card](reports/ML_P3_MODEL_CARD.md) cho kết quả thực tế/giới hạn.
+Đây là đánh giá lịch sử 2025 theo distance người dùng cung cấp, chưa chứng minh
+before-trip routing hoặc độ chính xác ở hiện tại; chưa tích hợp dashboard.
+
+### ML P4: trang Ước tính cước và Spark inference riêng
+
+Giữ trang **Phân tích lịch sử** làm mặc định. Mở `http://127.0.0.1:8501`, chọn
+**Ước tính cước** ở sidebar, nhập mile, pickup local datetime năm 2025, chọn tên
+PU/DO zone (hiện cả LocationID), xác nhận standard metered rồi bấm nút.
+Đổi form không tự predict. Đây là cước cơ bản USD theo distance cung cấp,
+**chưa gồm tip/tolls/taxes/surcharges**, không routing/ETA hoặc giá hiện tại.
+MAE không phải khoảng bảo đảm cho từng chuyến. Jul–Dec/2025 được cảnh báo là
+ngoại suy chưa đánh giá; ngoài 2025 bị chặn. Zero-distance, chuyến xa/cước cao
+và unseen zones có cảnh báo; không clip hoặc dùng giá giả khi lỗi.
+
+Dashboard vẫn **không có Java/PySpark**. Service `fare-inference` giữ một Spark
+`local[2]`/fitted PipelineModel mỗi process, 2 CPU/3 GiB, heap1536MiB. API chỉ
+ở network `inference` nội bộ, **không publish port**; không có DB credentials,
+MLflow URI hoặc SQLite mount, không nối network PostgreSQL. Root FS read-only,
+non-root10001, drop capabilities; riêng tmpfs `/tmp`1GiB cần `exec` để Snappy
+load native library, vẫn `nosuid,nodev`. Đây là HTTP server cho demo nội bộ,
+chưa phải public production serving/authentication/TLS.
+
+Compose override riêng `docker-compose.inference.yml`; **không trộn với các
+ML job/bootstrap overrides, không `up` cả stack**. Trước khi chạy, PostgreSQL và
+MLflow hiện có phải healthy. Chỉ các lệnh sau đã được dùng để build/start/update
+hai services liên quan; PostgreSQL/MLflow không restart/recreate:
+
+```powershell
+docker compose -p nyc-taxi-bigdata -f docker-compose.yml -f docker-compose.inference.yml config --quiet
+docker compose -p nyc-taxi-bigdata -f docker-compose.yml -f docker-compose.inference.yml build fare-inference
+docker compose -p nyc-taxi-bigdata -f docker-compose.yml -f docker-compose.inference.yml up -d --no-deps --no-build --pull never fare-inference
+# Chờ fare-inference healthy (/ready phải trả ready=true, không chỉ /health 200).
+docker compose -p nyc-taxi-bigdata -f docker-compose.yml -f docker-compose.inference.yml ps fare-inference
+docker compose -p nyc-taxi-bigdata -f docker-compose.yml -f docker-compose.inference.yml build dashboard
+docker compose -p nyc-taxi-bigdata -f docker-compose.yml -f docker-compose.inference.yml up -d --no-deps --no-build --pull never dashboard
+```
+
+Các lệnh `up` trên là **cập nhật tường minh cần review**, có thể thay hai container
+được chỉ định; không phải thao tác mở lại hằng ngày. Từ ML P5, dùng
+`start.ps1 -WithInference` để bật lại mà không tự recreate (hướng dẫn dưới).
+Không truyền switch vẫn giữ luồng analytics/base Compose. Model không nằm trong Git/image.
+Một clone mới **chưa đủ để chạy inference**: cần chuẩn bị đúng bốn read-only
+bind inputs dưới đây; Compose chặn tự tạo path thiếu, service fail readiness nếu
+file/model/hash không khớp, không tự download hay thay bằng latest:
+
+- `models/ml-p2/20261023-pilot02/fitted_model/` → `/model`.
+- `models/ml-p3/20261023-june01/candidate_lock.json` và
+  `models/ml-p2/20261023-pilot02/feature_contract.json` → `/model-contract/`.
+- `data/raw/taxi_zones/taxi_zone_lookup.csv` → `/model-contract/zones.csv`.
+
+Training run `d2772f1904d7472490a73b0ac1c0c5d4`, evaluation run
+`58d5008f0ed048f58599a859877ae336`, full model tree SHA256
+`759337ab73d6d6cd171edb4b0b42ff325f991cc7cda43e722905ce28c5c947ee`.
+Startup kiểm tra toàn bộ40files + pinned P3 lock/contract/zone/source hashes;
+không cần đọc MLflow hay Gold lúc serving. `/health` chỉ báo process còn sống;
+`/ready`503 khi model chưa load/lỗi. Request deadline30s, client45s, bận trả503;
+timeout/model failure làm unready, không reload/fallback. Sửa artifacts cần bước
+chuẩn bị/cập nhật tường minh, không âm thầm đổi model đã đánh giá.
+
+Kiểm chứng đã chạy: 8 synthetic cases trong `config/ml_serving_parity.json`,
+fingerprint `22292e16ef60b74890bbf834e3c93211f8c506b61bf4438165602b7ef4881d99`.
+Model gốc chạy độc lập bằng immutable P3 image; API cả8case max diff0 USD
+(tolerance1e-9). AppTest gọi API thật 3case normal/zero/unseen cũng max diff0;
+không có target labels, không đánh giá lại June. Model load27,03s / Docker
+healthy30,10s; HTTP đầu5,56s, lặp0,94s, không tạo Spark mới. Analytics aggregate
+READ ONLY vẫn23.886.265 rows và ba chart totals khớp; SQL29,18s lần đo này,
+không phải benchmark cold-cache.
+
+Tests backend/CI132PASS; web87PASS/1skip (DB integration opt-in chưa chạy), gồm
+đủ AppTests mới/cũ. Test web đầu tiên timeout3s ở một AppTest; chạy lại nguyên
+suite tuần tự PASS, không đổi timeout/bỏ test. Thiếu model thử riêng trả503,
+inputs sai400, service connection-refused hiện lỗi/no-price. **Chưa có browser
+render test**, HTTP200 không được coi là bằng chứng UI; đã kiểm tra AppTest và
+chart datasets từ aggregate thật. Xem [ML P4 REPORT](reports/ML_P4_REPORT.md).
+Local CI Python image không Spark/MLflow/Java đạt **374PASS/1deselected (SQL
+integration opt-in)**; image test này COPY fixture công khai mới. Không có
+GitHub Actions remote run cho thay đổi chưa commit.
+
+Tái hiện web checks (không cần Python/Java trên host):
+
+```powershell
+docker build --target test -f Dockerfile.dashboard -t nyc-taxi-dashboard:ml-p4-test .
+docker run --rm --network none --read-only --tmpfs /tmp:rw,size=268435456 nyc-taxi-dashboard:ml-p4-test python -B -m pytest -q -p no:cacheprovider tests/test_dashboard_queries.py tests/test_dashboard_app.py tests/test_dashboard_prediction.py
+```
+
+`scripts/check_fare_inference.py` có `--mode reference|service`; cần fixture RO,
+model RO cho reference, reference report RO + network nội bộ cho service.
+`scripts/check_fare_ui.py` chỉ chạy trong optional web test image, đọc cùng
+fixture/reference và gọi API thật; không cần DB. Outputs/logs tại
+`models/ml-p4/20261023-serving01/` được Git ignore; không thay `.env`/PBIX.
+
+### ML P5: bật lại inference và kiểm tra artifact cố định
+
+Clone mới phải **chuẩn bị bundle riêng từ nguồn tin cậy**, không chọn `latest`:
+`fitted_model/` đầy đủ và `feature_contract.json` của training run
+`d2772f1904d7472490a73b0ac1c0c5d4`, `candidate_lock.json` của evaluation run
+`58d5008f0ed048f58599a859877ae336`, cùng đúng zone CSV đã khóa. Nguồn hiện có là
+MLflow/backup local của người giữ các runs trên; cần họ export/cung cấp bundle
+đúng identity. **Chưa xác nhận nơi phân phối bundle công khai/release hoặc URL
+tải cho máy mới**; không tự upload trong bước này. Git clone không chứa model,
+dữ liệu hay Docker dependency image và tự nó chưa đủ chạy demo.
+Chưa có script export/download tự động; không tự train lại khi thiếu model.
+Giữ nguyên **40 files**, kể cả `.crc` và `_SUCCESS`, dưới đúng model root
+`fitted_model/` (không chỉ copy thư mục con `sparkml/` hoặc đổi tên file).
+Bốn bind inputs cố định, đều read-only, tính từ project root:
+
+| Đường dẫn trên host | Đường dẫn trong inference container |
+|---|---|
+| `models/ml-p2/20261023-pilot02/fitted_model/` | `/model/` |
+| `models/ml-p2/20261023-pilot02/feature_contract.json` | `/model-contract/feature_contract.json` |
+| `models/ml-p3/20261023-june01/candidate_lock.json` | `/model-contract/candidate_lock.json` |
+| `data/raw/taxi_zones/taxi_zone_lookup.csv` | `/model-contract/zones.csv` |
+
+Kiểm tra độc lập trước khi bật dịch vụ, không cần Python/Docker, không tải hoặc
+ghi file; thiếu/sai artifact trả exit khác 0:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\model_artifacts.ps1
+```
+
+Script kiểm full model tree SHA256
+`759337ab73d6d6cd171edb4b0b42ff325f991cc7cda43e722905ce28c5c947ee`, pinned
+candidate-lock SHA256
+`12442b5684943bb81169bb084cffc8c1b54043882d75711e295a0f1a0ff7338d`,
+feature contract, zone CSV và tám core source/dependency hashes trong lock.
+Không sửa hash để bỏ qua mismatch; cần phục hồi đúng bundle/code đã đánh giá.
+Tám core inputs phải giữ nguyên bytes, kể cả line endings sau copy/checkout;
+code tương đương về ý nghĩa nhưng khác bytes vẫn bị từ chối có chủ đích.
+`.gitattributes` cố định LF cho đúng tám inputs và profile P1, không đổi model lock.
+
+```powershell
+# Lần đầu bật inference: artifact đã chuẩn bị và runtime p6-clean đã có sẵn.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1 -WithInference -Build
+# Mở lại, không build/pull mặc định.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1 -WithInference
+```
+
+`-Build` tường minh build worker/dashboard/inference; Dockerfile inference tái sử
+dụng dependency runtime `nyc-taxi-worker:p6-clean` đã kiểm chứng, **không phải**
+clean build mới hay training model. Không build/pull PostgreSQL/MLflow. Script
+kiểm artifact trước build/lifecycle; luồng postgres → mlflow → fare-inference →
+dashboard có health/command timeout hữu hạn, kiểm thêm `/ready` đúng ba identities
+đã khóa và `model_load_count=1` (không chỉ `/health`200). Container healthy được
+tái sử dụng; stopped được start; chỉ tạo service thiếu bằng lệnh nhắm đúng target.
+Drift config/image báo **exit2**, không tự recreate: sau review, cập nhật riêng
+đúng service bằng các lệnh base+inference ở trên rồi chạy lại script.
+`-WithInference -Environment bootstrap-test` bị chặn; không trộn overrides thử/ML.
+Không truyền `-WithInference` vẫn là startup analytics cũ; nếu container hiện dùng
+inference override, base startup có thể báo drift chứ không tự đổi nó về base.
+
+UI giữ giá gắn với **yêu cầu gần nhất đã gửi**, chưa bấm nút thì không predict lại.
+Cảnh báo vùng unseen chỉ hiện một lần: “Vùng này chưa có trong dữ liệu huấn luyện;
+kết quả có thể kém chính xác hơn.” Run IDs, SHA và thời gian API nằm trong expander
+thu gọn; USD/mile, giới hạn lịch sử 2025, zero/long/high fare và cảnh báo sai số vẫn giữ.
+Kiểm tra local ML P5: Python **380PASS/1deselected**, web **93PASS/1deselected**;
+SQL opt-in không chạy. Pester 4.10.1 **204/204 PASS**, đủ bảy suites offline/mock;
+nhánh stopped/missing/drift/timeout không được thử bằng cách dừng services thật.
+Chưa kiểm chứng browser thật hay GitHub Actions remote. Xem [ML P5 REPORT](reports/ML_P5_REPORT.md).
+
 ## 14. Trạng thái triển khai
+
+Danh sách bên dưới giữ **mốc STEP 6 ban đầu** để đối chiếu lịch sử. Pilot Spark
+ML/MLflow và demo inference đã được triển khai sau đó ở ML P2–P5, xem các mục ML
+và reports tương ứng; không hiểu danh sách planned cũ là trạng thái demo hiện tại.
 
 ### Đã triển khai
 
@@ -570,10 +915,13 @@ giữ các trường này cho phân tích; tập train và feature selection là
 - Power BI dashboard
 - Airflow DAG, scheduling, monitoring và deployment production
 
-Model training chưa triển khai; các entry point liên quan sẽ báo
+Ở mốc STEP 6, model training chưa triển khai; các entry point scaffold cũ báo
 `NotImplementedError` thay vì tạo output giả.
 
-## 15. Roadmap đề xuất
+## 15. Roadmap đề xuất tại STEP 6 (lịch sử)
+
+Trạng thái và việc còn lại hiện tại được kiểm kê ở
+[PROJECT_HANDOFF_CHECKLIST.md](reports/PROJECT_HANDOFF_CHECKLIST.md).
 
 1. Giữ khả năng kiểm tra lineage Gold → PostgreSQL và reload từng tháng khi
    Gold batch ID thay đổi; nếu TLC/TSP xác nhận khác về timezone Parquet thì
@@ -814,7 +1162,8 @@ hướng dẫn rồi trả lỗi; không tự mở Docker Desktop hoặc cài ph
 
 Nếu thiếu `.env`, script copy nguyên `.env.example` một lần, thông báo để người
 dùng kiểm tra cấu hình; không in giá trị và không ghi đè file đã có. Compose được
-validate bằng `config --quiet`. `-Build` chỉ build `worker` và `dashboard`; không
+validate bằng `config --quiet`. Mặc định `-Build` chỉ build `worker` và `dashboard`;
+với `-WithInference` còn build `fare-inference` (xem ML P5); không
 build/pull/nâng image PostgreSQL/MLflow. Trên clone mới, cần chuẩn bị riêng các
 image PostgreSQL/MLflow đúng cấu hình Compose nếu máy chưa có. Nếu image cần tạo
 service còn thiếu, script dừng và hướng dẫn, không tự pull.
@@ -848,7 +1197,9 @@ Phân biệt ba thao tác:
 1. **Bật lại dịch vụ**: chạy `start.ps1`, giữ nguyên container/image/volume hiện hữu.
 2. **Cập nhật image/config**: `-Build` chỉ tạo image, không thay container đang chạy.
    Nếu cần triển khai image dashboard mới, review thay đổi rồi chạy riêng
-   `docker compose up -d --no-deps dashboard`. Thay đổi PostgreSQL/MLflow cần kế
+   `docker compose -p nyc-taxi-bigdata -f docker-compose.yml up -d --no-deps --no-build --pull never dashboard`
+   sau khi build riêng dashboard; nếu dùng inference, phải thêm override và theo
+   lệnh ML P5. Thay đổi PostgreSQL/MLflow cần kế
    hoạch cập nhật/backup riêng; script không tự thực hiện. Hash cũng có thể khác
    do phiên bản Compose, nên cảnh báo không khẳng định nguyên nhân thay đổi.
 3. **Khởi tạo dữ liệu**: quy trình riêng. P5 chỉ kiểm tra READ ONLY bằng `psql`
@@ -1344,9 +1695,9 @@ Workflow `.github/workflows/ci.yml` chạy khi `push`, `pull_request` và
 
 | Job | Runner | Phạm vi |
 |---|---|---|
-| Python offline unit tests | Ubuntu 24.04, Python 3.11.17, venv mới | Imports/config, Spark cleanup mock, Calendar, acquisition offline, loader helpers, profiling, dashboard query/AppTest và CI helpers |
-| PowerShell 5.1 mock tests | Windows 2022, Pester 4.10.1 | Parse toàn bộ scripts/tests PowerShell và đủ 5 mock suites start/bootstrap/environment/p62/fixture_pipeline |
-| Compose validation and dashboard packaging | Ubuntu 24.04 | actionlint 1.7.12; Compose 2.40.0 kiểm tra 8 tổ hợp bằng `config --quiet`; chỉ build target `dashboard` |
+| Python offline unit tests | Ubuntu 24.04, Python 3.11.17, venv mới | Imports/config, Calendar/acquisition offline, loader/query helpers, dashboard analytics/fare AppTest, CI helpers và ML/inference contract/tracking/diagnostic mocks; không Spark/artifact thật |
+| PowerShell 5.1 mock tests | Windows 2022, Pester 4.10.1 | Parse toàn bộ scripts/tests PowerShell và đủ 7 mock suites start/bootstrap/environment/p62/fixture_pipeline/model_artifacts/start_inference |
+| Compose validation and dashboard packaging | Ubuntu 24.04 | actionlint 1.7.12; Compose 2.40.0 kiểm tra 14 tổ hợp bằng `config --quiet`; chỉ build target `dashboard` |
 
 Python chỉ cài `requirements-ci.txt` (tái sử dụng dependencies web đã pin,
 thêm pytest 9.1.1 và PyArrow 21.0.0), **không** cài requirements worker/Spark/ML.
@@ -1358,6 +1709,15 @@ xfail/xpass ngoài dự kiến đều làm fail; không để `importorskip` che
 Loại khỏi CI nhẹ một cách tường minh:
 
 - `test_bronze.py`, `test_silver.py`, `test_gold.py`: cần Spark/JVM; giữ kiểm thử riêng.
+- `test_ml_pilot_data.py`, `test_ml_pilot_model.py`: fixtures nhỏ cần Spark/JVM,
+  chạy riêng bằng worker (`run_ml_pilot.ps1 -TestOnly`), không chạy training thật.
+  `test_ml_pilot_tracking.py` chỉ dùng mock/stdlib, không import MLflow/Spark hay
+  truy cập server, nên vẫn thuộc CI Python nhẹ; không coi đây là artifact integration PASS.
+- `test_ml_holdout_metrics.py`: Spark fixture đánh giá, không fit, chạy riêng trong
+  worker; `test_ml_holdout_contract.py` là unit guards offline thuộc CI nhẹ.
+- `test_ml_inference.py` và `test_dashboard_prediction.py` vẫn thuộc CI nhẹ:
+  HTTP/model/source guards dùng mock/fixture công khai, không cần Spark, fitted
+  artifacts thật, PostgreSQL hoặc service inference đang chạy.
 - `test_postgres_integration.py`: cần database thử cho migration/load, không dùng DB thật.
 - Đúng một test `test_postgres_readonly_weighted_aggregates_against_row_reference`
   trong `test_dashboard_queries.py`: deselect vì cần PostgreSQL; các query/mock
@@ -1367,9 +1727,11 @@ Loại khỏi CI nhẹ một cách tường minh:
   không thực thi fixture/ETL. Acquisition tests dùng file tạm/network mock.
 
 CI không khởi động stack/database, tải Taxi, chạy ETL/training/bootstrap, build
-worker Spark, push image, deploy hoặc tự merge PR. Compose helper chỉ copy bốn
+worker Spark, push image, deploy hoặc tự merge PR. Compose helper chỉ copy bảy
 YAML công khai vào thư mục tạm, dùng dummy env và kiểm tra default/all profiles
-cho base → bootstrap-test → clean-worker → fixture. Không đọc `.env` thật hoặc
+cho base → bootstrap-test → clean-worker → fixture, riêng base + ml-pilot và
+base + ml-pilot + ml-holdout; base + inference riêng (không trộn chuỗi ML với bootstrap thử).
+Không đọc `.env` thật hoặc
 in Compose environment. Docker build dùng `.dockerignore`, không COPY secrets/data/PBIX;
 dashboard image còn được kiểm tra `pip check`/imports trong container read-only,
 không mạng, không mount host (không phải browser/UI integration test).

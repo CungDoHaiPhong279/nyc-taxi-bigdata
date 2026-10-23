@@ -1,0 +1,73 @@
+# Apply explicitly with docker-compose.yml. Do not combine with ML job overrides.
+# Only fare-inference and the dashboard are new/updated; database services remain
+# untouched. Start named targets with --no-deps after checking existing services.
+services:
+  fare-inference:
+    build:
+      context: .
+      dockerfile: Dockerfile.inference
+    image: nyc-taxi-inference:ml-p4
+    restart: "no"
+    init: true
+    cpus: 2.0
+    mem_limit: 3g
+    read_only: true
+    tmpfs:
+      # Snappy's verified Java dependency extracts/loads its native .so here.
+      # Docker tmpfs defaults to noexec; only this private bounded scratch is exec.
+      - /tmp:rw,exec,nosuid,nodev,size=1073741824,mode=1777
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:ActiveProcessorCount=2"
+      PYSPARK_SUBMIT_ARGS: "--driver-memory 1536m --conf spark.ui.enabled=false pyspark-shell"
+      SPARK_LOCAL_IP: "127.0.0.1"
+      SPARK_LOCAL_DIRS: /tmp/ml-p4-spark
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+    volumes:
+      - type: bind
+        source: ./models/ml-p2/20261023-pilot02/fitted_model
+        target: /model
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./models/ml-p3/20261023-june01/candidate_lock.json
+        target: /model-contract/candidate_lock.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./models/ml-p2/20261023-pilot02/feature_contract.json
+        target: /model-contract/feature_contract.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./data/raw/taxi_zones/taxi_zone_lookup.csv
+        target: /model-contract/zones.csv
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: ["inference"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 90s
+      retries: 3
+    stop_grace_period: 30s
+
+  dashboard:
+    image: nyc-taxi-dashboard:ml-p4
+    environment:
+      FARE_INFERENCE_URL: http://fare-inference:8000
+    networks: ["default", "inference"]
+    depends_on:
+      fare-inference:
+        condition: service_healthy
+
+networks:
+  inference:
+    internal: true

@@ -61,7 +61,18 @@ def test_arguments_select_exact_profile_without_spark_or_database_tests(project,
     assert set(ci.EXCLUDED_TEST_FILES) == {
         "tests/test_bronze.py", "tests/test_silver.py", "tests/test_gold.py",
         "tests/test_postgres_integration.py",
+        "tests/test_ml_pilot_data.py", "tests/test_ml_pilot_model.py",
+        "tests/test_ml_holdout_metrics.py",
     }
+    assert "tests/test_ml_pilot_tracking.py" in ci.TEST_FILES
+    assert str(project / "tests/test_ml_pilot_tracking.py") in arguments
+    assert "tests/test_ml_holdout_contract.py" in ci.TEST_FILES
+    assert "tests/test_ml_inference.py" in ci.TEST_FILES
+    assert "tests/test_dashboard_prediction.py" in ci.TEST_FILES
+    assert str(project / "tests/test_ml_holdout_contract.py") in arguments
+    for filename in ("tests/test_ml_pilot_data.py", "tests/test_ml_pilot_model.py"):
+        assert "Spark/JVM ML fixture" in ci.EXCLUDED_TEST_FILES[filename]
+        assert "not ETL" in ci.EXCLUDED_TEST_FILES[filename]
 
 
 def test_dependency_preflight_imports_every_required_package():

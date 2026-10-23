@@ -1,0 +1,1315 @@
+{
+  "columns": [
+    "fare_amount",
+    "trip_distance",
+    "ratecode_id",
+    "passenger_count",
+    "pickup_datetime_local",
+    "pickup_location_id",
+    "dropoff_location_id",
+    "pickup_hour",
+    "pickup_month",
+    "day_of_week",
+    "is_weekend",
+    "is_holiday",
+    "calendar_matched",
+    "weather_matched",
+    "_source_year",
+    "_source_month"
+  ],
+  "created_at_utc": "2026-10-22T08:13:27.615084+00:00",
+  "file_inventory": [
+    {
+      "bytes": 25380325,
+      "mtime_ns": "1791289282858943100",
+      "path": "taxi_enriched/year=2025/month=01/part-00000-78593514-fc9b-41ac-9b03-76f0b7e5a55e-c000.snappy.parquet",
+      "rows": 1048196
+    },
+    {
+      "bytes": 25295337,
+      "mtime_ns": "1791289283106121500",
+      "path": "taxi_enriched/year=2025/month=01/part-00001-78593514-fc9b-41ac-9b03-76f0b7e5a55e-c000.snappy.parquet",
+      "rows": 1048099
+    },
+    {
+      "bytes": 24818992,
+      "mtime_ns": "1791289282945683000",
+      "path": "taxi_enriched/year=2025/month=01/part-00002-78593514-fc9b-41ac-9b03-76f0b7e5a55e-c000.snappy.parquet",
+      "rows": 1047481
+    },
+    {
+      "bytes": 7325092,
+      "mtime_ns": "1791289275608234000",
+      "path": "taxi_enriched/year=2025/month=01/part-00003-78593514-fc9b-41ac-9b03-76f0b7e5a55e-c000.snappy.parquet",
+      "rows": 329399
+    },
+    {
+      "bytes": 25035068,
+      "mtime_ns": "1791289357265851400",
+      "path": "taxi_enriched/year=2025/month=02/part-00000-5e30e4a6-82d7-4a12-b2db-41f41926889c-c000.snappy.parquet",
+      "rows": 1046680
+    },
+    {
+      "bytes": 25054693,
+      "mtime_ns": "1791289357261927200",
+      "path": "taxi_enriched/year=2025/month=02/part-00001-5e30e4a6-82d7-4a12-b2db-41f41926889c-c000.snappy.parquet",
+      "rows": 1046603
+    },
+    {
+      "bytes": 24574093,
+      "mtime_ns": "1791289357151397800",
+      "path": "taxi_enriched/year=2025/month=02/part-00002-5e30e4a6-82d7-4a12-b2db-41f41926889c-c000.snappy.parquet",
+      "rows": 1047371
+    },
+    {
+      "bytes": 9914070,
+      "mtime_ns": "1791289350324333900",
+      "path": "taxi_enriched/year=2025/month=02/part-00003-5e30e4a6-82d7-4a12-b2db-41f41926889c-c000.snappy.parquet",
+      "rows": 431725
+    },
+    {
+      "bytes": 25068430,
+      "mtime_ns": "1791289390514818600",
+      "path": "taxi_enriched/year=2025/month=03/part-00000-eb7aff5e-a12e-4282-a7ae-85d87cdef747-c000.snappy.parquet",
+      "rows": 1044312
+    },
+    {
+      "bytes": 25000775,
+      "mtime_ns": "1791289390316461600",
+      "path": "taxi_enriched/year=2025/month=03/part-00001-eb7aff5e-a12e-4282-a7ae-85d87cdef747-c000.snappy.parquet",
+      "rows": 1039901
+    },
+    {
+      "bytes": 24663056,
+      "mtime_ns": "1791289390103579000",
+      "path": "taxi_enriched/year=2025/month=03/part-00002-eb7aff5e-a12e-4282-a7ae-85d87cdef747-c000.snappy.parquet",
+      "rows": 1040037
+    },
+    {
+      "bytes": 23000606,
+      "mtime_ns": "1791289389208009100",
+      "path": "taxi_enriched/year=2025/month=03/part-00003-eb7aff5e-a12e-4282-a7ae-85d87cdef747-c000.snappy.parquet",
+      "rows": 998727
+    },
+    {
+      "bytes": 24957424,
+      "mtime_ns": "1791289422804818000",
+      "path": "taxi_enriched/year=2025/month=04/part-00000-041ff493-b174-4176-bff5-0ed35c1276ca-c000.snappy.parquet",
+      "rows": 1034990
+    },
+    {
+      "bytes": 24845455,
+      "mtime_ns": "1791289422751839200",
+      "path": "taxi_enriched/year=2025/month=04/part-00001-041ff493-b174-4176-bff5-0ed35c1276ca-c000.snappy.parquet",
+      "rows": 1040072
+    },
+    {
+      "bytes": 24820773,
+      "mtime_ns": "1791289422656702700",
+      "path": "taxi_enriched/year=2025/month=04/part-00002-041ff493-b174-4176-bff5-0ed35c1276ca-c000.snappy.parquet",
+      "rows": 1037174
+    },
+    {
+      "bytes": 19153109,
+      "mtime_ns": "1791289419265229700",
+      "path": "taxi_enriched/year=2025/month=04/part-00003-041ff493-b174-4176-bff5-0ed35c1276ca-c000.snappy.parquet",
+      "rows": 823548
+    },
+    {
+      "bytes": 33055857,
+      "mtime_ns": "1791289458164922700",
+      "path": "taxi_enriched/year=2025/month=05/part-00000-6da7acef-5b32-40b3-b898-65fb66560cf9-c000.snappy.parquet",
+      "rows": 1440613
+    },
+    {
+      "bytes": 24881728,
+      "mtime_ns": "1791289454854859200",
+      "path": "taxi_enriched/year=2025/month=05/part-00001-6da7acef-5b32-40b3-b898-65fb66560cf9-c000.snappy.parquet",
+      "rows": 1028376
+    },
+    {
+      "bytes": 24783693,
+      "mtime_ns": "1791289454948224200",
+      "path": "taxi_enriched/year=2025/month=05/part-00002-6da7acef-5b32-40b3-b898-65fb66560cf9-c000.snappy.parquet",
+      "rows": 1032228
+    },
+    {
+      "bytes": 24823425,
+      "mtime_ns": "1791289454726588200",
+      "path": "taxi_enriched/year=2025/month=05/part-00003-6da7acef-5b32-40b3-b898-65fb66560cf9-c000.snappy.parquet",
+      "rows": 1026356
+    },
+    {
+      "bytes": 26543013,
+      "mtime_ns": "1791289490966068700",
+      "path": "taxi_enriched/year=2025/month=06/part-00000-6fea822f-d24d-4370-af91-7135b53b4815-c000.snappy.parquet",
+      "rows": 1176932
+    },
+    {
+      "bytes": 25035801,
+      "mtime_ns": "1791289489994403900",
+      "path": "taxi_enriched/year=2025/month=06/part-00001-6fea822f-d24d-4370-af91-7135b53b4815-c000.snappy.parquet",
+      "rows": 1026249
+    },
+    {
+      "bytes": 24987535,
+      "mtime_ns": "1791289489560354300",
+      "path": "taxi_enriched/year=2025/month=06/part-00002-6fea822f-d24d-4370-af91-7135b53b4815-c000.snappy.parquet",
+      "rows": 1025154
+    },
+    {
+      "bytes": 24959137,
+      "mtime_ns": "1791289489969900100",
+      "path": "taxi_enriched/year=2025/month=06/part-00003-6fea822f-d24d-4370-af91-7135b53b4815-c000.snappy.parquet",
+      "rows": 1026042
+    }
+  ],
+  "manifest_sha256": "bb755aa6181615127c8d06454094789cb862a818a2862784a558fd46f08b57ff",
+  "method": "One projected Arrow streaming pass, 65536 rows/batch, no pandas; no sampling for counts",
+  "partitions": [
+    {
+      "distance_bins": {
+        "(0,1]": 837076,
+        "(1,5]": 2023244,
+        "(20,200]": 28160,
+        "(5,20]": 494372,
+        ">200": 122,
+        "negative": 0,
+        "zero": 90201
+      },
+      "eligible_flags": {
+        "distance_above_1000": 0,
+        "distance_above_200": 0,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 17744,
+        "fare_above_1000": 1,
+        "fare_above_10000": 1,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 0,
+        "fare_zero": 0,
+        "passenger_above_6": 0,
+        "passenger_null": 0,
+        "passenger_zero": 23280,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 0,
+        "pickup_outside_source_month": 1,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "fare_bins": {
+        "(0,10]": 1168485,
+        "(10,50]": 1977133,
+        "(100,1000]": 8039,
+        "(50,100]": 174053,
+        ">1000": 3,
+        "negative": 144107,
+        "zero": 1355
+      },
+      "flags": {
+        "distance_above_1000": 116,
+        "distance_above_200": 122,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 90201,
+        "fare_above_1000": 3,
+        "fare_above_10000": 1,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 144107,
+        "fare_zero": 1355,
+        "passenger_above_6": 18,
+        "passenger_zero": 24465,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 21,
+        "pickup_outside_source_month": 22,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "gold_batch_id": "4e9696c901524438930b737bbac0aa50",
+      "nulls": {
+        "_source_month": 0,
+        "_source_year": 0,
+        "calendar_matched": 0,
+        "day_of_week": 21,
+        "dropoff_location_id": 0,
+        "fare_amount": 0,
+        "is_holiday": 21,
+        "is_weekend": 21,
+        "passenger_count": 539930,
+        "pickup_datetime_local": 0,
+        "pickup_hour": 0,
+        "pickup_location_id": 0,
+        "pickup_month": 0,
+        "ratecode_id": 539930,
+        "trip_distance": 0,
+        "weather_matched": 0
+      },
+      "passengers": {
+        "-999.0": 539930,
+        "0.0": 24465,
+        "1.0": 2321106,
+        "2.0": 407522,
+        "3.0": 91360,
+        "4.0": 58992,
+        "5.0": 17779,
+        "6.0": 12003,
+        "7.0": 4,
+        "8.0": 11,
+        "9.0": 3
+      },
+      "pickup_months": {
+        "2024-12": 21,
+        "2025-01": 3473153,
+        "2025-02": 1
+      },
+      "ranges": {
+        "distance": [
+          0,
+          276423.57
+        ],
+        "fare": [
+          -900,
+          863372.12
+        ],
+        "pickup": [
+          "2024-12-31T20:47:55.000000",
+          "2025-02-01T00:00:44.000000"
+        ]
+      },
+      "rate1_target": {
+        "negative": 52985,
+        "positive": 2701014,
+        "zero": 889
+      },
+      "ratecodes": {
+        "-999.0": 539930,
+        "1.0": 2754888,
+        "2.0": 94398,
+        "3.0": 8622,
+        "4.0": 7091,
+        "5.0": 26450,
+        "6.0": 7,
+        "99.0": 41789
+      },
+      "rows": 3473175,
+      "seconds": 7.255,
+      "source_month": "2025-01",
+      "split_all": {
+        "test_June": 0,
+        "train_Jan_Apr": 3473154,
+        "validation_May": 0
+      },
+      "split_before_distance_cap": {
+        "test_June": 0,
+        "train_Jan_Apr": 2684498,
+        "validation_May": 0
+      },
+      "split_eligible": {
+        "test_June": 0,
+        "train_Jan_Apr": 2684495,
+        "validation_May": 0
+      },
+      "waterfall_kept": {
+        "distance_at_most_200_miles": 2684495,
+        "finite_fare": 3473154,
+        "finite_nonnegative_distance": 3327692,
+        "named_location_ids_1_263": 3300710,
+        "pickup_in_2025_Jan_Jun": 3473154,
+        "positive_fare": 3327692,
+        "standard_rate_1": 2684498
+      }
+    },
+    {
+      "distance_bins": {
+        "(0,1]": 824930,
+        "(1,5]": 2113155,
+        "(20,200]": 23891,
+        "(5,20]": 511147,
+        ">200": 151,
+        "negative": 0,
+        "zero": 99105
+      },
+      "eligible_flags": {
+        "distance_above_1000": 0,
+        "distance_above_200": 0,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 18059,
+        "fare_above_1000": 1,
+        "fare_above_10000": 1,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 0,
+        "fare_zero": 0,
+        "passenger_above_6": 0,
+        "passenger_null": 0,
+        "passenger_zero": 20685,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 0,
+        "pickup_outside_source_month": 29,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "fare_bins": {
+        "(0,10]": 1109941,
+        "(10,50]": 2114011,
+        "(100,1000]": 6791,
+        "(50,100]": 157584,
+        ">1000": 6,
+        "negative": 182645,
+        "zero": 1401
+      },
+      "flags": {
+        "distance_above_1000": 141,
+        "distance_above_200": 151,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 99105,
+        "fare_above_1000": 6,
+        "fare_above_10000": 1,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 182645,
+        "fare_zero": 1401,
+        "passenger_above_6": 16,
+        "passenger_zero": 21585,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 0,
+        "pickup_outside_source_month": 31,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "gold_batch_id": "067059ba205e41d5bf97f03f3311bd61",
+      "nulls": {
+        "_source_month": 0,
+        "_source_year": 0,
+        "calendar_matched": 0,
+        "day_of_week": 0,
+        "dropoff_location_id": 0,
+        "fare_amount": 0,
+        "is_holiday": 0,
+        "is_weekend": 0,
+        "passenger_count": 806764,
+        "pickup_datetime_local": 0,
+        "pickup_hour": 0,
+        "pickup_location_id": 0,
+        "pickup_month": 0,
+        "ratecode_id": 806764,
+        "trip_distance": 0,
+        "weather_matched": 0
+      },
+      "passengers": {
+        "-999.0": 806764,
+        "0.0": 21585,
+        "1.0": 2222008,
+        "2.0": 370275,
+        "3.0": 77914,
+        "4.0": 46560,
+        "5.0": 16645,
+        "6.0": 10612,
+        "7.0": 4,
+        "8.0": 9,
+        "9.0": 3
+      },
+      "pickup_months": {
+        "2025-01": 30,
+        "2025-02": 3572348,
+        "2025-03": 1
+      },
+      "ranges": {
+        "distance": [
+          0,
+          228782.51
+        ],
+        "fare": [
+          -1807.6,
+          132531.36
+        ],
+        "pickup": [
+          "2025-01-31T22:22:53.000000",
+          "2025-03-01T00:06:32.000000"
+        ]
+      },
+      "rate1_target": {
+        "negative": 49187,
+        "positive": 2557866,
+        "zero": 979
+      },
+      "ratecodes": {
+        "-999.0": 806764,
+        "1.0": 2608032,
+        "2.0": 81832,
+        "3.0": 7940,
+        "4.0": 6386,
+        "5.0": 22459,
+        "6.0": 1,
+        "99.0": 38965
+      },
+      "rows": 3572379,
+      "seconds": 4.897,
+      "source_month": "2025-02",
+      "split_all": {
+        "test_June": 0,
+        "train_Jan_Apr": 3572379,
+        "validation_May": 0
+      },
+      "split_before_distance_cap": {
+        "test_June": 0,
+        "train_Jan_Apr": 2543471,
+        "validation_May": 0
+      },
+      "split_eligible": {
+        "test_June": 0,
+        "train_Jan_Apr": 2543469,
+        "validation_May": 0
+      },
+      "waterfall_kept": {
+        "distance_at_most_200_miles": 2543469,
+        "finite_fare": 3572379,
+        "finite_nonnegative_distance": 3388333,
+        "named_location_ids_1_263": 3364629,
+        "pickup_in_2025_Jan_Jun": 3572379,
+        "positive_fare": 3388333,
+        "standard_rate_1": 2543471
+      }
+    },
+    {
+      "distance_bins": {
+        "(0,1]": 895561,
+        "(1,5]": 2434630,
+        "(20,200]": 32193,
+        "(5,20]": 657459,
+        ">200": 174,
+        "negative": 0,
+        "zero": 102960
+      },
+      "eligible_flags": {
+        "distance_above_1000": 0,
+        "distance_above_200": 0,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 18577,
+        "fare_above_1000": 0,
+        "fare_above_10000": 0,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 0,
+        "fare_zero": 0,
+        "passenger_above_6": 0,
+        "passenger_null": 0,
+        "passenger_zero": 21486,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 0,
+        "pickup_outside_source_month": 31,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "fare_bins": {
+        "(0,10]": 1192733,
+        "(10,50]": 2489284,
+        "(100,1000]": 9749,
+        "(50,100]": 220883,
+        ">1000": 5,
+        "negative": 208716,
+        "zero": 1607
+      },
+      "flags": {
+        "distance_above_1000": 164,
+        "distance_above_200": 174,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 102960,
+        "fare_above_1000": 5,
+        "fare_above_10000": 1,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 208716,
+        "fare_zero": 1607,
+        "passenger_above_6": 12,
+        "passenger_zero": 22570,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 2,
+        "pickup_outside_source_month": 33,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "gold_batch_id": "e0fe67a3934241519c855400afdadb0b",
+      "nulls": {
+        "_source_month": 0,
+        "_source_year": 0,
+        "calendar_matched": 0,
+        "day_of_week": 2,
+        "dropoff_location_id": 0,
+        "fare_amount": 0,
+        "is_holiday": 2,
+        "is_weekend": 2,
+        "passenger_count": 916484,
+        "pickup_datetime_local": 0,
+        "pickup_hour": 0,
+        "pickup_location_id": 0,
+        "pickup_month": 0,
+        "ratecode_id": 916484,
+        "trip_distance": 0,
+        "weather_matched": 0
+      },
+      "passengers": {
+        "-999.0": 916484,
+        "0.0": 22570,
+        "1.0": 2552254,
+        "2.0": 439223,
+        "3.0": 99699,
+        "4.0": 63820,
+        "5.0": 18600,
+        "6.0": 10315,
+        "7.0": 4,
+        "8.0": 6,
+        "9.0": 2
+      },
+      "pickup_months": {
+        "2007-12": 1,
+        "2009-01": 1,
+        "2025-02": 29,
+        "2025-03": 4122944,
+        "2025-04": 2
+      },
+      "ranges": {
+        "distance": [
+          0,
+          320136.29
+        ],
+        "fare": [
+          -999,
+          46263.88
+        ],
+        "pickup": [
+          "2007-12-05T18:45:00.000000",
+          "2025-04-01T00:00:17.000000"
+        ]
+      },
+      "rate1_target": {
+        "negative": 60636,
+        "positive": 2938727,
+        "zero": 1109
+      },
+      "ratecodes": {
+        "-999.0": 916484,
+        "1.0": 3000472,
+        "2.0": 111921,
+        "3.0": 10583,
+        "4.0": 7800,
+        "5.0": 31864,
+        "6.0": 3,
+        "99.0": 43850
+      },
+      "rows": 4122977,
+      "seconds": 5.149,
+      "source_month": "2025-03",
+      "split_all": {
+        "test_June": 0,
+        "train_Jan_Apr": 4122975,
+        "validation_May": 0
+      },
+      "split_before_distance_cap": {
+        "test_June": 0,
+        "train_Jan_Apr": 2924045,
+        "validation_May": 0
+      },
+      "split_eligible": {
+        "test_June": 0,
+        "train_Jan_Apr": 2924042,
+        "validation_May": 0
+      },
+      "waterfall_kept": {
+        "distance_at_most_200_miles": 2924042,
+        "finite_fare": 4122975,
+        "finite_nonnegative_distance": 3912652,
+        "named_location_ids_1_263": 3885965,
+        "pickup_in_2025_Jan_Jun": 4122975,
+        "positive_fare": 3912652,
+        "standard_rate_1": 2924045
+      }
+    },
+    {
+      "distance_bins": {
+        "(0,1]": 860994,
+        "(1,5]": 2309082,
+        "(20,200]": 31074,
+        "(5,20]": 643767,
+        ">200": 265,
+        "negative": 0,
+        "zero": 90602
+      },
+      "eligible_flags": {
+        "distance_above_1000": 0,
+        "distance_above_200": 0,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 18488,
+        "fare_above_1000": 1,
+        "fare_above_10000": 0,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 0,
+        "fare_zero": 0,
+        "passenger_above_6": 0,
+        "passenger_null": 0,
+        "passenger_zero": 21744,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 0,
+        "pickup_outside_source_month": 7,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "fare_bins": {
+        "(0,10]": 1126025,
+        "(10,50]": 2393497,
+        "(100,1000]": 10488,
+        "(50,100]": 217682,
+        ">1000": 3,
+        "negative": 186709,
+        "zero": 1380
+      },
+      "flags": {
+        "distance_above_1000": 258,
+        "distance_above_200": 265,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 90602,
+        "fare_above_1000": 3,
+        "fare_above_10000": 0,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 186709,
+        "fare_zero": 1380,
+        "passenger_above_6": 14,
+        "passenger_zero": 22918,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 0,
+        "pickup_outside_source_month": 7,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "gold_batch_id": "edf3c84e08374f0d8ccadc2674565a29",
+      "nulls": {
+        "_source_month": 0,
+        "_source_year": 0,
+        "calendar_matched": 0,
+        "day_of_week": 0,
+        "dropoff_location_id": 0,
+        "fare_amount": 0,
+        "is_holiday": 0,
+        "is_weekend": 0,
+        "passenger_count": 745469,
+        "pickup_datetime_local": 0,
+        "pickup_hour": 0,
+        "pickup_location_id": 0,
+        "pickup_month": 0,
+        "ratecode_id": 745469,
+        "trip_distance": 0,
+        "weather_matched": 0
+      },
+      "passengers": {
+        "-999.0": 745469,
+        "0.0": 22918,
+        "1.0": 2516722,
+        "2.0": 437117,
+        "3.0": 107388,
+        "4.0": 78340,
+        "5.0": 18758,
+        "6.0": 9058,
+        "7.0": 2,
+        "8.0": 9,
+        "9.0": 3
+      },
+      "pickup_months": {
+        "2025-03": 4,
+        "2025-04": 3935777,
+        "2025-05": 3
+      },
+      "ranges": {
+        "distance": [
+          0,
+          386088.43
+        ],
+        "fare": [
+          -1777.5,
+          1777.5
+        ],
+        "pickup": [
+          "2025-03-31T23:45:01.000000",
+          "2025-05-01T00:48:13.000000"
+        ]
+      },
+      "rate1_target": {
+        "negative": 63789,
+        "positive": 2915669,
+        "zero": 905
+      },
+      "ratecodes": {
+        "-999.0": 745469,
+        "1.0": 2980363,
+        "2.0": 111006,
+        "3.0": 11335,
+        "4.0": 8493,
+        "5.0": 33979,
+        "6.0": 6,
+        "99.0": 45133
+      },
+      "rows": 3935784,
+      "seconds": 4.93,
+      "source_month": "2025-04",
+      "split_all": {
+        "test_June": 0,
+        "train_Jan_Apr": 3935781,
+        "validation_May": 3
+      },
+      "split_before_distance_cap": {
+        "test_June": 0,
+        "train_Jan_Apr": 2901590,
+        "validation_May": 3
+      },
+      "split_eligible": {
+        "test_June": 0,
+        "train_Jan_Apr": 2901589,
+        "validation_May": 3
+      },
+      "waterfall_kept": {
+        "distance_at_most_200_miles": 2901592,
+        "finite_fare": 3935784,
+        "finite_nonnegative_distance": 3747695,
+        "named_location_ids_1_263": 3720484,
+        "pickup_in_2025_Jan_Jun": 3935784,
+        "positive_fare": 3747695,
+        "standard_rate_1": 2901593
+      }
+    },
+    {
+      "distance_bins": {
+        "(0,1]": 921301,
+        "(1,5]": 2612105,
+        "(20,200]": 37831,
+        "(5,20]": 816432,
+        ">200": 306,
+        "negative": 0,
+        "zero": 139598
+      },
+      "eligible_flags": {
+        "distance_above_1000": 0,
+        "distance_above_200": 0,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 18529,
+        "fare_above_1000": 0,
+        "fare_above_10000": 0,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 0,
+        "fare_zero": 0,
+        "passenger_above_6": 0,
+        "passenger_null": 0,
+        "passenger_zero": 22508,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 0,
+        "pickup_outside_source_month": 23,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "fare_bins": {
+        "(0,10]": 1179032,
+        "(10,50]": 2731571,
+        "(100,1000]": 14649,
+        "(50,100]": 275002,
+        ">1000": 2,
+        "negative": 325250,
+        "zero": 2067
+      },
+      "flags": {
+        "distance_above_1000": 296,
+        "distance_above_200": 306,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 139598,
+        "fare_above_1000": 2,
+        "fare_above_10000": 0,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 325250,
+        "fare_zero": 2067,
+        "passenger_above_6": 12,
+        "passenger_zero": 23659,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 1,
+        "pickup_outside_source_month": 24,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "gold_batch_id": "4eb1d3a9646b4594b33c62d245664faa",
+      "nulls": {
+        "_source_month": 0,
+        "_source_year": 0,
+        "calendar_matched": 0,
+        "day_of_week": 1,
+        "dropoff_location_id": 0,
+        "fare_amount": 0,
+        "is_holiday": 1,
+        "is_weekend": 1,
+        "passenger_count": 1195946,
+        "pickup_datetime_local": 0,
+        "pickup_hour": 0,
+        "pickup_location_id": 0,
+        "pickup_month": 0,
+        "ratecode_id": 1195946,
+        "trip_distance": 0,
+        "weather_matched": 0
+      },
+      "passengers": {
+        "-999.0": 1195946,
+        "0.0": 23659,
+        "1.0": 2630055,
+        "2.0": 478160,
+        "3.0": 105192,
+        "4.0": 67087,
+        "5.0": 17708,
+        "6.0": 9754,
+        "8.0": 10,
+        "9.0": 2
+      },
+      "pickup_months": {
+        "2009-01": 1,
+        "2025-04": 20,
+        "2025-05": 4527549,
+        "2025-06": 3
+      },
+      "ranges": {
+        "distance": [
+          0,
+          263103.98
+        ],
+        "fare": [
+          -998,
+          1583.6
+        ],
+        "pickup": [
+          "2009-01-01T00:20:39.000000",
+          "2025-06-01T00:04:31.000000"
+        ]
+      },
+      "rate1_target": {
+        "negative": 67718,
+        "positive": 3023122,
+        "zero": 1318
+      },
+      "ratecodes": {
+        "-999.0": 1195946,
+        "1.0": 3092158,
+        "2.0": 129649,
+        "3.0": 13284,
+        "4.0": 10887,
+        "5.0": 39876,
+        "6.0": 5,
+        "99.0": 45768
+      },
+      "rows": 4527573,
+      "seconds": 6.135,
+      "source_month": "2025-05",
+      "split_all": {
+        "test_June": 3,
+        "train_Jan_Apr": 20,
+        "validation_May": 4527549
+      },
+      "split_before_distance_cap": {
+        "test_June": 3,
+        "train_Jan_Apr": 20,
+        "validation_May": 3008378
+      },
+      "split_eligible": {
+        "test_June": 3,
+        "train_Jan_Apr": 20,
+        "validation_May": 3008376
+      },
+      "waterfall_kept": {
+        "distance_at_most_200_miles": 3008399,
+        "finite_fare": 4527572,
+        "finite_nonnegative_distance": 4200255,
+        "named_location_ids_1_263": 4168101,
+        "pickup_in_2025_Jan_Jun": 4527572,
+        "positive_fare": 4200255,
+        "standard_rate_1": 3008401
+      }
+    },
+    {
+      "distance_bins": {
+        "(0,1]": 845852,
+        "(1,5]": 2447849,
+        "(20,200]": 35401,
+        "(5,20]": 792189,
+        ">200": 204,
+        "negative": 0,
+        "zero": 132882
+      },
+      "eligible_flags": {
+        "distance_above_1000": 0,
+        "distance_above_200": 0,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 16948,
+        "fare_above_1000": 1,
+        "fare_above_10000": 0,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 0,
+        "fare_zero": 0,
+        "passenger_above_6": 0,
+        "passenger_null": 0,
+        "passenger_zero": 21282,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 0,
+        "pickup_outside_source_month": 17,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "fare_bins": {
+        "(0,10]": 1055260,
+        "(10,50]": 2648738,
+        "(100,1000]": 13575,
+        "(50,100]": 259331,
+        ">1000": 5,
+        "negative": 275552,
+        "zero": 1916
+      },
+      "flags": {
+        "distance_above_1000": 195,
+        "distance_above_200": 204,
+        "distance_infinite": 0,
+        "distance_nan": 0,
+        "distance_negative": 0,
+        "distance_zero": 132882,
+        "fare_above_1000": 5,
+        "fare_above_10000": 1,
+        "fare_infinite": 0,
+        "fare_nan": 0,
+        "fare_negative": 275552,
+        "fare_zero": 1916,
+        "passenger_above_6": 11,
+        "passenger_zero": 22510,
+        "pickup_hour_inconsistent": 0,
+        "pickup_month_inconsistent": 0,
+        "pickup_outside_analysis_period": 0,
+        "pickup_outside_source_month": 20,
+        "source_lineage_mismatch": 0,
+        "weekday_inconsistent": 0
+      },
+      "gold_batch_id": "a1eb7ef553a547e68dc603103faa7a21",
+      "nulls": {
+        "_source_month": 0,
+        "_source_year": 0,
+        "calendar_matched": 0,
+        "day_of_week": 0,
+        "dropoff_location_id": 0,
+        "fare_amount": 0,
+        "is_holiday": 0,
+        "is_weekend": 0,
+        "passenger_count": 1212640,
+        "pickup_datetime_local": 0,
+        "pickup_hour": 0,
+        "pickup_location_id": 0,
+        "pickup_month": 0,
+        "ratecode_id": 1212640,
+        "trip_distance": 0,
+        "weather_matched": 0
+      },
+      "passengers": {
+        "-999.0": 1212640,
+        "0.0": 22510,
+        "1.0": 2403371,
+        "2.0": 422533,
+        "3.0": 102138,
+        "4.0": 67585,
+        "5.0": 14942,
+        "6.0": 8647,
+        "7.0": 2,
+        "8.0": 6,
+        "9.0": 3
+      },
+      "pickup_months": {
+        "2025-05": 20,
+        "2025-06": 4254357
+      },
+      "ranges": {
+        "distance": [
+          0,
+          261262.39
+        ],
+        "fare": [
+          -990,
+          325478.05
+        ],
+        "pickup": [
+          "2025-05-31T22:34:26.000000",
+          "2025-06-30T23:59:59.000000"
+        ]
+      },
+      "rate1_target": {
+        "negative": 64323,
+        "positive": 2749407,
+        "zero": 1330
+      },
+      "ratecodes": {
+        "-999.0": 1212640,
+        "1.0": 2815060,
+        "2.0": 118690,
+        "3.0": 12316,
+        "4.0": 10502,
+        "5.0": 38046,
+        "6.0": 4,
+        "99.0": 47119
+      },
+      "rows": 4254377,
+      "seconds": 5.507,
+      "source_month": "2025-06",
+      "split_all": {
+        "test_June": 4254357,
+        "train_Jan_Apr": 0,
+        "validation_May": 20
+      },
+      "split_before_distance_cap": {
+        "test_June": 2735533,
+        "train_Jan_Apr": 0,
+        "validation_May": 17
+      },
+      "split_eligible": {
+        "test_June": 2735530,
+        "train_Jan_Apr": 0,
+        "validation_May": 17
+      },
+      "waterfall_kept": {
+        "distance_at_most_200_miles": 2735547,
+        "finite_fare": 4254377,
+        "finite_nonnegative_distance": 3976909,
+        "named_location_ids_1_263": 3946232,
+        "pickup_in_2025_Jan_Jun": 4254377,
+        "positive_fare": 3976909,
+        "standard_rate_1": 2735550
+      }
+    }
+  ],
+  "peak_rss_mib": 165.05,
+  "seconds": 33.911,
+  "survey_version": 1,
+  "total": {
+    "distance_bins": {
+      "(0,1]": 5185714,
+      "(1,5]": 13940065,
+      "(20,200]": 188550,
+      "(5,20]": 3915366,
+      ">200": 1222,
+      "negative": 0,
+      "zero": 655348
+    },
+    "eligible_flags": {
+      "distance_above_1000": 0,
+      "distance_above_200": 0,
+      "distance_infinite": 0,
+      "distance_nan": 0,
+      "distance_negative": 0,
+      "distance_zero": 108345,
+      "fare_above_1000": 4,
+      "fare_above_10000": 2,
+      "fare_infinite": 0,
+      "fare_nan": 0,
+      "fare_negative": 0,
+      "fare_zero": 0,
+      "passenger_above_6": 0,
+      "passenger_null": 0,
+      "passenger_zero": 130985,
+      "pickup_hour_inconsistent": 0,
+      "pickup_month_inconsistent": 0,
+      "pickup_outside_analysis_period": 0,
+      "pickup_outside_source_month": 108,
+      "source_lineage_mismatch": 0,
+      "weekday_inconsistent": 0
+    },
+    "fare_bins": {
+      "(0,10]": 6831476,
+      "(10,50]": 14354234,
+      "(100,1000]": 63291,
+      "(50,100]": 1304535,
+      ">1000": 24,
+      "negative": 1322979,
+      "zero": 9726
+    },
+    "flags": {
+      "distance_above_1000": 1170,
+      "distance_above_200": 1222,
+      "distance_infinite": 0,
+      "distance_nan": 0,
+      "distance_negative": 0,
+      "distance_zero": 655348,
+      "fare_above_1000": 24,
+      "fare_above_10000": 4,
+      "fare_infinite": 0,
+      "fare_nan": 0,
+      "fare_negative": 1322979,
+      "fare_zero": 9726,
+      "passenger_above_6": 83,
+      "passenger_zero": 137707,
+      "pickup_hour_inconsistent": 0,
+      "pickup_month_inconsistent": 0,
+      "pickup_outside_analysis_period": 24,
+      "pickup_outside_source_month": 137,
+      "source_lineage_mismatch": 0,
+      "weekday_inconsistent": 0
+    },
+    "nulls": {
+      "_source_month": 0,
+      "_source_year": 0,
+      "calendar_matched": 0,
+      "day_of_week": 24,
+      "dropoff_location_id": 0,
+      "fare_amount": 0,
+      "is_holiday": 24,
+      "is_weekend": 24,
+      "passenger_count": 5417233,
+      "pickup_datetime_local": 0,
+      "pickup_hour": 0,
+      "pickup_location_id": 0,
+      "pickup_month": 0,
+      "ratecode_id": 5417233,
+      "trip_distance": 0,
+      "weather_matched": 0
+    },
+    "passengers": {
+      "-999.0": 5417233,
+      "0.0": 137707,
+      "1.0": 14645516,
+      "2.0": 2554830,
+      "3.0": 583691,
+      "4.0": 382384,
+      "5.0": 104432,
+      "6.0": 60389,
+      "7.0": 16,
+      "8.0": 51,
+      "9.0": 16
+    },
+    "pickup_months": {
+      "2007-12": 1,
+      "2009-01": 2,
+      "2024-12": 21,
+      "2025-01": 3473183,
+      "2025-02": 3572378,
+      "2025-03": 4122949,
+      "2025-04": 3935799,
+      "2025-05": 4527572,
+      "2025-06": 4254360
+    },
+    "ranges": {
+      "distance": [
+        0,
+        386088.43
+      ],
+      "fare": [
+        -1807.6,
+        863372.12
+      ],
+      "pickup": [
+        "2007-12-05T18:45:00.000000",
+        "2025-06-30T23:59:59.000000"
+      ]
+    },
+    "rate1_target": {
+      "negative": 358638,
+      "positive": 16885805,
+      "zero": 6530
+    },
+    "ratecodes": {
+      "-999.0": 5417233,
+      "1.0": 17250973,
+      "2.0": 647496,
+      "3.0": 64080,
+      "4.0": 51159,
+      "5.0": 192674,
+      "6.0": 26,
+      "99.0": 262624
+    },
+    "rows": 23886265,
+    "split_all": {
+      "test_June": 4254360,
+      "train_Jan_Apr": 15104309,
+      "validation_May": 4527572
+    },
+    "split_before_distance_cap": {
+      "test_June": 2735536,
+      "train_Jan_Apr": 11053624,
+      "validation_May": 3008398
+    },
+    "split_eligible": {
+      "test_June": 2735533,
+      "train_Jan_Apr": 11053615,
+      "validation_May": 3008396
+    },
+    "waterfall_kept": {
+      "distance_at_most_200_miles": 16797544,
+      "finite_fare": 23886241,
+      "finite_nonnegative_distance": 22553536,
+      "named_location_ids_1_263": 22386121,
+      "pickup_in_2025_Jan_Jun": 23886241,
+      "positive_fare": 22553536,
+      "standard_rate_1": 16797558
+    }
+  },
+  "execution": {
+    "worker_image": "nyc-taxi-worker:p6-clean",
+    "worker_image_id": "sha256:32f066cdb5e0827d3b45abc387972ca45650cf43ed05e602cdcb6287dff43cd4",
+    "public_execution_hash_inputs": 45,
+    "public_execution_hash_passed": true,
+    "default_p2_stale": true,
+    "script_executed_sha256": "149be4ff19c4f0b349e7063f64769ef032cba83b2d4bdb2cbdf6731aab8cd665",
+    "wall_seconds": 35.93,
+    "cpu_limit": 1,
+    "memory_limit_mib": 1024,
+    "network": "none",
+    "root_filesystem": "read-only",
+    "gold_mount": "read-only",
+    "source_mounts": 0,
+    "spark_session_started": false,
+    "training_performed": false,
+    "database_accessed": false,
+    "python": "3.11.17",
+    "java": "17.0.20.1",
+    "pyspark": "4.2.0",
+    "pyarrow": "21.0.0",
+    "mlflow": "3.5.1"
+  },
+  "interpretation": {
+    "null_category_sentinel": "-999.0 in ratecodes/passengers denotes Arrow NULL; counter values equal corresponding exact NULL counts in this dataset",
+    "nan_flags": "fare_nan/distance_nan mean NULL or NaN after NumPy conversion; consult nulls separately; both zero here",
+    "filter_counts": "Sequential proposed ML-only cohort; not written to Gold; not a training run; counts before cross-source dedup",
+    "sampling": "No sampling for survey counts; future pilot sampling is only a proposal",
+    "quantiles": "No additional pass, quantile fitting, training or model metrics performed",
+    "file_timestamps": "mtime_ns is preserved as a decimal string from the original Python output, avoiding 64-bit JSON/JavaScript rounding"
+  }
+}

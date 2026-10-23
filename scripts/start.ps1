@@ -6,6 +6,7 @@ and explicit image/config updates are separate operations. No host Python needed
 [CmdletBinding()]
 param(
     [switch]$Build,
+    [switch]$WithInference,
     [ValidateSet('current', 'bootstrap-test')][string]$Environment = 'current',
     [ValidateRange(1, 1800)][int]$HealthTimeoutSeconds = 120,
     [ValidateRange(1, 300)][int]$CommandTimeoutSeconds = 30,
@@ -213,6 +214,7 @@ function Invoke-ProjectStart {
     param(
         [string]$ProjectRoot = $script:StartupProjectRoot,
         [switch]$Build,
+        [switch]$WithInference,
         [ValidateSet('current', 'bootstrap-test')][string]$Environment = 'current',
         [int]$HealthTimeoutSeconds = 120,
         [int]$CommandTimeoutSeconds = 30,
@@ -220,11 +222,25 @@ function Invoke-ProjectStart {
         [int]$PollIntervalSeconds = 2
     )
     try {
+        if ($WithInference -and $Environment -ne 'current') { Stop-Startup '-WithInference cannot be combined with bootstrap-test; use the current frozen-model environment explicitly.' }
         $script:DockerCliPath = Resolve-DockerCli
         if (-not $script:DockerCliPath) { Stop-Startup 'Docker CLI is missing. Install Docker Desktop, open it, wait for the engine, then run this script again.' }
         $composeFile = Join-Path $ProjectRoot 'docker-compose.yml'
         if (-not (Test-Path -LiteralPath $composeFile -PathType Leaf)) { Stop-Startup 'docker-compose.yml is missing beside the scripts directory.' }
         $context = New-ProjectEnvironmentContext -ProjectRoot $ProjectRoot -Environment $Environment -CommandTimeoutSeconds $CommandTimeoutSeconds -HealthTimeoutSeconds $HealthTimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds
+        if ($WithInference) {
+            Enable-InferenceStartupContext -Context $context
+            # Host-only hashes; fail before builds, container lifecycle work, or
+            # even creating a missing .env. Never train/bootstrap/fetch a model.
+            try { $artifacts = Assert-FareArtifacts -ProjectRoot $context.Root }
+            catch {
+                $safeArtifactMessage = $_.Exception.Data['StartupSafeMessage']
+                if ($safeArtifactMessage) { throw }
+                Stop-Startup 'Frozen inference artifacts are missing or mismatched. Provision the reviewed P2.1/P3 artifacts separately; no build, service lifecycle, or automatic training was attempted.'
+            }
+            if ((Get-OptionalProperty $artifacts 'Verified' $false) -ne $true) { Stop-Startup 'Frozen inference artifacts are not verified; no service lifecycle or automatic training was attempted.' }
+            $context.InferenceArtifacts = $artifacts
+        }
         $null = Invoke-StartupDocker $context @('info', '--format', '{{.ServerVersion}}') 'Docker daemon is unavailable. Open Docker Desktop, wait until the engine is running, then retry'
         $null = Invoke-StartupDocker $context @('compose', 'version', '--short') 'Docker Compose plugin is unavailable. Enable/install it through Docker Desktop'
 
@@ -247,6 +263,7 @@ function Invoke-ProjectStart {
         $model = ConvertFrom-StartupJson $modelJson 'public Compose metadata'
         $modelProject = Get-OptionalProperty $model 'name'
         if ($Environment -eq 'bootstrap-test' -and $modelProject -ne $context.ExpectedProject) { Stop-Startup 'Resolved bootstrap-test Compose project differs from the required isolated project.' }
+        if ($WithInference -and $modelProject -ne $context.ExpectedProject) { Stop-Startup 'Inference Compose project differs from the required existing project.' }
         $context.Project = $modelProject
         if (-not $context.Project -or $context.Project -notmatch '^[a-z0-9][a-z0-9_-]*$') { Stop-Startup 'Cannot determine the Compose project name safely.' }
         # Isolation must pass before either image builds or service lifecycle work.
@@ -281,6 +298,7 @@ function Invoke-ProjectStart {
             $imageId = ''
             if ($image.ExitCode -eq 0) { $imageId = $image.StdOut.Trim() }
             if ($null -eq $container -and -not $imageId) {
+                if ($WithInference -and $service -in @('fare-inference', 'dashboard')) { Stop-Startup ($service + ' image is missing. Run scripts/start.ps1 -WithInference -Build explicitly; no automatic build, pull, or model training was attempted.') }
                 if ($service -eq 'dashboard') { Stop-Startup 'Dashboard image is missing. Run scripts/start.ps1 -Build first; no automatic build or pull was attempted.' }
                 Stop-Startup ($service + ' image is missing. Obtain the exact configured image explicitly, then retry. -Build never builds/pulls postgres or mlflow.')
             }
@@ -291,6 +309,9 @@ function Invoke-ProjectStart {
                 if ($drift.Count -gt 0) {
                     $updateNeeded = $true
                     Write-Warning ($service + ' differs in ' + ($drift -join ', ') + '. Existing container is preserved; a separate reviewed update is required. This script does not recreate it.')
+                    if ($WithInference -and $service -in @('fare-inference', 'dashboard')) {
+                        Write-Host ('Separate reviewed update command (not executed): ' + (Get-InferenceUpdateCommand -Context $context -Service $service))
+                    }
                 }
             }
             $plans += [pscustomobject]@{ Service = $service; Container = $container; ContainerName = $containerName; Drift = ($drift.Count -gt 0) }
@@ -318,6 +339,7 @@ function Invoke-ProjectStart {
                 Write-Host ('Reusing running container: ' + $service + '.')
             } else { Stop-Startup ($service + ' is ' + $container.Status + '; review separately. No restart/recreate attempted.') }
             $healthy = Wait-ServiceHealth $context $service $container.ID
+            if ($WithInference -and $service -eq 'fare-inference') { $null = Test-InferenceReadiness -Context $context -Container $healthy }
             $final += $healthy
         }
         Write-Host ('Compose project: ' + $context.Project)
@@ -328,6 +350,7 @@ function Invoke-ProjectStart {
         if ($Environment -eq 'current') {
             Write-Host 'Dashboard: http://127.0.0.1:8501'
             Write-Host 'MLflow: http://localhost:5000'
+            if ($WithInference) { Write-Host 'Fare inference: internal-only, verified frozen model; open the dashboard fare-estimate page.' }
         } else {
             Write-Host 'Bootstrap-test PostgreSQL/MLflow are internal-only; no host ports or dashboard are started.'
         }
@@ -343,7 +366,9 @@ function Invoke-ProjectStart {
 }
 
 . (Join-Path $PSScriptRoot 'docker_environment.ps1')
+. (Join-Path $PSScriptRoot 'start_inference.ps1')
+. (Join-Path $PSScriptRoot 'model_artifacts.ps1')
 
 if ($MyInvocation.InvocationName -ne '.') {
-    exit (Invoke-ProjectStart -Build:$Build -Environment $Environment -HealthTimeoutSeconds $HealthTimeoutSeconds -CommandTimeoutSeconds $CommandTimeoutSeconds -BuildTimeoutSeconds $BuildTimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds)
+    exit (Invoke-ProjectStart -Build:$Build -WithInference:$WithInference -Environment $Environment -HealthTimeoutSeconds $HealthTimeoutSeconds -CommandTimeoutSeconds $CommandTimeoutSeconds -BuildTimeoutSeconds $BuildTimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds)
 }

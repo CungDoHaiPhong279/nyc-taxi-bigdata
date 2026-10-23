@@ -1,0 +1,33 @@
+# Apply after the base and ml-pilot files for evaluation only, never service up.
+services:
+  worker:
+    image: ${MLP2_WORKER_IMAGE:-nyc-taxi-worker:ml-p3-20261023}
+    environment:
+      SPARK_LOCAL_DIRS: ${MLP2_SPARK_LOCAL_DIRS:-/tmp/ml-p3-spark}
+    volumes: !override
+      - type: bind
+        source: ./data/gold
+        target: /gold
+        read_only: true
+      - type: bind
+        source: ${MLP2_RUNTIME_DIR:-./models/ml-p3/20261023-june01}
+        target: /ml-output
+      - type: bind
+        source: ./reports/ml_p1_profile.json
+        target: /ml-contract/p1-profile.json
+        read_only: true
+      - type: bind
+        source: ./models/ml-p2/20261023-pilot02
+        target: /training-input
+        read_only: true
+      - type: bind
+        source: ./data/raw/taxi_zones/taxi_zone_lookup.csv
+        target: /ml-contract/zones.csv
+        read_only: true
+      - type: volume
+        source: ml-p2-artifacts
+        target: /mlflow/artifacts/ml-p2-20261022
+        volume:
+          nocopy: true
+          subpath: artifacts/ml-p2-20261022
+    command: ["python", "scripts/evaluate_holdout.py", "--help"]

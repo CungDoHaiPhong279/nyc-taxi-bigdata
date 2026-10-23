@@ -1,0 +1,47 @@
+# Explicit ML job override; never use this to start/reconcile existing services.
+# Requires an already-created dedicated artifact subdirectory in the OLD volume.
+services:
+  worker:
+    image: ${MLP2_WORKER_IMAGE:-nyc-taxi-worker:ml-p2}
+    build:
+      dockerfile: Dockerfile.ml
+    cpus: 2.0
+    mem_limit: 3g
+    environment: !override
+      JAVA_TOOL_OPTIONS: "-XX:ActiveProcessorCount=2"
+      PYSPARK_SUBMIT_ARGS: "--driver-memory 1536m --conf spark.ui.enabled=false pyspark-shell"
+      SPARK_LOCAL_DIRS: ${MLP2_SPARK_LOCAL_DIRS:-/ml-output/spark-tmp}
+      # Anonymous temporary files must stay on the container filesystem; Docker
+      # Desktop Windows bind mounts do not support all tempfile operations.
+      TMPDIR: /tmp
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MLFLOW_TRACKING_URI: ${MLP2_TRACKING_URI:?Use run_ml_pilot.ps1 to verify the current MLflow private IP}
+      MLFLOW_HTTP_REQUEST_TIMEOUT: "15"
+      MLFLOW_HTTP_REQUEST_MAX_RETRIES: "2"
+      MLFLOW_ARTIFACT_UPLOAD_DOWNLOAD_TIMEOUT: "60"
+      MLFLOW_ENABLE_ASYNC_LOGGING: "false"
+    volumes: !override
+      - type: bind
+        source: ./data/gold
+        target: /gold
+        read_only: true
+      - type: bind
+        source: ${MLP2_RUNTIME_DIR:-./models/ml-p2/20261022-pilot01}
+        target: /ml-output
+      - type: bind
+        source: ./reports/ml_p1_profile.json
+        target: /ml-contract/p1-profile.json
+        read_only: true
+      - type: volume
+        source: ml-p2-artifacts
+        target: /mlflow/artifacts/ml-p2-20261022
+        volume:
+          nocopy: true
+          subpath: artifacts/ml-p2-20261022
+    command: ["python", "scripts/train_pilot.py", "--help"]
+
+volumes:
+  ml-p2-artifacts:
+    external: true
+    name: nyc-taxi-bigdata_mlflow-data

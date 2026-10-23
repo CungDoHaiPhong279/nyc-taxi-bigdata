@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "ordinary-january",
+      "inputs": {
+        "distance_miles": 2.5,
+        "pickup_datetime": "2025-01-15T08:30:00",
+        "pickup_location_id": 161,
+        "dropoff_location_id": 237
+      },
+      "expected_unseen": {"pickup": false, "dropoff": false}
+    },
+    {
+      "id": "zero-distance-juneteenth",
+      "inputs": {
+        "distance_miles": 0.0,
+        "pickup_datetime": "2025-06-19T00:00:00",
+        "pickup_location_id": 10,
+        "dropoff_location_id": 10
+      },
+      "expected_unseen": {"pickup": false, "dropoff": false}
+    },
+    {
+      "id": "unseen-pickup-zone",
+      "inputs": {
+        "distance_miles": 3.2,
+        "pickup_datetime": "2025-03-15T10:15:00",
+        "pickup_location_id": 1,
+        "dropoff_location_id": 10
+      },
+      "expected_unseen": {"pickup": true, "dropoff": false}
+    },
+    {
+      "id": "unseen-dropoff-zone",
+      "inputs": {
+        "distance_miles": 4.7,
+        "pickup_datetime": "2025-04-20T21:00:00",
+        "pickup_location_id": 10,
+        "dropoff_location_id": 5
+      },
+      "expected_unseen": {"pickup": false, "dropoff": true}
+    },
+    {
+      "id": "unseen-both-zones",
+      "inputs": {
+        "distance_miles": 1.1,
+        "pickup_datetime": "2025-05-26T12:00:00",
+        "pickup_location_id": 1,
+        "dropoff_location_id": 5
+      },
+      "expected_unseen": {"pickup": true, "dropoff": true}
+    },
+    {
+      "id": "long-distance-100-miles",
+      "inputs": {
+        "distance_miles": 100.0,
+        "pickup_datetime": "2025-06-01T12:00:00",
+        "pickup_location_id": 161,
+        "dropoff_location_id": 237
+      },
+      "expected_unseen": {"pickup": false, "dropoff": false}
+    },
+    {
+      "id": "upper-distance-december-extrapolation",
+      "inputs": {
+        "distance_miles": 200.0,
+        "pickup_datetime": "2025-12-31T23:59:59",
+        "pickup_location_id": 161,
+        "dropoff_location_id": 237
+      },
+      "expected_unseen": {"pickup": false, "dropoff": false}
+    },
+    {
+      "id": "microsecond-local-wall-clock",
+      "inputs": {
+        "distance_miles": 2.5,
+        "pickup_datetime": "2025-02-03T07:08:09.123456",
+        "pickup_location_id": 161,
+        "dropoff_location_id": 237
+      },
+      "expected_unseen": {"pickup": false, "dropoff": false}
+    }
+  ]
+}
