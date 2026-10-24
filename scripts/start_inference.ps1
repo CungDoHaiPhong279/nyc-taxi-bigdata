@@ -17,6 +17,15 @@ function Get-InferenceUpdateCommand {
     param($Context, [ValidateSet('fare-inference', 'dashboard')][string]$Service)
     # This is a review instruction, never executed. Single-quoted PowerShell
     # literals preserve paths containing spaces, $, backticks or apostrophes.
+    if (Get-OptionalProperty $Context 'IsPackage' $false) {
+        $composeArguments = @($Context.ComposeArguments)
+        if ($composeArguments.Count -eq 0 -or $composeArguments[0] -cne 'compose') {
+            Stop-Startup 'Cannot prepare a package update command without its explicit Compose context.'
+        }
+        $arguments = $composeArguments + @('up', '-d', '--no-deps', '--no-build', '--pull', 'never', $Service)
+        $quoted = @($arguments | ForEach-Object { "'" + ([string]$_).Replace("'", "''") + "'" })
+        return 'docker ' + ($quoted -join ' ')
+    }
     $project = "'" + $Context.Root.Replace("'", "''") + "'"
     $base = "'" + (Join-Path $Context.Root 'docker-compose.yml').Replace("'", "''") + "'"
     $override = "'" + (Join-Path $Context.Root 'docker-compose.inference.yml').Replace("'", "''") + "'"

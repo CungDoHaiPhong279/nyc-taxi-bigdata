@@ -1,0 +1,95 @@
+# Last layer after base + inference + package. Compose >=2.24.4 is required.
+# All state is distinct from both the live stack and bootstrap/fixture sandboxes.
+name: nyc-taxi-package-test
+
+services:
+  postgres:
+    container_name: !reset null
+    restart: "no"
+    ports: !reset []
+    environment: !override
+      POSTGRES_DB: nyc_taxi_package_test
+      POSTGRES_USER: package_test
+      POSTGRES_PASSWORD: ${PACKAGE_POSTGRES_PASSWORD:?Prepare the dedicated package-test environment first}
+    volumes: !override
+      - postgres-data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+
+  mlflow:
+    container_name: !reset null
+    restart: "no"
+    ports: !override
+      - "127.0.0.1:15000:5000"
+    volumes: !override
+      - mlflow-data:/mlflow
+
+  dashboard:
+    container_name: !reset null
+    restart: "no"
+    ports: !override
+      - "127.0.0.1:18501:8501"
+    environment: !override
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: nyc_taxi_package_test
+      POSTGRES_USER: package_test
+      POSTGRES_PASSWORD: ${PACKAGE_POSTGRES_PASSWORD:?Prepare the dedicated package-test environment first}
+      FARE_INFERENCE_URL: http://fare-inference:8000
+
+  worker:
+    container_name: !reset null
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: nyc_taxi_package_test
+      POSTGRES_USER: package_test
+      POSTGRES_PASSWORD: ${PACKAGE_POSTGRES_PASSWORD:?Prepare the dedicated package-test environment first}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes: !override
+      - ./.sandbox/package-test/data:/app/data
+      - ./.sandbox/package-test/logs:/app/logs
+      - ./.sandbox/package-test/models:/app/models
+      - ./.sandbox/package-test/reports:/app/reports
+
+  fare-inference:
+    container_name: !reset null
+    volumes: !override
+      - type: bind
+        source: ./.sandbox/package-test/model-bundle/models/ml-p2/20261023-pilot02/fitted_model
+        target: /model
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.sandbox/package-test/model-bundle/models/ml-p3/20261023-june01/candidate_lock.json
+        target: /model-contract/candidate_lock.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.sandbox/package-test/model-bundle/models/ml-p2/20261023-pilot02/feature_contract.json
+        target: /model-contract/feature_contract.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.sandbox/package-test/model-bundle/data/raw/taxi_zones/taxi_zone_lookup.csv
+        target: /model-contract/zones.csv
+        read_only: true
+        bind:
+          create_host_path: false
+
+volumes:
+  postgres-data:
+    name: nyc-taxi-package-test_postgres-data
+  mlflow-data:
+    name: nyc-taxi-package-test_mlflow-data
+
+networks:
+  default:
+    name: nyc-taxi-package-test_default
+  inference:
+    name: nyc-taxi-package-test_inference
+    internal: true

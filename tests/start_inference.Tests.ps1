@@ -254,6 +254,47 @@ Describe 'ML P5 optional inference startup (mock-only)' {
         $script:InferenceText | Should Match 'docker-compose\.inference\.yml'
     }
 
+    It 'prints the exact package-test layers project and env file as one safely quoted command' {
+        $root = 'C:\fixtures\demo''s $cash `token; path with spaces'
+        $compose = @('compose', '--project-directory', $root,
+            '--file', (Join-Path $root 'docker-compose.yml'),
+            '--file', (Join-Path $root 'docker-compose.inference.yml'),
+            '--file', (Join-Path $root 'docker-compose.package.yml'),
+            '--file', (Join-Path $root 'docker-compose.package-test.yml'),
+            '--env-file', (Join-Path $root '.sandbox/package-test/compose.env'),
+            '--project-name', 'nyc-taxi-package-test')
+        $context = [pscustomobject]@{ Root = $root; IsPackage = $true; ComposeArguments = $compose }
+        $command = Get-InferenceUpdateCommand -Context $context -Service dashboard
+        $tokens = $null
+        $errors = $null
+        $parsed = [Management.Automation.Language.Parser]::ParseInput($command, [ref]$tokens, [ref]$errors)
+        @($errors).Count | Should Be 0
+        @($parsed.EndBlock.Statements).Count | Should Be 1
+        @($parsed.EndBlock.Statements[0].PipelineElements).Count | Should Be 1
+        $actual = @($parsed.EndBlock.Statements[0].PipelineElements[0].CommandElements | ForEach-Object { $_.Value })
+        $expected = @('docker') + $compose + @('up', '-d', '--no-deps', '--no-build', '--pull', 'never', 'dashboard')
+        ($actual -join "`n") | Should BeExactly ($expected -join "`n")
+        $script:InferenceCalls.Count | Should Be 0
+    }
+
+    It 'keeps the current-package update command on its selected package layers without borrowing test or legacy paths' {
+        $compose = @('compose', '--project-directory', $script:InferenceRoot,
+            '-f', (Join-Path $script:InferenceRoot 'docker-compose.yml'),
+            '-f', (Join-Path $script:InferenceRoot 'docker-compose.inference.yml'),
+            '-f', (Join-Path $script:InferenceRoot 'docker-compose.package.yml'),
+            '--env-file', (Join-Path $script:InferenceRoot '.env'), '--project-name', 'nyc-taxi-bigdata')
+        $context = [pscustomobject]@{ Root = $script:InferenceRoot; IsPackage = $true; ComposeArguments = $compose }
+        $command = Get-InferenceUpdateCommand -Context $context -Service fare-inference
+        $tokens = $null
+        $errors = $null
+        $parsed = [Management.Automation.Language.Parser]::ParseInput($command, [ref]$tokens, [ref]$errors)
+        @($errors).Count | Should Be 0
+        $actual = @($parsed.EndBlock.Statements[0].PipelineElements[0].CommandElements | ForEach-Object { $_.Value })
+        ($actual -join "`n") | Should BeExactly ((@('docker') + $compose + @('up', '-d', '--no-deps', '--no-build', '--pull', 'never', 'fare-inference')) -join "`n")
+        $command | Should Not Match 'nyc-taxi-package-test'
+        $script:InferenceCalls.Count | Should Be 0
+    }
+
     It 'does not start a stopped inference container whose configuration drifted' {
         $script:InferenceScenario.StoppedService = 'fare-inference'
         $script:InferenceScenario.ConfigDrift = 'fare-inference'

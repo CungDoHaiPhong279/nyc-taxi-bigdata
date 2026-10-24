@@ -1,0 +1,236 @@
+{
+  "schema": "nyc-taxi-frozen-model-bundle-v1",
+  "version": "ml-p4-v1",
+  "training_run_id": "d2772f1904d7472490a73b0ac1c0c5d4",
+  "evaluation_run_id": "58d5008f0ed048f58599a859877ae336",
+  "model_tree_sha256": "759337ab73d6d6cd171edb4b0b42ff325f991cc7cda43e722905ce28c5c947ee",
+  "candidate_lock_sha256": "12442b5684943bb81169bb084cffc8c1b54043882d75711e295a0f1a0ff7338d",
+  "archive": {
+    "file": "nyc-taxi-model-ml-p4-v1.zip",
+    "bytes": 63680,
+    "sha256": "7770b7a64722b0a801015f99f0c6b5d2ea3aa39dbc15bc01cb7b6dd376293105"
+  },
+  "files": [
+    {
+      "bytes": 12331,
+      "path": "data/raw/taxi_zones/taxi_zone_lookup.csv",
+      "sha256": "1a99e105092230f8620f301edcca7f80d3080642ff404d28ed957d3fa222c8ed"
+    },
+    {
+      "bytes": 681,
+      "path": "models/ml-p2/20261023-pilot02/feature_contract.json",
+      "sha256": "4a48ae568d8d568eb83b9884534518322f723cb7e1554ffd32d745c30c213d3d"
+    },
+    {
+      "bytes": 466,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/MLmodel",
+      "sha256": "990806841d13affd9797d4abbb03ff6d5bce6767acd75bbf032646750fab866b"
+    },
+    {
+      "bytes": 145,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/conda.yaml",
+      "sha256": "86058b2e3deeb2fb3ed96638c8df98934ceff0f8e43c19aad1d508a43d20e213"
+    },
+    {
+      "bytes": 121,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/python_env.yaml",
+      "sha256": "d327dec5bc0742d30c47e5214279a3ca3696e64bd294825d39aea60e8db8bec7"
+    },
+    {
+      "bytes": 41,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/requirements.txt",
+      "sha256": "5626ac6abb7c10afcd1bc4c8fd9561f84b2c1555ca2175714d8f6e7431c69673"
+    },
+    {
+      "bytes": 8,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/metadata/.part-00000-afea5fb9-312f-4c67-9408-0068008de031-c000.txt.crc",
+      "sha256": "705989e11f8bb2bb63be731f049e6dd8108f38f07440d938b007c2021a157e30"
+    },
+    {
+      "bytes": 0,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 295,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/metadata/part-00000-afea5fb9-312f-4c67-9408-0068008de031-c000.txt",
+      "sha256": "a53e6c0f67c8a679d9b1b2bd5ff9c66d9f6328c4a752d66a446b6f268f96a4fa"
+    },
+    {
+      "bytes": 8,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/data/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 20,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/data/.part-00000-36a0785a-594d-4583-b70c-239e9cacc73c-c000.snappy.parquet.crc",
+      "sha256": "1bcb7ba1992c3150c0ee51212b5d8d7773bd68459ab3385b0a566daa585415ef"
+    },
+    {
+      "bytes": 0,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/data/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1403,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/data/part-00000-36a0785a-594d-4583-b70c-239e9cacc73c-c000.snappy.parquet",
+      "sha256": "234efdc27c32db02021942c41de1d58a7f995adb655d1372892784a4d7c75461"
+    },
+    {
+      "bytes": 8,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/metadata/.part-00000-6fa96a77-d762-4be3-a7bf-d2df56ab611a-c000.txt.crc",
+      "sha256": "01e9f0fd47d7f7729ecaf8555be12fcdfbc1ac608ed54767317a295ed4936b69"
+    },
+    {
+      "bytes": 0,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 395,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/metadata/part-00000-6fa96a77-d762-4be3-a7bf-d2df56ab611a-c000.txt",
+      "sha256": "ee5fc135e5258e5126a013cf85176e2b47b74121548b335120d1f2c8840712c6"
+    },
+    {
+      "bytes": 8,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/data/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 24,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/data/.part-00000-26c48d6b-b45b-4055-9b12-4dcb6dbfbad2-c000.snappy.parquet.crc",
+      "sha256": "9860dcce854a3622be60d7498cd349651b23c3ddc83c116089ac086865508a8e"
+    },
+    {
+      "bytes": 0,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/data/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1619,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/data/part-00000-26c48d6b-b45b-4055-9b12-4dcb6dbfbad2-c000.snappy.parquet",
+      "sha256": "06e8fdac7606e70c51ef5ed68012b6c90326093e0a8ca28c7d1b298562b4168a"
+    },
+    {
+      "bytes": 8,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/metadata/.part-00000-a947c40f-6e65-4fcb-8340-2c2823a3e751-c000.txt.crc",
+      "sha256": "5a0f63c1cf669f6380cb1b03b44cf785f04387bbd140a4c04f5b45fc7ffc6fdf"
+    },
+    {
+      "bytes": 0,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 397,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/metadata/part-00000-a947c40f-6e65-4fcb-8340-2c2823a3e751-c000.txt",
+      "sha256": "1005a051f8d2425d7e0abc56640eb9f805c3e015182860514f9b8fc9efb32681"
+    },
+    {
+      "bytes": 8,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/2_VectorAssembler_8ab7742e6060/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/2_VectorAssembler_8ab7742e6060/metadata/.part-00000-c46ea489-69fb-424e-81f1-271c0452d66b-c000.txt.crc",
+      "sha256": "1b56d1e9c11bc030208b8a9b8a0f38317f704a058b452f529c360ac2423c21db"
+    },
+    {
+      "bytes": 0,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/2_VectorAssembler_8ab7742e6060/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 465,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/2_VectorAssembler_8ab7742e6060/metadata/part-00000-c46ea489-69fb-424e-81f1-271c0452d66b-c000.txt",
+      "sha256": "c787b3e52a75306ce420c12b1209fde87b9784e970a30b8f450daba62ed04b06"
+    },
+    {
+      "bytes": 8,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/data/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 360,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/data/.part-00000-dd9fc92e-18bf-499b-a699-3ea76210f085-c000.snappy.parquet.crc",
+      "sha256": "d479a692e691bfc1a25c5bc1d761432ea8fa480b650f38dd6c98d1c5331d5e2a"
+    },
+    {
+      "bytes": 0,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/data/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 45046,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/data/part-00000-dd9fc92e-18bf-499b-a699-3ea76210f085-c000.snappy.parquet",
+      "sha256": "e62e06f980be16cd03faf7507267024f83444fdcc94ffd5f60fc48d789828ed6"
+    },
+    {
+      "bytes": 8,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 16,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/metadata/.part-00000-c731ae04-9fbd-4053-b635-bcb9cc1d452d-c000.txt.crc",
+      "sha256": "162073c5344a350b48d1a3fdbafd180a7e2cd5a6ab262838a419a100a59b8825"
+    },
+    {
+      "bytes": 0,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 863,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/metadata/part-00000-c731ae04-9fbd-4053-b635-bcb9cc1d452d-c000.txt",
+      "sha256": "7d3a021642c89a691f6e63ddccd1de705ac007c1e114a8a8dcf60ec3b569d73e"
+    },
+    {
+      "bytes": 8,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/treesMetadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 40,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/treesMetadata/.part-00000-64737d74-9b48-46af-9d44-777674116f80-c000.snappy.parquet.crc",
+      "sha256": "e2670f9844599925dbd6bd7257f2f7ae3d617bfd6fd615b7198d7e2de8e0e824"
+    },
+    {
+      "bytes": 0,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/treesMetadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3824,
+      "path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/treesMetadata/part-00000-64737d74-9b48-46af-9d44-777674116f80-c000.snappy.parquet",
+      "sha256": "c0bde95a4f46b1be8c1ab092295573cb4fb06d3de0eefd243ada22f0c9e34e54"
+    },
+    {
+      "bytes": 14417,
+      "path": "models/ml-p3/20261023-june01/candidate_lock.json",
+      "sha256": "12442b5684943bb81169bb084cffc8c1b54043882d75711e295a0f1a0ff7338d"
+    }
+  ],
+  "distribution": {
+    "status": "repository-bundled",
+    "redistribution_rights": "project-generated-model-and-nyc-open-data-notices",
+    "provenance": "PROVENANCE.md",
+    "content_audit": "CONTENT_AUDIT.json"
+  }
+}

@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <# Read-only frozen-model preflight; no Python, Docker, download or training. #>
 [CmdletBinding()]
-param([string]$ProjectRoot)
+param([string]$ProjectRoot, [string]$RuntimeRoot)
 
 function Stop-FareArtifactCheck {
     param([string]$Reason)
@@ -83,17 +83,20 @@ function Get-FareModelTree {
 }
 
 function Assert-FareArtifacts {
-    param([Parameter(Mandatory=$true)][string]$ProjectRoot)
+    param([Parameter(Mandatory=$true)][string]$ProjectRoot, [string]$RuntimeRoot)
+    # Runtime artifacts may be installed in a dedicated directory. Frozen source
+    # hashes always resolve under the actual code root, never the runtime tree.
+    if (-not $RuntimeRoot) { $RuntimeRoot = $ProjectRoot }
     $pin = Get-FareModelIdentity
-    $lockPath = Resolve-FareArtifactPath $ProjectRoot 'models/ml-p3/20261023-june01/candidate_lock.json'
+    $lockPath = Resolve-FareArtifactPath $RuntimeRoot 'models/ml-p3/20261023-june01/candidate_lock.json'
     if ((Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $pin.CandidateLockSHA256) {
         Stop-FareArtifactCheck 'Pinned candidate_lock.json SHA256 mismatch.'
     }
     try { $lock = Get-Content -LiteralPath $lockPath -Raw -Encoding UTF8 | ConvertFrom-Json }
     catch { Stop-FareArtifactCheck 'Pinned candidate lock is not valid JSON.' }
-    $modelPath = Resolve-FareArtifactPath $ProjectRoot 'models/ml-p2/20261023-pilot02/fitted_model' -Directory
-    $featurePath = Resolve-FareArtifactPath $ProjectRoot 'models/ml-p2/20261023-pilot02/feature_contract.json'
-    $zonesPath = Resolve-FareArtifactPath $ProjectRoot 'data/raw/taxi_zones/taxi_zone_lookup.csv'
+    $modelPath = Resolve-FareArtifactPath $RuntimeRoot 'models/ml-p2/20261023-pilot02/fitted_model' -Directory
+    $featurePath = Resolve-FareArtifactPath $RuntimeRoot 'models/ml-p2/20261023-pilot02/feature_contract.json'
+    $zonesPath = Resolve-FareArtifactPath $RuntimeRoot 'data/raw/taxi_zones/taxi_zone_lookup.csv'
     $observed = Get-FareModelTree $modelPath
     if ($lock.training_run_id -cne $pin.TrainingRunId -or $lock.model_tree.sha256 -cne $pin.ModelSHA256 -or
         $observed.sha256 -cne $pin.ModelSHA256 -or @($observed.files).Count -ne 40) {
@@ -120,7 +123,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     $ErrorActionPreference = 'Stop'
     try {
         if (-not $ProjectRoot) { $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path) }
-        $verified = Assert-FareArtifacts -ProjectRoot $ProjectRoot
+        $verified = Assert-FareArtifacts -ProjectRoot $ProjectRoot -RuntimeRoot $RuntimeRoot
         Write-Host ('Frozen artifacts verified (40 files). Model SHA256: ' + $verified.ModelSHA256)
         Write-Host ('Training: ' + $verified.TrainingRunId + '; evaluation: ' + $verified.EvaluationRunId)
         exit 0

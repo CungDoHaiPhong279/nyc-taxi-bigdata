@@ -1,6 +1,7 @@
 # Spark inference code refresh on the separately verified dependency runtime.
 # No package upgrades, model artifacts, data, .env or MLflow store are copied.
-FROM nyc-taxi-worker:p6-clean
+ARG WORKER_RUNTIME_IMAGE=nyc-taxi-worker:p6-clean
+FROM ${WORKER_RUNTIME_IMAGE}
 
 WORKDIR /app
 COPY requirements.txt requirements-worker-constraints.txt pyproject.toml /tmp/inference-inputs/

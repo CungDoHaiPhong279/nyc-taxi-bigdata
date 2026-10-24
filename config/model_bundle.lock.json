@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "version": "ml-p4-v1",
+  "training_run_id": "d2772f1904d7472490a73b0ac1c0c5d4",
+  "evaluation_run_id": "58d5008f0ed048f58599a859877ae336",
+  "model_sha256": "759337ab73d6d6cd171edb4b0b42ff325f991cc7cda43e722905ce28c5c947ee",
+  "manifest_sha256": "5e2cbc312b404dc9d1fb0eae7848420b6077f07f99272b844a942719ab75719b",
+  "archive_sha256": "7770b7a64722b0a801015f99f0c6b5d2ea3aa39dbc15bc01cb7b6dd376293105",
+  "archive_bytes": 63680,
+  "manifest_bytes": 11473,
+  "distribution": {
+    "status": "repository-bundled",
+    "location": "distribution/models/ml-p4-v1",
+    "source": "Project-generated Spark GBT and fitted preprocessing from the frozen evaluated run; unmodified public TLC zone lookup with provenance notices.",
+    "provenance": "distribution/models/ml-p4-v1/PROVENANCE.md",
+    "content_audit": "distribution/models/ml-p4-v1/CONTENT_AUDIT.json"
+  }
+}

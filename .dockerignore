@@ -1,5 +1,6 @@
 .git/
 .sandbox/
+distribution/models/
 .env*
 **/.env*
 .venv/

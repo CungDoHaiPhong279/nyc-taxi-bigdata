@@ -1,0 +1,610 @@
+{
+  "schema_version": 1,
+  "source_directory": ".sandbox/package-bundles/ml-p4-v1",
+  "audit_utc": "2026-10-24T04:47:23.357976+00:00",
+  "scope": "Read-only archive and explicit original model/contract/lookup counterpart inspection; no Gold/raw taxi trip files, services, Spark model loading, predictions, training or extraction.",
+  "method": {
+    "python": "3.11.9",
+    "pyarrow": "21.0.0",
+    "model_parquet_read": "All four small parameter tables read in memory; only schemas, counts and classifications are recorded.",
+    "secret_check": "File-type/content review plus bounded known credential/private-key/URL-userinfo pattern scan; not a universal proof of absence."
+  },
+  "archive": {
+    "file": "nyc-taxi-model-ml-p4-v1.zip",
+    "bytes": 63680,
+    "sha256": "7770b7a64722b0a801015f99f0c6b5d2ea3aa39dbc15bc01cb7b6dd376293105"
+  },
+  "manifest": {
+    "file": "nyc-taxi-model-ml-p4-v1.manifest.json",
+    "bytes": 9822,
+    "sha256": "da6d5229edd41bbfda490a8585f161024d7dcb3d532e2ee58309fb13e7d14ca7",
+    "all_member_sizes_and_sha256_match": true
+  },
+  "checksum_sidecar_verified": true,
+  "public_distribution_manifest": {
+    "file": "nyc-taxi-model-ml-p4-v1.manifest.json",
+    "bytes": 11473,
+    "sha256": "5e2cbc312b404dc9d1fb0eae7848420b6077f07f99272b844a942719ab75719b",
+    "status": "repository-bundled",
+    "note": "Same ZIP and 43-file payload; distribution metadata is not a rights or license grant."
+  },
+  "model_tree": {
+    "relative_root": "models/ml-p2/20261023-pilot02/fitted_model",
+    "file_count": 40,
+    "bytes": 55660,
+    "sha256": "759337ab73d6d6cd171edb4b0b42ff325f991cc7cda43e722905ce28c5c947ee",
+    "preserved": true
+  },
+  "summary": {
+    "file_count": 43,
+    "model_file_count": 40,
+    "additional_file_count": 3,
+    "uncompressed_bytes": 83089,
+    "original_counterpart_byte_matches": 43,
+    "kind_counts": {
+      "dependency_environment_yaml": 2,
+      "dependency_version_pins_text": 1,
+      "empty_spark_success_marker": 9,
+      "feature_contract_json": 1,
+      "frozen_candidate_lock_json": 1,
+      "hadoop_checksum_binary": 18,
+      "mlflow_model_flavor_yaml": 1,
+      "public_taxi_zone_lookup_csv": 1,
+      "spark_model_metadata_json": 5,
+      "spark_model_parameters_parquet": 4
+    },
+    "observed_secret_patterns": [],
+    "unexpected_files": [],
+    "taxi_trip_record_tables_found": false,
+    "payload_license_or_permission_text_found": false,
+    "distribution_status_from_manifest": "local-only-unpublished",
+    "redistribution_rights_from_manifest": "unverified",
+    "privacy_limit": "Learned model weights/node statistics are derived from training; this review does not establish differential privacy or redistribution rights."
+  },
+  "archive_structure": {
+    "unique_safe_member_paths": true,
+    "no_encrypted_or_symlink_entries": true,
+    "zip_crc_test_passed": true,
+    "first_local_header_offset": 0,
+    "extra_field_bytes": 0,
+    "comment_bytes": 0,
+    "standard_eocd_at_archive_end": true
+  },
+  "files": [
+    {
+      "relative_path": "data/raw/taxi_zones/taxi_zone_lookup.csv",
+      "bytes": 12331,
+      "sha256": "1a99e105092230f8620f301edcca7f80d3080642ff404d28ed957d3fa222c8ed",
+      "role": "additional_contract_or_lookup",
+      "kind": "public_taxi_zone_lookup_csv",
+      "csv": {
+        "row_count": 265,
+        "columns": [
+          "LocationID",
+          "Borough",
+          "Zone",
+          "service_zone"
+        ],
+        "unique_location_ids_1_to_265": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/feature_contract.json",
+      "bytes": 681,
+      "sha256": "4a48ae568d8d568eb83b9884534518322f723cb7e1554ffd32d745c30c213d3d",
+      "role": "additional_contract_or_lookup",
+      "kind": "feature_contract_json"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/MLmodel",
+      "bytes": 466,
+      "sha256": "990806841d13affd9797d4abbb03ff6d5bce6767acd75bbf032646750fab866b",
+      "role": "fitted_model",
+      "kind": "mlflow_model_flavor_yaml"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/conda.yaml",
+      "bytes": 145,
+      "sha256": "86058b2e3deeb2fb3ed96638c8df98934ceff0f8e43c19aad1d508a43d20e213",
+      "role": "fitted_model",
+      "kind": "dependency_environment_yaml"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/python_env.yaml",
+      "bytes": 121,
+      "sha256": "d327dec5bc0742d30c47e5214279a3ca3696e64bd294825d39aea60e8db8bec7",
+      "role": "fitted_model",
+      "kind": "dependency_environment_yaml"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/requirements.txt",
+      "bytes": 41,
+      "sha256": "5626ac6abb7c10afcd1bc4c8fd9561f84b2c1555ca2175714d8f6e7431c69673",
+      "role": "fitted_model",
+      "kind": "dependency_version_pins_text"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/metadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/metadata/_SUCCESS",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/metadata/.part-00000-afea5fb9-312f-4c67-9408-0068008de031-c000.txt.crc",
+      "bytes": 12,
+      "sha256": "705989e11f8bb2bb63be731f049e6dd8108f38f07440d938b007c2021a157e30",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/metadata/part-00000-afea5fb9-312f-4c67-9408-0068008de031-c000.txt",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/metadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "fitted_model",
+      "kind": "empty_spark_success_marker"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/metadata/part-00000-afea5fb9-312f-4c67-9408-0068008de031-c000.txt",
+      "bytes": 295,
+      "sha256": "a53e6c0f67c8a679d9b1b2bd5ff9c66d9f6328c4a752d66a446b6f268f96a4fa",
+      "role": "fitted_model",
+      "kind": "spark_model_metadata_json"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/data/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/data/_SUCCESS",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/data/.part-00000-36a0785a-594d-4583-b70c-239e9cacc73c-c000.snappy.parquet.crc",
+      "bytes": 20,
+      "sha256": "1bcb7ba1992c3150c0ee51212b5d8d7773bd68459ab3385b0a566daa585415ef",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/data/part-00000-36a0785a-594d-4583-b70c-239e9cacc73c-c000.snappy.parquet",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/data/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "fitted_model",
+      "kind": "empty_spark_success_marker"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/data/part-00000-36a0785a-594d-4583-b70c-239e9cacc73c-c000.snappy.parquet",
+      "bytes": 1403,
+      "sha256": "234efdc27c32db02021942c41de1d58a7f995adb655d1372892784a4d7c75461",
+      "role": "fitted_model",
+      "kind": "spark_model_parameters_parquet",
+      "parquet": {
+        "row_count": 1,
+        "row_groups": 1,
+        "schema": [
+          {
+            "field": "labelsArray",
+            "type": "list<element: list<element: string>>",
+            "nullable": true
+          }
+        ],
+        "metadata_keys": [
+          "org.apache.spark.sql.parquet.row.metadata",
+          "org.apache.spark.version"
+        ],
+        "content_class": "fitted_categorical_dictionary",
+        "category_count": 177,
+        "all_categories_are_public_zone_ids_1_to_263": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/metadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/metadata/_SUCCESS",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/metadata/.part-00000-6fa96a77-d762-4be3-a7bf-d2df56ab611a-c000.txt.crc",
+      "bytes": 12,
+      "sha256": "01e9f0fd47d7f7729ecaf8555be12fcdfbc1ac608ed54767317a295ed4936b69",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/metadata/part-00000-6fa96a77-d762-4be3-a7bf-d2df56ab611a-c000.txt",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/metadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "fitted_model",
+      "kind": "empty_spark_success_marker"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/0_StringIndexer_ddceef986725/metadata/part-00000-6fa96a77-d762-4be3-a7bf-d2df56ab611a-c000.txt",
+      "bytes": 395,
+      "sha256": "ee5fc135e5258e5126a013cf85176e2b47b74121548b335120d1f2c8840712c6",
+      "role": "fitted_model",
+      "kind": "spark_model_metadata_json"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/data/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/data/_SUCCESS",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/data/.part-00000-26c48d6b-b45b-4055-9b12-4dcb6dbfbad2-c000.snappy.parquet.crc",
+      "bytes": 24,
+      "sha256": "9860dcce854a3622be60d7498cd349651b23c3ddc83c116089ac086865508a8e",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/data/part-00000-26c48d6b-b45b-4055-9b12-4dcb6dbfbad2-c000.snappy.parquet",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/data/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "fitted_model",
+      "kind": "empty_spark_success_marker"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/data/part-00000-26c48d6b-b45b-4055-9b12-4dcb6dbfbad2-c000.snappy.parquet",
+      "bytes": 1619,
+      "sha256": "06e8fdac7606e70c51ef5ed68012b6c90326093e0a8ca28c7d1b298562b4168a",
+      "role": "fitted_model",
+      "kind": "spark_model_parameters_parquet",
+      "parquet": {
+        "row_count": 1,
+        "row_groups": 1,
+        "schema": [
+          {
+            "field": "labelsArray",
+            "type": "list<element: list<element: string>>",
+            "nullable": true
+          }
+        ],
+        "metadata_keys": [
+          "org.apache.spark.sql.parquet.row.metadata",
+          "org.apache.spark.version"
+        ],
+        "content_class": "fitted_categorical_dictionary",
+        "category_count": 242,
+        "all_categories_are_public_zone_ids_1_to_263": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/metadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/metadata/_SUCCESS",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/metadata/.part-00000-a947c40f-6e65-4fcb-8340-2c2823a3e751-c000.txt.crc",
+      "bytes": 12,
+      "sha256": "5a0f63c1cf669f6380cb1b03b44cf785f04387bbd140a4c04f5b45fc7ffc6fdf",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/metadata/part-00000-a947c40f-6e65-4fcb-8340-2c2823a3e751-c000.txt",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/metadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "fitted_model",
+      "kind": "empty_spark_success_marker"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/1_StringIndexer_2906ae7e99f1/metadata/part-00000-a947c40f-6e65-4fcb-8340-2c2823a3e751-c000.txt",
+      "bytes": 397,
+      "sha256": "1005a051f8d2425d7e0abc56640eb9f805c3e015182860514f9b8fc9efb32681",
+      "role": "fitted_model",
+      "kind": "spark_model_metadata_json"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/2_VectorAssembler_8ab7742e6060/metadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/2_VectorAssembler_8ab7742e6060/metadata/_SUCCESS",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/2_VectorAssembler_8ab7742e6060/metadata/.part-00000-c46ea489-69fb-424e-81f1-271c0452d66b-c000.txt.crc",
+      "bytes": 12,
+      "sha256": "1b56d1e9c11bc030208b8a9b8a0f38317f704a058b452f529c360ac2423c21db",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/2_VectorAssembler_8ab7742e6060/metadata/part-00000-c46ea489-69fb-424e-81f1-271c0452d66b-c000.txt",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/2_VectorAssembler_8ab7742e6060/metadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "fitted_model",
+      "kind": "empty_spark_success_marker"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/2_VectorAssembler_8ab7742e6060/metadata/part-00000-c46ea489-69fb-424e-81f1-271c0452d66b-c000.txt",
+      "bytes": 465,
+      "sha256": "c787b3e52a75306ce420c12b1209fde87b9784e970a30b8f450daba62ed04b06",
+      "role": "fitted_model",
+      "kind": "spark_model_metadata_json"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/data/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/data/_SUCCESS",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/data/.part-00000-dd9fc92e-18bf-499b-a699-3ea76210f085-c000.snappy.parquet.crc",
+      "bytes": 360,
+      "sha256": "d479a692e691bfc1a25c5bc1d761432ea8fa480b650f38dd6c98d1c5331d5e2a",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/data/part-00000-dd9fc92e-18bf-499b-a699-3ea76210f085-c000.snappy.parquet",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/data/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "fitted_model",
+      "kind": "empty_spark_success_marker"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/data/part-00000-dd9fc92e-18bf-499b-a699-3ea76210f085-c000.snappy.parquet",
+      "bytes": 45046,
+      "sha256": "e62e06f980be16cd03faf7507267024f83444fdcc94ffd5f60fc48d789828ed6",
+      "role": "fitted_model",
+      "kind": "spark_model_parameters_parquet",
+      "parquet": {
+        "row_count": 620,
+        "row_groups": 1,
+        "schema": [
+          {
+            "field": "treeID",
+            "type": "int32",
+            "nullable": false
+          },
+          {
+            "field": "nodeData.id",
+            "type": "int32",
+            "nullable": false
+          },
+          {
+            "field": "nodeData.prediction",
+            "type": "double",
+            "nullable": false
+          },
+          {
+            "field": "nodeData.impurity",
+            "type": "double",
+            "nullable": false
+          },
+          {
+            "field": "nodeData.impurityStats",
+            "type": "list<element: double not null>",
+            "nullable": true
+          },
+          {
+            "field": "nodeData.rawCount",
+            "type": "int64",
+            "nullable": false
+          },
+          {
+            "field": "nodeData.gain",
+            "type": "double",
+            "nullable": false
+          },
+          {
+            "field": "nodeData.leftChild",
+            "type": "int32",
+            "nullable": false
+          },
+          {
+            "field": "nodeData.rightChild",
+            "type": "int32",
+            "nullable": false
+          },
+          {
+            "field": "nodeData.split.featureIndex",
+            "type": "int32",
+            "nullable": false
+          },
+          {
+            "field": "nodeData.split.leftCategoriesOrThreshold",
+            "type": "list<element: double not null>",
+            "nullable": true
+          },
+          {
+            "field": "nodeData.split.numCategories",
+            "type": "int32",
+            "nullable": false
+          }
+        ],
+        "metadata_keys": [
+          "org.apache.spark.sql.parquet.row.metadata",
+          "org.apache.spark.version"
+        ],
+        "content_class": "learned_tree_nodes_and_aggregate_statistics",
+        "tree_count": 20
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/metadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/metadata/_SUCCESS",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/metadata/.part-00000-c731ae04-9fbd-4053-b635-bcb9cc1d452d-c000.txt.crc",
+      "bytes": 16,
+      "sha256": "162073c5344a350b48d1a3fdbafd180a7e2cd5a6ab262838a419a100a59b8825",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/metadata/part-00000-c731ae04-9fbd-4053-b635-bcb9cc1d452d-c000.txt",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/metadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "fitted_model",
+      "kind": "empty_spark_success_marker"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/metadata/part-00000-c731ae04-9fbd-4053-b635-bcb9cc1d452d-c000.txt",
+      "bytes": 863,
+      "sha256": "7d3a021642c89a691f6e63ddccd1de705ac007c1e114a8a8dcf60ec3b569d73e",
+      "role": "fitted_model",
+      "kind": "spark_model_metadata_json"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/treesMetadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/treesMetadata/_SUCCESS",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/treesMetadata/.part-00000-64737d74-9b48-46af-9d44-777674116f80-c000.snappy.parquet.crc",
+      "bytes": 40,
+      "sha256": "e2670f9844599925dbd6bd7257f2f7ae3d617bfd6fd615b7198d7e2de8e0e824",
+      "role": "fitted_model",
+      "kind": "hadoop_checksum_binary",
+      "crc": {
+        "target_relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/treesMetadata/part-00000-64737d74-9b48-46af-9d44-777674116f80-c000.snappy.parquet",
+        "bytes_per_checksum": 512,
+        "verified": true
+      }
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/treesMetadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "fitted_model",
+      "kind": "empty_spark_success_marker"
+    },
+    {
+      "relative_path": "models/ml-p2/20261023-pilot02/fitted_model/sparkml/stages/3_GBTRegressor_29e3d2c54f90/treesMetadata/part-00000-64737d74-9b48-46af-9d44-777674116f80-c000.snappy.parquet",
+      "bytes": 3824,
+      "sha256": "c0bde95a4f46b1be8c1ab092295573cb4fb06d3de0eefd243ada22f0c9e34e54",
+      "role": "fitted_model",
+      "kind": "spark_model_parameters_parquet",
+      "parquet": {
+        "row_count": 20,
+        "row_groups": 1,
+        "schema": [
+          {
+            "field": "_1",
+            "type": "int32",
+            "nullable": false
+          },
+          {
+            "field": "_2",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "field": "_3",
+            "type": "double",
+            "nullable": false
+          }
+        ],
+        "metadata_keys": [
+          "org.apache.spark.sql.parquet.row.metadata",
+          "org.apache.spark.version"
+        ],
+        "content_class": "decision_tree_metadata_and_weights"
+      }
+    },
+    {
+      "relative_path": "models/ml-p3/20261023-june01/candidate_lock.json",
+      "bytes": 14417,
+      "sha256": "12442b5684943bb81169bb084cffc8c1b54043882d75711e295a0f1a0ff7338d",
+      "role": "additional_contract_or_lookup",
+      "kind": "frozen_candidate_lock_json"
+    }
+  ]
+}

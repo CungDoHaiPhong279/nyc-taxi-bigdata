@@ -55,6 +55,8 @@ reports/**
 !reports/ml_p1_profile.json
 !reports/PROJECT_HANDOFF_CHECKLIST.md
 !reports/ML_P6_REPORT.md
+!reports/PACKAGE_P1_REPORT.md
+!reports/PACKAGE_P2_REPORT.md
 mlruns/
 
 # IDE

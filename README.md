@@ -12,6 +12,12 @@ demo Streamlit/inference đã kiểm chứng ở ML P2.1–P5. PBIX có trong re
 Xem [checklist bàn giao](reports/PROJECT_HANDOFF_CHECKLIST.md) để phân biệt phần
 đã đạt, chưa kiểm chứng, chưa triển khai và nâng cao.
 
+**PACKAGE P2:** entrypoint dùng bundle model cố định kèm source tại
+`distribution/models/ml-p4-v1/`, không cần tải model hoặc chuẩn bị model thủ công.
+Clone từ commit có PACKAGE P1/P2 sẽ nhận cả source và bundle đã pin này.
+Full bootstrap dữ liệu thật Jan–Jun/2025 từ máy mới vẫn **chưa E2E kiểm chứng**;
+không suy từ bundle tests/PLAN. Xem phần PACKAGE P2 cuối file.
+
 ## 1. Kiến trúc hiện tại và định hướng
 
 ```text
@@ -809,6 +815,11 @@ fixture/reference và gọi API thật; không cần DB. Outputs/logs tại
 
 ### ML P5: bật lại inference và kiểm tra artifact cố định
 
+Ghi chú lịch sử: yêu cầu nhận bundle riêng dưới đây thuộc ML P5. **PACKAGE P2**
+đã kèm bundle trong source và `setup_system.ps1` tự chuẩn bị model runtime riêng;
+không còn cần bước export/download thủ công cho luồng máy mới đó. Bốn paths
+dưới đây vẫn mô tả startup legacy `start.ps1 -WithInference` đang dùng.
+
 Clone mới phải **chuẩn bị bundle riêng từ nguồn tin cậy**, không chọn `latest`:
 `fitted_model/` đầy đủ và `feature_contract.json` của training run
 `d2772f1904d7472490a73b0ac1c0c5d4`, `candidate_lock.json` của evaluation run
@@ -885,8 +896,9 @@ Không có training/evaluation/ETL trong CI; không thiết lập auto-merge/req
 Commit bổ sung tài liệu bàn giao được kiểm CI riêng; xem SHA/run chính xác trong
 báo cáo bàn giao của lượt P6, không lấy run của SHA khác để xác nhận HEAD mới.
 Xem [checklist](reports/PROJECT_HANDOFF_CHECKLIST.md) và [ML P6 REPORT](reports/ML_P6_REPORT.md).
-Model bundle hiện chỉ từ chủ MLflow/backup của đúng runs; chưa có nơi phân phối
-công khai được xác nhận, không tự có sau clone hoặc được upload trong P6.
+Tại ML P6, model bundle chỉ từ chủ MLflow/backup và chưa có trong Git. PACKAGE P2
+đã chuẩn bị bundle kèm source, xem mục P2 cuối file; full
+bootstrap máy mới vẫn chưa E2E kiểm chứng.
 
 ## 14. Trạng thái triển khai
 
@@ -1709,8 +1721,8 @@ Workflow `.github/workflows/ci.yml` chạy khi `push`, `pull_request` và
 | Job | Runner | Phạm vi |
 |---|---|---|
 | Python offline unit tests | Ubuntu 24.04, Python 3.11.17, venv mới | Imports/config, Calendar/acquisition offline, loader/query helpers, dashboard analytics/fare AppTest, CI helpers và ML/inference contract/tracking/diagnostic mocks; không Spark/artifact thật |
-| PowerShell 5.1 mock tests | Windows 2022, Pester 4.10.1 | Parse toàn bộ scripts/tests PowerShell và đủ 7 mock suites start/bootstrap/environment/p62/fixture_pipeline/model_artifacts/start_inference |
-| Compose validation and dashboard packaging | Ubuntu 24.04 | actionlint 1.7.12; Compose 2.40.0 kiểm tra 14 tổ hợp bằng `config --quiet`; chỉ build target `dashboard` |
+| PowerShell 5.1 mock tests | Windows 2022, Pester 4.10.1 | Parse toàn bộ scripts/tests PowerShell và đủ 11 suites; Docker/service calls dùng mock, bundle/hash/extraction kiểm offline thực; không bootstrap |
+| Compose validation and dashboard packaging | Ubuntu 24.04 | actionlint 1.7.12; Compose 2.40.0 kiểm tra 18 tổ hợp bằng `config --quiet`, gồm package/package-test; chỉ build target `dashboard` |
 
 Python chỉ cài `requirements-ci.txt` (tái sử dụng dependencies web đã pin,
 thêm pytest 9.1.1 và PyArrow 21.0.0), **không** cài requirements worker/Spark/ML.
@@ -1740,7 +1752,7 @@ Loại khỏi CI nhẹ một cách tường minh:
   không thực thi fixture/ETL. Acquisition tests dùng file tạm/network mock.
 
 CI không khởi động stack/database, tải Taxi, chạy ETL/training/bootstrap, build
-worker Spark, push image, deploy hoặc tự merge PR. Compose helper chỉ copy bảy
+worker Spark, push image, deploy hoặc tự merge PR. Compose helper chỉ copy chín
 YAML công khai vào thư mục tạm, dùng dummy env và kiểm tra default/all profiles
 cho base → bootstrap-test → clean-worker → fixture, riêng base + ml-pilot và
 base + ml-pilot + ml-holdout; base + inference riêng (không trộn chuỗi ML với bootstrap thử).
@@ -1801,3 +1813,231 @@ mạng/host mounts, không dựa vào `.venv` trên máy. Dashboard target build
 Các tag local riêng `nyc-taxi-ci-python:p7-check` / `nyc-taxi-dashboard:p7-ci-check`
 không thay image của services/worker đang dùng. Đây là kiểm chứng local tương
 đương, **không phải GitHub Actions remote PASS**.
+
+## PACKAGE P1 — chuẩn bị và mở hệ thống bằng một entrypoint
+
+Phần này ghi trạng thái P1 tại thời điểm kiểm chứng. **P2 bên dưới thay thế phần
+model distribution/manual bundle**; giới hạn full bootstrap chưa kiểm chứng giữ nguyên.
+
+P1 mới kiểm chứng **bundle local, tests mock và PLAN/preflight**; chưa build các
+image package, bật stack package hoặc chạy acquisition/bootstrap thật từ đầu.
+Không dùng fixture P6.3 làm bằng chứng cho dữ liệu thật. Chưa commit/push P1.
+
+### Mở lại máy hiện có dữ liệu/model
+
+Hệ thống cũ đã chuẩn bị theo ML P5 tiếp tục dùng lệnh cũ, không đổi Compose/volumes:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1 -WithInference
+```
+
+Lệnh này chỉ bật/tái sử dụng dịch vụ và kiểm tra nhẹ trạng thái dữ liệu, **không
+bootstrap hoặc đếm toàn fact**. Model đã đánh giá June, không tự cập nhật khi thêm
+dữ liệu. Không áp dụng package layers lên hệ thống cũ để “chuyển đổi” ngầm.
+
+### Máy mới — lệnh mục tiêu, còn điều kiện model distribution
+
+Cần Windows PowerShell 5.1, Docker Desktop Linux engine đang chạy, Compose
+**>=2.24.4**, mạng tới registry/PyPI/apt/TLC/Open-Meteo và **bundle ml-p4-v1 từ
+người giữ model**. Không cần Python/Java/Spark trên host. Chưa có URL/release phân
+phối bundle được xác nhận; **chỉ clone + Docker hiện chưa đủ**. Không tự tải
+`latest`, training thay thế hoặc lấy runtime P2/P6 làm nền cho package worker.
+
+```powershell
+# Mặc định PLAN: không tạo .env máy thật, build/pull/start, install model hay chạy data.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_system.ps1 -BundleDirectory 'D:\trusted-bundles\ml-p4-v1'
+
+# Lệnh mục tiêu cho MÁY MỚI/TRỐNG sau khi đủ điều kiện, chưa chạy E2E trong P1:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_system.ps1 -BundleDirectory 'D:\trusted-bundles\ml-p4-v1' -Execute
+```
+
+Root được tìm từ script, không từ cwd. Khi Execute: preflight → tạo config còn
+thiếu → khóa chống hai setup chạy đồng thời/checkpoint → build worker chuẩn
+`Dockerfile.spark`, dashboard nhẹ và inference từ worker đó → PostgreSQL/MLflow →
+gọi **bootstrap hiện có** → cài bundle vào thư mục model riêng → inference ready →
+dashboard → kiểm tra report SQL đầy đủ/model identity. Không ghi đè `.env` đã có;
+config mới lấy mẫu và sinh password ngẫu nhiên, không in giá trị. Infrastructure
+images pin digest trong `docker-compose.package.yml`; app tags riêng
+`package-p1-standard`/`package-p1`, không ghi đè p2/p6-test/p6-clean.
+
+Bootstrap vẫn đủ **14 CLI steps**: Calendar 2025 → Raw sáu Taxi tháng + zones +
+weather Jan–Jun → Bronze → Silver → Gold → dimensions → sáu tháng fact tuần tự →
+indexes/view → validation. Gold cần đủ **9 Silver entries**, loader cần **6 Gold
+entries**; chưa hứa chạy riêng một tháng. Raw dùng TLC Yellow Parquet/zone CSV
+từ [TLC chính thức](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page),
+weather dùng Open-Meteo archive ERA5 NYC theo UTC, Calendar tạo local. Nguồn/raw
+có thể được bên cung cấp cập nhật: SHA/manifest/lineage, không load log, quyết định
+outputs có còn hợp lệ. Free weather API có giới hạn và điều kiện sử dụng/
+[attribution CC BY 4.0](https://open-meteo.com/en/terms); cần rà quyền phân phối
+bundle riêng trước phát hành. P1 chưa tải Taxi hoặc xác minh acquisition qua mạng.
+
+Chạy lại cùng lệnh `-Execute` kiểm tra hash code/images, manifests và lineage;
+skip outputs hợp lệ, dimensions UPSERT, fact dùng cơ chế idempotency/repair hiện
+có. Không truyền force/recreate-schema. Checkpoint theo stage ở
+`.sandbox/package-current/package-state/checkpoint.json` (test: package-test);
+chỉ ghi tiến độ/ownership, **không thay cho kiểm chứng dữ liệu**. Lỗi dừng ngay,
+exit khác 0; giữ outputs/checkpoint. Trước chạy tiếp phải xác nhận worker/
+transaction cũ không còn chạy; timeout không tự kill container/rollback hay retry.
+
+Containers healthy được giữ, stopped được start, thiếu mới tạo đúng service bằng
+`--no-deps --no-recreate`. Drift config/image/code làm dừng, in lệnh cập nhật riêng
+đúng project/Compose layers để người dùng rà soát; script **không thực thi lệnh
+cập nhật đó**. Resources cũ không có package ownership checkpoint bị từ chối
+adopt/bootstrap. Không down/prune/thay volumes. Package PostgreSQL không publish
+port host; Power BI và port của hệ thống cũ không đổi. Dashboard/MLflow package
+current lần lượt `http://127.0.0.1:8501` / `http://127.0.0.1:5000` (không phải URL
+stack test). Script in URL, không tự mở browser hoặc giả định browser đã render.
+
+Startup light check chỉ kiểm tra health/schema/table/existence/load-state. Để
+báo READY, Execute bắt buộc CLI validation cuối chạy **SQL COUNT/FK/sanity thật**
+và sinh report mới của lần này; so tổng fact và sáu tháng với Gold counts/batch
+lineage, dimensions 265/365/4.344, indexes/view, rồi model readiness/full hash.
+Không lấy `loaded_row_count` thay cho COUNT. P1 **chưa chạy kiểm chứng đầy đủ này**.
+
+### Bundle cố định và máy mới
+
+P1 đã tạo local `.sandbox/package-bundles/ml-p4-v1/`, không upload hay đưa binary
+vào Git/image. ZIP **63.680 bytes**, **43 files**: 40 fitted-model files (55.660
+bytes), candidate lock, fitted feature contract và zone CSV; không dữ liệu chuyến,
+MLflow SQLite hoặc credentials. Public pin ở `config/model_bundle.lock.json`:
+
+- Training run: `d2772f1904d7472490a73b0ac1c0c5d4`;
+  evaluation run: `58d5008f0ed048f58599a859877ae336`.
+- Model tree SHA256: `759337ab73d6d6cd171edb4b0b42ff325f991cc7cda43e722905ce28c5c947ee`.
+- Archive SHA256: `7770b7a64722b0a801015f99f0c6b5d2ea3aa39dbc15bc01cb7b6dd376293105`.
+- Manifest SHA256: `da6d5229edd41bbfda490a8585f161024d7dcb3d532e2ee58309fb13e7d14ca7`.
+
+Entrypoint chỉ nhận đúng version/manifest pin độc lập trong Git, xác minh toàn
+inventory/hash/size và tám frozen source/dependency hashes. Không tin checksum
+do một bundle lạ tự khai. Extraction có allowlist/bounds/path guards, cài atomic
+vào `.sandbox/package-model/` (test: `package-test/model-bundle`); đúng bundle đã
+cài thì skip, sai/incomplete thì dừng, không ghi đè model gốc. Inference chỉ mount
+artifacts read-only. Chủ artifact có thể chuẩn bị bundle local bằng
+`model_bundle.ps1 -Action Create -Execute` nếu thư mục version chưa tồn tại;
+không dùng Create để thay thế một version đã phát hành. Kiểm tra riêng:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\model_bundle.ps1 -Action Check -BundlePath '.sandbox/package-bundles/ml-p4-v1/nyc-taxi-model-ml-p4-v1.zip' -ManifestPath '.sandbox/package-bundles/ml-p4-v1/nyc-taxi-model-ml-p4-v1.manifest.json' -ManifestSHA256 da6d5229edd41bbfda490a8585f161024d7dcb3d532e2ee58309fb13e7d14ca7
+```
+
+Để đạt mục tiêu máy mới chỉ một lệnh: chủ model cần xác nhận provenance/quyền
+phân phối và cung cấp bản version bất biến (ví dụ Release asset với checksum pin),
+rồi bổ sung nguồn tải được duyệt. **Chưa publish/upload trong P1** và chưa xác
+nhận quyền phát hành model; dữ liệu public không tự chứng minh quyền model.
+
+### Môi trường kiểm chứng trống — chưa Execute
+
+```powershell
+# P1 đã chạy: chỉ tạo config thử và thư mục runtime trống, rồi PLAN/preflight.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_system.ps1 -Environment package-test -PrepareTest
+
+# PLAN lại, không build/start/chạy worker.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_system.ps1 -Environment package-test
+
+# Dự kiến bước kiểm chứng sau, CHƯA THỰC THI trong P1:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_system.ps1 -Environment package-test -BundleDirectory '.sandbox/package-bundles/ml-p4-v1' -Execute
+```
+
+| Resource | Hệ thống đang có | Package test mới |
+|---|---|---|
+| Project / containers | `nyc-taxi-bigdata`, giữ nguyên | `nyc-taxi-package-test`, không fixed container_name |
+| Ports host | PG5432 / MLflow5000 / dashboard8501 | PG/inference không publish; MLflow127.0.0.1:15000 / dashboard127.0.0.1:18501 |
+| Named volumes | `nyc-taxi-bigdata_{postgres,mlflow}-data` | `nyc-taxi-package-test_{postgres,mlflow}-data` |
+| Networks | project default/inference | `nyc-taxi-package-test_default`, `_inference` (internal) |
+| Runtime RW binds | `data/ logs/ models/ reports/` | `.sandbox/package-test/{data,logs,models,reports}/` |
+| Serving model | model gốc, không đổi | `.sandbox/package-test/model-bundle/`, RO |
+
+SQL bind dùng code repo read-only; không mount source/repo vào worker/web. Guard
+kiểm tra cấu hình resolved riêng tư và metadata Docker, chặn shared resources,
+port/path collisions và junction/symlink. **Không tái sử dụng**
+`.sandbox/bootstrap-test/` đang chứa fixture P6.3. P1 chỉ chuẩn bị thư mục/config;
+package-test chưa có containers, networks, volumes hay dữ liệu/model cài đặt.
+
+Preflight yêu cầu >=2 Docker CPUs, >=7 GiB Docker RAM, >=8 GiB host RAM, >=60 GiB
+**physical host free** ở drive runtime; không coi dung lượng logical của VHD là
+physical free. Đo khi tiếp tục P1: host15,35GiB RAM, Docker7,44GiB/16CPUs, physical
+free 71,27–71,54GiB (lần PLAN trước ngắt: 87,99GiB). Nếu Docker disk image ở drive
+khác, phải kiểm tra thêm physical free/disk limit drive đó. **Ước tính**, chưa đo
+E2E: 60GiB headroom cho images/layers,
+Raw→Gold, database/index/WAL, shuffle/temp; 3–8+ giờ tùy mạng/I/O/tài nguyên, có
+thể lâu hơn. Mạng tải dependencies/images có thể thất bại; timeout hữu hạn và
+checkpoint không bảo đảm thời gian này. RAM đo là tổng tài nguyên cấp phát, không
+phải headroom đang trống; cần rà ngân sách khi chạy song song hai stack. Bootstrap
+worker giới hạn 2CPU/3GiB, JVM1536MiB; inference chỉ bật sau bootstrap, không training.
+
+Pester/Compose inventory CI đã bao gồm PACKAGE offline tests và overrides,
+không cần bundle ngoài repo/secrets và không chạy Spark/full bootstrap trên CI. Xem
+[PACKAGE P1 report](reports/PACKAGE_P1_REPORT.md) cho kết quả local cuối cùng.
+Chỉ sau kiểm chứng Execute riêng: đối chiếu COUNT thật/manifests/model ready,
+chạy lại kiểm tra skip, xác nhận môi trường thật không đổi, và kiểm tra UI thực
+mới có thể gọi bootstrap máy mới PASS. Không suy từ mocks/PLAN hoặc fixture.
+
+## PACKAGE P2 — model bundle đi kèm source, không cần tải riêng
+
+Đã đưa bản ZIP nhỏ, manifest, checksum, `PROVENANCE.md` và `CONTENT_AUDIT.json`
+vào `distribution/models/ml-p4-v1/` để đi cùng commit source. Trong bước kiểm
+chứng P2 chưa commit/push hoặc publish bundle/image riêng; trạng thái Git/CI
+của lần bàn giao sau đó phải đối chiếu đúng commit, không suy từ tests local.
+Nguồn là preprocessing + GBT được fit bởi code dự án trong training run
+`d2772f1904d7472490a73b0ac1c0c5d4`, đã đánh giá trong run
+`58d5008f0ed048f58599a859877ae336`; không pretrained weights bên ngoài, không retrain.
+Code/báo cáo training và đối chiếu nội dung được ghi trong
+[provenance notice](distribution/models/ml-p4-v1/PROVENANCE.md).
+
+ZIP **43 files** = **40 files model gốc** (55.660bytes, gồm Spark CRC/success
+markers) + đúng **3 files**: `candidate_lock.json` (14.417bytes),
+`feature_contract.json` (681bytes), `taxi_zone_lookup.csv` (12.331bytes/265zones).
+Các Parquet trong model là fitted category dictionaries/GBT nodes/tree metadata,
+không phải chuyến taxi. Audit từng file và kiểm CRC/schema không thấy secrets,
+trip rows, MLflow SQLite, executable model code hoặc payload khác.
+
+TLC là nguồn zone lookup không sửa đổi; giữ URL, ngày lấy, version/hash và
+disclaimers. [NYC Open Data FAQ](https://www.nyc.gov/opendata/get-started/FAQs) và
+[public policies](https://cityofnewyork.github.io/opendatatsm/publicpolicies.html)
+là bằng chứng sử dụng/publication dữ liệu, không phải giấy phép pretrained model.
+Không thấy hạn chế cụ thể đòi một “chủ model bên ngoài duyệt” cho model tự fit này;
+P1 đã đặt gate đó quá chung. Không gán CSV là CC BY/CC0/public domain hoặc giả định
+City endorsement. Dự án chưa chọn giấy phép tái sử dụng tổng thể/model-specific;
+notice không tự cấp phép mới hay thay điều khoản của bên thứ ba.
+
+Full model SHA256 **không đổi**:
+`759337ab73d6d6cd171edb4b0b42ff325f991cc7cda43e722905ce28c5c947ee`.
+ZIP63.680bytes **không đổi**:
+`7770b7a64722b0a801015f99f0c6b5d2ea3aa39dbc15bc01cb7b6dd376293105`.
+Manifest P2 cập nhật **metadata phân phối bên ngoài ZIP**, không đổi weights:
+`5e2cbc312b404dc9d1fb0eae7848420b6077f07f99272b844a942719ab75719b`
+(11.473bytes). `config/model_bundle.lock.json` là trust anchor được theo dõi;
+sidecar `.sha256` để kiểm tra thủ công, không tự tin checksum từ archive lạ.
+
+Lệnh mục tiêu trên **máy mới/trống** sau khi source có đầy đủ files P1/P2:
+
+```powershell
+# PLAN, không build/pull/start/install/bootstrap:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_system.ps1
+
+# Lệnh mục tiêu, CHƯA chạy full bootstrap trong P2:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_system.ps1 -Execute
+
+# Kiểm model riêng, không Docker/Python/Java/training hoặc giải nén:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\model_bundle.ps1 -Action Check
+```
+
+Không cần `-BundleDirectory`, cache `.sandbox/package-bundles`, MLflow download
+hay model gốc ở `models/`. Setup xác minh bundle trước xử lý dữ liệu; Execute
+dùng installer có sẵn để giải nén vào model runtime riêng trước bật inference.
+Missing/sai pin/hash/source/path thì exit khác0, không fallback cache/latest.
+Hash từng member trước ghi và toàn model/contract/lock sau giải nén; chặn traversal,
+symlink/junction, duplicate-case và oversized ZIP. Output đúng được verify/skip,
+giữ mtime; output đã có nhưng sai/incomplete thì dừng, không overwrite/merge.
+Bundle trong Git không đồng nghĩa được bake vào image: `.dockerignore` loại
+`distribution/models/`; serving vẫn dùng artifact mounts read-only.
+`.gitattributes` giữ ZIP binary và manifest/checksum LF để checkout Windows
+không làm thay checksum. Hệ thống cũ vẫn dùng `start.ps1 -WithInference` như trước.
+
+P2 kiểm bundle/check/install/rerun trong **bản sao chỉ có source dự kiến Git**,
+không model/cache/dữ liệu/.env/PBIX local; PLAN/preflight không chạy bootstrap.
+Thực tế: **335/335 Pester PASS** (không skip/pending); bản sao150files kiểm default
+bundle, install43files/rerun giữ hashes+mtime và PLAN/preflight exit0.
+Thiếu dependency build, mạng tải dữ liệu, tài nguyên và full acquisition → ETL →
+DB counts/indexes/view → serving/readiness/rerun trên môi trường trống vẫn cần
+kiểm chứng riêng. Xem [PACKAGE P2 report](reports/PACKAGE_P2_REPORT.md).

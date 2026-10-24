@@ -24,6 +24,8 @@ COMPOSE_FILES = (
     "docker-compose.ml-pilot.yml",
     "docker-compose.ml-holdout.yml",
     "docker-compose.inference.yml",
+    "docker-compose.package.yml",
+    "docker-compose.package-test.yml",
 )
 COMPOSE_VARIANTS = (
     ("base", COMPOSE_FILES[:1]),
@@ -34,6 +36,8 @@ COMPOSE_VARIANTS = (
     ("ml-pilot", (COMPOSE_FILES[0], COMPOSE_FILES[4])),
     ("ml-holdout", (COMPOSE_FILES[0], COMPOSE_FILES[4], COMPOSE_FILES[5])),
     ("inference", (COMPOSE_FILES[0], COMPOSE_FILES[6])),
+    ("package", (COMPOSE_FILES[0], COMPOSE_FILES[6], COMPOSE_FILES[7])),
+    ("package-test", (COMPOSE_FILES[0], COMPOSE_FILES[6], COMPOSE_FILES[7], COMPOSE_FILES[8])),
 )
 MIN_COMPOSE_VERSION = (2, 24, 4)
 COMMAND_TIMEOUT_SECONDS = 60
@@ -46,6 +50,7 @@ CI_VALUES = {
     "P61_POSTGRES_PASSWORD": "ci_fixture_only",
     "MLFLOW_TRACKING_URI": "http://mlflow:5000",
     "MLP2_TRACKING_URI": "http://172.18.0.99:5000",
+    "PACKAGE_POSTGRES_PASSWORD": "ci_package_dummy_only",
 }
 
 # Keep only process/CLI-discovery essentials, not arbitrary host credentials,
@@ -102,7 +107,7 @@ def _run(
 
 
 def validate_compose(project_root: Path, compose_command: list[str]) -> int:
-    """Check seven override combinations with default and all profiles (14 checks)."""
+    """Check nine override combinations with default and all profiles (18 checks)."""
     with tempfile.TemporaryDirectory(prefix="nyc-taxi-ci-compose-") as temporary:
         project_directory = Path(temporary)
         for filename in COMPOSE_FILES:

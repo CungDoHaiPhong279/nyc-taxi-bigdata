@@ -5,7 +5,7 @@ No host Python/Java/Spark. Never builds, pulls, starts or recreates services.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('current', 'bootstrap-test')][string]$Environment = 'current',
+    [ValidateSet('current', 'bootstrap-test', 'package-test')][string]$Environment = 'current',
     [ValidateSet('refresh', 'clean')][string]$WorkerVariant = 'refresh',
     [switch]$Execute,
     [ValidateRange(1, 300)][int]$CommandTimeoutSeconds = 30,
@@ -130,8 +130,10 @@ function Get-BootstrapFileHashes {
 function Test-BootstrapWorkerFreshness {
     param($Context, [int]$StepTimeoutSeconds)
     $expected = Get-BootstrapFileHashes -ProjectRoot $Context.Root
-    # Clean-build-only input; do not invalidate the unchanged P6.1 refresh image.
-    if ((Get-OptionalProperty $Context 'WorkerVariant' 'refresh') -eq 'clean') {
+    # Standard-build input for clean/package workers; preserve the unchanged
+    # P6.1 refresh image's dependency-input contract.
+    if ((Get-OptionalProperty $Context 'WorkerVariant' 'refresh') -eq 'clean' -or
+        (Get-OptionalProperty $Context 'IsPackage' $false)) {
         $constraintFile = 'requirements-worker-constraints.txt'
         $expected[$constraintFile] = (Get-FileHash -LiteralPath (Join-Path $Context.Root $constraintFile) -Algorithm SHA256).Hash.ToLowerInvariant()
     }
@@ -172,15 +174,27 @@ print(json.dumps({'ok': not mismatches, 'checked': len(expected), 'mismatches': 
 function Invoke-DataBootstrap {
     param(
         [string]$ProjectRoot = $script:BootstrapProjectRoot,
-        [ValidateSet('current', 'bootstrap-test')][string]$Environment = 'current',
+        [ValidateSet('current', 'bootstrap-test', 'package-test')][string]$Environment = 'current',
         [ValidateSet('refresh', 'clean')][string]$WorkerVariant = 'refresh',
         [switch]$Execute,
         [ValidateRange(1, 300)][int]$CommandTimeoutSeconds = 30,
-        [ValidateRange(60, 86400)][int]$StepTimeoutSeconds = 21600
+        [ValidateRange(60, 86400)][int]$StepTimeoutSeconds = 21600,
+        $Context = $null
     )
     try {
         $root = [IO.Path]::GetFullPath($ProjectRoot)
-        $context = New-ProjectEnvironmentContext -ProjectRoot $root -Environment $Environment -WorkerVariant $WorkerVariant -CommandTimeoutSeconds $CommandTimeoutSeconds
+        if ($null -eq $Context) {
+            $context = New-ProjectEnvironmentContext -ProjectRoot $root -Environment $Environment -WorkerVariant $WorkerVariant -CommandTimeoutSeconds $CommandTimeoutSeconds
+        } else {
+            # Internal orchestration seam: callers may select the reviewed package
+            # layer, but may not silently switch project roots or environments.
+            if ((Get-NormalizedEnvironmentPath (Get-OptionalProperty $Context 'Root' '')) -ne
+                    (Get-NormalizedEnvironmentPath $root) -or
+                (Get-OptionalProperty $Context 'Environment' '') -ne $Environment) {
+                Stop-Startup 'Supplied bootstrap context differs from the requested root/environment.'
+            }
+            $context = $Context
+        }
         $required = @('docker-compose.yml', 'requirements.txt', 'pyproject.toml', 'config/config.yaml',
             'scripts/create_calendar.py', 'scripts/start.ps1')
         $plan = @(Get-BootstrapPlan)
@@ -201,7 +215,9 @@ function Invoke-DataBootstrap {
         $modelArguments = @('config', '--no-interpolate', '--format', 'json')
         # The test override uses interpolated, isolated runtime paths. Capture its
         # resolved model privately; never print its environment/secret values.
-        if ($Environment -eq 'bootstrap-test') { $modelArguments = @('--profile', '*', 'config', '--format', 'json') }
+        if ($Environment -ne 'current' -or (Get-OptionalProperty $context 'IsPackage' $false)) {
+            $modelArguments = @('--profile', '*', 'config', '--format', 'json')
+        }
         $json = Invoke-StartupCompose $context $modelArguments 'Cannot read selected Compose metadata'
         $model = ConvertFrom-StartupJson $json 'public Compose metadata'
         $context.Project = Get-OptionalProperty $model 'name' ''

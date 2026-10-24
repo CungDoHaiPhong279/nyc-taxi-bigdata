@@ -31,7 +31,7 @@ def success(command, **kwargs):
     return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
 
 
-def test_validates_fourteen_combinations_without_reading_secrets(project, monkeypatch, capsys):
+def test_validates_eighteen_combinations_without_reading_secrets(project, monkeypatch, capsys):
     calls = []
     real_read_text = Path.read_text
 
@@ -51,6 +51,7 @@ def test_validates_fourteen_combinations_without_reading_secrets(project, monkey
         assert kwargs["env"]["COMPOSE_DISABLE_ENV_FILE"] == "1"
         assert kwargs["env"]["POSTGRES_PASSWORD"] == "ci_dummy_only"
         assert kwargs["env"]["P61_POSTGRES_PASSWORD"] == "ci_fixture_only"
+        assert kwargs["env"]["PACKAGE_POSTGRES_PASSWORD"] == "ci_package_dummy_only"
         assert kwargs["env"]["MLP2_TRACKING_URI"] == "http://172.18.0.99:5000"
         assert "MLP2_WORKER_IMAGE" not in kwargs["env"]
         assert "MLP2_RUNTIME_DIR" not in kwargs["env"]
@@ -74,7 +75,7 @@ def test_validates_fourteen_combinations_without_reading_secrets(project, monkey
     monkeypatch.setattr(ci.subprocess, "run", run)
 
     assert ci.main(["--project-root", str(project)]) == 0
-    assert len(calls) == 15  # version + fourteen quiet validations
+    assert len(calls) == 19  # version + eighteen quiet validations
     expected_variants = (
         ("docker-compose.yml",),
         ("docker-compose.yml", "docker-compose.bootstrap-test.yml"),
@@ -83,6 +84,8 @@ def test_validates_fourteen_combinations_without_reading_secrets(project, monkey
         ("docker-compose.yml", "docker-compose.ml-pilot.yml"),
         ("docker-compose.yml", "docker-compose.ml-pilot.yml", "docker-compose.ml-holdout.yml"),
         ("docker-compose.yml", "docker-compose.inference.yml"),
+        ("docker-compose.yml", "docker-compose.inference.yml", "docker-compose.package.yml"),
+        ("docker-compose.yml", "docker-compose.inference.yml", "docker-compose.package.yml", "docker-compose.package-test.yml"),
     )
     for index, (command, directory) in enumerate(calls[1:]):
         assert command[:2] == ["docker", "compose"]
@@ -93,7 +96,7 @@ def test_validates_fourteen_combinations_without_reading_secrets(project, monkey
         assert command[command.index("--project-name") + 1] == "nyc-taxi-ci"
         files = [command[i + 1] for i, value in enumerate(command) if value == "-f"]
         assert files == [str(directory / name) for name in expected_variants[index // 2]]
-        if index >= 8:
+        if 8 <= index < 14:
             assert len(files) == (3 if 10 <= index < 12 else 2)
             assert all("bootstrap" not in file and "fixture" not in file for file in files)
         if index >= 12:
@@ -103,7 +106,7 @@ def test_validates_fourteen_combinations_without_reading_secrets(project, monkey
             assert command[command.index("--profile") + 1] == "*"
     assert all(not directory.exists() for _, directory in calls)
     output = capsys.readouterr()
-    assert "14 checks" in output.out
+    assert "18 checks" in output.out
     assert "sentinel" not in output.out + output.err
 
 
@@ -185,6 +188,6 @@ def test_missing_override_fails_before_running_compose(project, monkeypatch):
 def test_default_root_is_derived_from_script_not_cwd(tmp_path, monkeypatch):
     received = []
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(ci, "validate_compose", lambda root, command: received.append((root, command)) or 14)
+    monkeypatch.setattr(ci, "validate_compose", lambda root, command: received.append((root, command)) or 18)
     assert ci.main([]) == 0
     assert received == [(SCRIPT.parents[1], ["docker", "compose"])]

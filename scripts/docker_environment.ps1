@@ -4,7 +4,7 @@
 function New-ProjectEnvironmentContext {
     param(
         [string]$ProjectRoot,
-        [ValidateSet('current', 'bootstrap-test')][string]$Environment = 'current',
+        [ValidateSet('current', 'bootstrap-test', 'package-test')][string]$Environment = 'current',
         [ValidateSet('refresh', 'clean')][string]$WorkerVariant = 'refresh',
         [int]$CommandTimeoutSeconds = 30,
         [int]$HealthTimeoutSeconds = 120,
@@ -21,6 +21,8 @@ function New-ProjectEnvironmentContext {
     $buildServices = @('worker', 'dashboard')
     $expectedProject = ''
     $expectedImage = ''
+    $modelRuntime = ''
+    $isPackage = $false
     if ($Environment -eq 'bootstrap-test') {
         $runtime = Join-Path $root '.sandbox/bootstrap-test'
         $envPath = Join-Path $runtime 'compose.env'
@@ -34,10 +36,27 @@ function New-ProjectEnvironmentContext {
         $services = @('postgres', 'mlflow')
         $buildServices = @('worker')
     }
+    if ($Environment -eq 'package-test') {
+        $runtime = Join-Path $root '.sandbox/package-test'
+        $modelRuntime = Join-Path $runtime 'model-bundle'
+        $envPath = Join-Path $runtime 'compose.env'
+        $expectedProject = 'nyc-taxi-package-test'
+        $expectedImage = 'nyc-taxi-worker:package-p1-standard'
+        $arguments += @('--file', (Join-Path $root 'docker-compose.inference.yml'),
+            '--file', (Join-Path $root 'docker-compose.package.yml'),
+            '--file', (Join-Path $root 'docker-compose.package-test.yml'),
+            '--env-file', $envPath, '--project-name', $expectedProject)
+        # Infrastructure first. The package orchestrator starts the web/model
+        # services explicitly only after data/artifact readiness is established.
+        $services = @('postgres', 'mlflow')
+        $buildServices = @('worker', 'dashboard', 'fare-inference')
+        $isPackage = $true
+    }
     return [pscustomobject]@{
         Root = $root; RuntimeRoot = [IO.Path]::GetFullPath($runtime); EnvPath = $envPath
         Environment = $Environment; WorkerVariant = $WorkerVariant; ComposeArguments = $arguments; Project = ''
         ExpectedProject = $expectedProject; ExpectedWorkerImage = $expectedImage
+        IsPackage = $isPackage; ModelRuntimeRoot = $modelRuntime
         Services = $services; BuildServices = $buildServices
         CommandTimeoutSeconds = $CommandTimeoutSeconds; HealthTimeoutSeconds = $HealthTimeoutSeconds
         PollIntervalSeconds = $PollIntervalSeconds
@@ -118,6 +137,13 @@ function Get-EnvironmentDockerInventory {
 
 function Assert-ProjectEnvironmentIsolation {
     param($Context, $Model)
+    if ($Context.Environment -eq 'package-test' -or (Get-OptionalProperty $Context 'IsPackage' $false)) {
+        if (-not (Get-Command Assert-PackageEnvironmentIsolation -CommandType Function -ErrorAction SilentlyContinue)) {
+            Stop-Startup 'Package isolation helpers are unavailable; no package action is allowed.'
+        }
+        Assert-PackageEnvironmentIsolation -Context $Context -Model $Model
+        return
+    }
     if ($Context.Environment -eq 'current') { return }
     $testProject = 'nyc-taxi-bootstrap-test'
     if ($Model.name -ne $testProject -or $Context.ExpectedProject -ne $testProject) { Stop-Startup 'Test project name is not the dedicated bootstrap-test project.' }

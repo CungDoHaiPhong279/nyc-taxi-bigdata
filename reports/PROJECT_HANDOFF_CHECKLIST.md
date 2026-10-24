@@ -1,5 +1,8 @@
 # Checklist bàn giao — ML P6
 
+Các mục ML P6 là mốc lịch sử; cập nhật PACKAGE P1/P2 ở cuối file thay thế trạng
+thái model distribution tương ứng, không thay đổi bằng chứng E2E chưa có.
+
 2026-10-24. Đây là kiểm kê kỹ thuật, không phải rubric chấm điểm: chưa tìm thấy
 đề/rubric gốc của giảng viên trong repo. Các yêu cầu từng bước và đề xuất nâng cao
 không tự động được xem là yêu cầu bắt buộc của thầy.
@@ -54,3 +57,35 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
   kiểm thử tải/browser và phát hành bundle có kiểm soát.
 - Airflow/retraining/drift monitoring, mô hình định tuyến trước chuyến hoặc
   uncertainty calibration; không suy ra đây là yêu cầu bắt buộc nếu chưa có rubric.
+
+## PACKAGE P1 — cập nhật sau ML P6
+
+- Có entrypoint `scripts/setup_system.ps1` (PLAN mặc định, Execute tường minh),
+  tái sử dụng bootstrap/start hiện có, checkpoint và guards cách ly; bundle local
+  ml-p4-v1 kèm checksum/version lock. Không training/latest hoặc pipeline thứ hai.
+- Môi trường trống `nyc-taxi-package-test` được chuẩn bị riêng cả config, ports,
+  containers, volumes, networks và mọi writable runtime path; không dùng DB
+  bootstrap-test đang giữ fixture. Mới kiểm tra mock/PLAN, chưa khởi động stack mới.
+- **Blocker máy mới:** chưa có nguồn phân phối model/quyền phát hành được xác
+  nhận. Chủ artifact phải cung cấp đúng bundle đã pin; chưa upload/publish.
+- Full acquisition/bootstrap Jan–Jun từ clone mới và chạy lại vẫn **chưa E2E
+  kiểm chứng**; không coi PLAN/mock hoặc fixture20facts là PASS dữ liệu thật.
+- Một lệnh `start.ps1 -WithInference` mở lại máy đã có model/dữ liệu vẫn giữ
+  nguyên; không đồng nghĩa một lệnh từ clone mới. Model June đã chốt, không tự
+  retrain khi có dữ liệu mới. Các giới hạn cache miss/PBIX/CI remote nêu trên
+  giữ nguyên; P1 chưa commit/push hoặc có lượt CI remote cho code mới.
+- Chi tiết/lệnh kiểm chứng tiếp theo: [PACKAGE P1 report](PACKAGE_P1_REPORT.md).
+
+## PACKAGE P2 — cập nhật model distribution
+
+- Bundle cố định `distribution/models/ml-p4-v1/` nay là nguồn mặc định của setup;
+  không cần chủ model export/download thủ công. Bundle đi cùng source; P2 ghi
+  nhận trạng thái trước commit, trạng thái phát hành sau đó xem Git log/CI đúng SHA.
+- Audit 43 files =40 model gốc+candidate lock+feature contract+zone lookup; cùng
+  full model/ZIP SHA, không taxi observations/secrets. Manifest P2 chỉ đổi
+  external distribution metadata. Provenance/attribution và điều khoản NYC được
+  ghi rõ, không tự gán license hay đặt gate chủ model bên ngoài không có bằng chứng.
+- Gate phân phối model chung ở P1 được thay thế; dự án vẫn chưa chọn license
+  tái sử dụng tổng thể/model-specific. Bundle không được bake vào images.
+- Full bootstrap/acquisition/rerun dữ liệu thật trên máy mới vẫn chưa E2E; model
+  bundle test/PLAN không thay chứng cứ đó. Chi tiết [PACKAGE P2 report](PACKAGE_P2_REPORT.md).

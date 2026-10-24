@@ -1,0 +1,59 @@
+# Explicit package layer, after base + inference. Never apply to the live stack
+# without a separately reviewed package startup/update. No training or downloads.
+services:
+  postgres:
+    image: postgres:16@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
+    # Package-created databases stay internal; existing live Compose is untouched.
+    ports: !reset []
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.5.1@sha256:7a8c21cd553b84227391ad7daa39c029dab64328da7607c372370cfa07ef43d9
+
+    ports: !override
+      - "127.0.0.1:5000:5000"
+
+  worker:
+    image: nyc-taxi-worker:package-p1-standard
+    build:
+      dockerfile: Dockerfile.spark
+    cpus: 2.0
+    mem_limit: 3g
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:ActiveProcessorCount=2"
+      PYSPARK_SUBMIT_ARGS: "--driver-memory 1536m --conf spark.ui.enabled=false pyspark-shell"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+
+  dashboard:
+    image: nyc-taxi-dashboard:package-p1
+
+  fare-inference:
+    image: nyc-taxi-inference:package-p1
+    build:
+      args:
+        WORKER_RUNTIME_IMAGE: nyc-taxi-worker:package-p1-standard
+    volumes: !override
+      - type: bind
+        source: ./.sandbox/package-model/models/ml-p2/20261023-pilot02/fitted_model
+        target: /model
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.sandbox/package-model/models/ml-p3/20261023-june01/candidate_lock.json
+        target: /model-contract/candidate_lock.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.sandbox/package-model/models/ml-p2/20261023-pilot02/feature_contract.json
+        target: /model-contract/feature_contract.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.sandbox/package-model/data/raw/taxi_zones/taxi_zone_lookup.csv
+        target: /model-contract/zones.csv
+        read_only: true
+        bind:
+          create_host_path: false

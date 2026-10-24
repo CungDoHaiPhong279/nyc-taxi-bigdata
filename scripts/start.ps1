@@ -7,7 +7,7 @@ and explicit image/config updates are separate operations. No host Python needed
 param(
     [switch]$Build,
     [switch]$WithInference,
-    [ValidateSet('current', 'bootstrap-test')][string]$Environment = 'current',
+    [ValidateSet('current', 'bootstrap-test', 'package-test')][string]$Environment = 'current',
     [ValidateRange(1, 1800)][int]$HealthTimeoutSeconds = 120,
     [ValidateRange(1, 300)][int]$CommandTimeoutSeconds = 30,
     [ValidateRange(60, 7200)][int]$BuildTimeoutSeconds = 1800,
@@ -215,24 +215,35 @@ function Invoke-ProjectStart {
         [string]$ProjectRoot = $script:StartupProjectRoot,
         [switch]$Build,
         [switch]$WithInference,
-        [ValidateSet('current', 'bootstrap-test')][string]$Environment = 'current',
+        [ValidateSet('current', 'bootstrap-test', 'package-test')][string]$Environment = 'current',
         [int]$HealthTimeoutSeconds = 120,
         [int]$CommandTimeoutSeconds = 30,
         [int]$BuildTimeoutSeconds = 1800,
-        [int]$PollIntervalSeconds = 2
+        [int]$PollIntervalSeconds = 2,
+        $Context = $null
     )
     try {
-        if ($WithInference -and $Environment -ne 'current') { Stop-Startup '-WithInference cannot be combined with bootstrap-test; use the current frozen-model environment explicitly.' }
+        $package = $null -ne $Context -and (Get-OptionalProperty $Context 'IsPackage' $false)
+        if ($WithInference -and $Environment -ne 'current' -and -not $package) { Stop-Startup '-WithInference cannot be combined with bootstrap-test; use the current frozen-model environment explicitly.' }
         $script:DockerCliPath = Resolve-DockerCli
         if (-not $script:DockerCliPath) { Stop-Startup 'Docker CLI is missing. Install Docker Desktop, open it, wait for the engine, then run this script again.' }
         $composeFile = Join-Path $ProjectRoot 'docker-compose.yml'
         if (-not (Test-Path -LiteralPath $composeFile -PathType Leaf)) { Stop-Startup 'docker-compose.yml is missing beside the scripts directory.' }
-        $context = New-ProjectEnvironmentContext -ProjectRoot $ProjectRoot -Environment $Environment -CommandTimeoutSeconds $CommandTimeoutSeconds -HealthTimeoutSeconds $HealthTimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds
+        if ($null -eq $Context) {
+            $context = New-ProjectEnvironmentContext -ProjectRoot $ProjectRoot -Environment $Environment -CommandTimeoutSeconds $CommandTimeoutSeconds -HealthTimeoutSeconds $HealthTimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds
+        } elseif ((Get-NormalizedEnvironmentPath $Context.Root) -ne (Get-NormalizedEnvironmentPath $ProjectRoot) -or $Context.Environment -ne $Environment) {
+            Stop-Startup 'Supplied startup context differs from the requested root/environment.'
+        } else { $context = $Context }
         if ($WithInference) {
-            Enable-InferenceStartupContext -Context $context
+            if ($package) {
+                $context | Add-Member WithInference $true -Force
+            } else { Enable-InferenceStartupContext -Context $context }
             # Host-only hashes; fail before builds, container lifecycle work, or
             # even creating a missing .env. Never train/bootstrap/fetch a model.
-            try { $artifacts = Assert-FareArtifacts -ProjectRoot $context.Root }
+            try {
+                if ($package) { $artifacts = Assert-FareArtifacts -ProjectRoot $context.Root -RuntimeRoot $context.ModelRuntimeRoot }
+                else { $artifacts = Assert-FareArtifacts -ProjectRoot $context.Root }
+            }
             catch {
                 $safeArtifactMessage = $_.Exception.Data['StartupSafeMessage']
                 if ($safeArtifactMessage) { throw }
@@ -246,7 +257,7 @@ function Invoke-ProjectStart {
 
         $envPath = $context.EnvPath
         if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) {
-            if ($Environment -eq 'bootstrap-test') { Stop-Startup 'Bootstrap-test configuration is missing. Run the separate test-environment preparation script first; the existing .env is never copied or changed for this environment.' }
+            if ($Environment -ne 'current' -or $package) { Stop-Startup 'Selected isolated/package configuration is missing. Prepare it through its explicit setup script; existing .env is never overwritten.' }
             if (Test-Path -LiteralPath $envPath) { Stop-Startup '.env exists but is not a regular file.' }
             $example = Join-Path $ProjectRoot '.env.example'
             if (-not (Test-Path -LiteralPath $example -PathType Leaf)) { Stop-Startup '.env and .env.example are missing. Create local configuration separately.' }
@@ -258,7 +269,7 @@ function Invoke-ProjectStart {
 
         $null = Invoke-StartupCompose $context @('config', '--quiet') 'Compose validation failed; check local .env and docker-compose.yml (resolved values withheld)'
         $modelArguments = @('config', '--no-interpolate', '--format', 'json')
-        if ($Environment -eq 'bootstrap-test') { $modelArguments = @('--profile', '*', 'config', '--format', 'json') }
+        if ($Environment -ne 'current' -or $package) { $modelArguments = @('--profile', '*', 'config', '--format', 'json') }
         $modelJson = Invoke-StartupCompose $context $modelArguments 'Cannot read Compose metadata; resolved values withheld'
         $model = ConvertFrom-StartupJson $modelJson 'public Compose metadata'
         $modelProject = Get-OptionalProperty $model 'name'
@@ -368,6 +379,7 @@ function Invoke-ProjectStart {
 . (Join-Path $PSScriptRoot 'docker_environment.ps1')
 . (Join-Path $PSScriptRoot 'start_inference.ps1')
 . (Join-Path $PSScriptRoot 'model_artifacts.ps1')
+. (Join-Path $PSScriptRoot 'package_environment.ps1')
 
 if ($MyInvocation.InvocationName -ne '.') {
     exit (Invoke-ProjectStart -Build:$Build -WithInference:$WithInference -Environment $Environment -HealthTimeoutSeconds $HealthTimeoutSeconds -CommandTimeoutSeconds $CommandTimeoutSeconds -BuildTimeoutSeconds $BuildTimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds)
