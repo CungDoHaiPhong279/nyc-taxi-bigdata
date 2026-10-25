@@ -117,7 +117,11 @@ jobs:
         env:
           DOCKER_BUILDKIT: "1"
         run: docker build --target dashboard --progress=plain -f Dockerfile.dashboard -t nyc-taxi-dashboard:ci .
+      - name: Check route-map browser bridge using offline Node DOM stubs
+        run: node --test tests/test_route_map_frontend.js
       - name: Check packaged dashboard dependencies and imports without network
         run: |
           docker run --rm --network none --read-only nyc-taxi-dashboard:ci python -m pip check
           docker run --rm --network none --read-only nyc-taxi-dashboard:ci python -c "import streamlit; from nyc_taxi.dashboard import queries, prediction, fare_page"
+      - name: Smoke-check pinned geometry and frontend assets inside the image
+        run: docker run --rm --network none --read-only --cpus=1 --memory=768m nyc-taxi-dashboard:ci python scripts/check_dashboard_package.py

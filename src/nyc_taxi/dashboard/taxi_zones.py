@@ -165,6 +165,11 @@ class TaxiZoneGeometry:
                 polygons.append((bounds, rings))
             self._zones.append((metadata, tuple(polygons)))
 
+    @property
+    def location_ids(self) -> tuple[int, ...]:
+        """Public geometry inventory; 264/265 are non-geographic sentinels."""
+        return tuple(sorted(metadata["location_id"] for metadata, _polygons in self._zones))
+
     @classmethod
     def load(cls, path: str | Path, expected_sha256: str) -> TaxiZoneGeometry:
         """Load local bytes only; never fetch missing assets or skip verification."""

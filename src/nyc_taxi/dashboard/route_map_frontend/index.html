@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <style>
+    body { margin: 0; font: 14px sans-serif; color: #262730; }
+    #map { width: 100%; height: 360px; display: none; }
+    #status { margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <div id="status" role="status" aria-live="polite">Bản đồ chưa bật.</div>
+  <div id="map" aria-label="Tuyến đường của lần ước tính đã gửi"></div>
+  <script>
+    "use strict";
+    // Fixed library/style versions. There are no external resources until a
+    // valid submitted route and the explicit online flag reach this iframe.
+    const GL_VERSION = "3.15.0";
+    const GL_ORIGIN = "https://api.mapbox.com/mapbox-gl-js/v" + GL_VERSION + "/";
+    const SOURCE_ID = "submitted-route";
+    let libraryPromise = null;
+    let map = null;
+    let mapReady = false;
+    let pending = null;
+    let displayed = null;
+    let failed = false;
+    let renderRevision = 0;
+    const status = document.getElementById("status");
+    const mapElement = document.getElementById("map");
+    const send = (type, payload = {}) => window.parent.postMessage(
+      {isStreamlitMessage: true, type, ...payload}, "*");
+    const height = () => send("streamlit:setFrameHeight", {height: document.body.scrollHeight + 8});
+    const safeFailure = () => {
+      failed = true;
+      status.textContent = "Không thể hiển thị bản đồ. Kiểm tra cấu hình/kết nối; không tự gọi lại dịch vụ.";
+      height();
+    };
+    const valid = (args) => args && args.online === true
+      && typeof args.access_token === "string" && /^pk\.[A-Za-z0-9._-]+$/.test(args.access_token)
+      && typeof args.submission_id === "string" && args.submission_id.length > 0
+      && args.submission_id.length <= 128 && args.geometry && args.geometry.type === "LineString"
+      && Array.isArray(args.geometry.coordinates) && args.geometry.coordinates.length >= 2
+      && args.geometry.coordinates.length <= 20000
+      && args.geometry.coordinates.every((point) => Array.isArray(point) && point.length === 2
+        && point.every((value) => typeof value === "number" && Number.isFinite(value))
+        && point[0] >= -180 && point[0] <= 180 && point[1] >= -90 && point[1] <= 90);
+    const loadLibrary = () => {
+      if (libraryPromise) return libraryPromise;
+      libraryPromise = new Promise((resolve, reject) => {
+        const deadline = window.setTimeout(() => reject(), 15000);
+        const rejectLoad = () => { window.clearTimeout(deadline); reject(); };
+        const css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = GL_ORIGIN + "mapbox-gl.css";
+        css.referrerPolicy = "no-referrer";
+        const script = document.createElement("script");
+        script.src = GL_ORIGIN + "mapbox-gl.js";
+        script.crossOrigin = "anonymous";
+        script.referrerPolicy = "no-referrer";
+        script.onload = () => {
+          window.clearTimeout(deadline);
+          if (window.mapboxgl) resolve(window.mapboxgl);
+          else reject();
+        };
+        script.onerror = rejectLoad; // cached rejection: no retry on rerun
+        css.onerror = rejectLoad;
+        document.head.appendChild(css);
+        document.head.appendChild(script);
+      });
+      return libraryPromise;
+    };
+    const applyPending = () => {
+      if (!mapReady || !pending || failed) return;
+      if (displayed && displayed.id === pending.id) return;
+      const data = {type: "Feature", properties: {}, geometry: pending.geometry};
+      const existing = map.getSource(SOURCE_ID);
+      if (existing) existing.setData(data);
+      else {
+        map.addSource(SOURCE_ID, {type: "geojson", data});
+        map.addLayer({id: SOURCE_ID, type: "line", source: SOURCE_ID,
+          layout: {"line-join": "round", "line-cap": "round"},
+          paint: {"line-color": "#1565c0", "line-width": 5}});
+      }
+      const coordinates = pending.geometry.coordinates;
+      const bounds = [[Math.min(...coordinates.map((p) => p[0])), Math.min(...coordinates.map((p) => p[1]))],
+        [Math.max(...coordinates.map((p) => p[0])), Math.max(...coordinates.map((p) => p[1]))]];
+      map.fitBounds(bounds, {padding: 40, maxZoom: 15, duration: 0});
+      displayed = {id: pending.id, fingerprint: pending.fingerprint};
+      status.textContent = "Tuyến đường của lần ước tính đã gửi; thay đổi biểu mẫu chưa cập nhật kết quả này.";
+      height();
+    };
+    const render = async (args) => {
+      const revision = ++renderRevision;
+      if (!valid(args)) {
+        pending = null;
+        displayed = null;
+        if (map) map.remove();
+        map = null;
+        mapReady = false;
+        mapElement.style.display = "none";
+        status.textContent = "Bản đồ chưa bật hoặc cấu hình/tuyến đường không hợp lệ.";
+        height();
+        return;
+      }
+      const fingerprint = JSON.stringify(args.geometry);
+      // The immutable submission identity must never acquire draft coordinates.
+      if ((displayed && displayed.id === args.submission_id && displayed.fingerprint !== fingerprint)
+          || (pending && pending.id === args.submission_id && pending.fingerprint !== fingerprint)) {
+        safeFailure();
+        return;
+      }
+      pending = {id: args.submission_id, fingerprint,
+        geometry: JSON.parse(fingerprint)};
+      if (failed) return;
+      if (map) {
+        try { applyPending(); } catch (_) { safeFailure(); }
+        return;
+      }
+      status.textContent = "Đang tải bản đồ của tuyến đã gửi…";
+      try {
+        const gl = await loadLibrary();
+        if (revision !== renderRevision || !pending || failed) return;
+        mapElement.style.display = "block";
+        map = new gl.Map({container: "map", accessToken: args.access_token,
+          style: "mapbox://styles/mapbox/streets-v12", center: pending.geometry.coordinates[0],
+          zoom: 11, attributionControl: true, logoPosition: "bottom-left",
+          performanceMetricsCollection: false, collectResourceTiming: false});
+        // Explicit listener handles failures without logging error objects/URLs.
+        map.on("error", () => safeFailure());
+        map.on("load", () => {
+          mapReady = true;
+          try { applyPending(); } catch (_) { safeFailure(); }
+        });
+        height();
+      } catch (_) { safeFailure(); }
+    };
+    window.addEventListener("message", (event) => {
+      if (event.source !== window.parent || !event.data || event.data.type !== "streamlit:render") return;
+      void render(event.data.args);
+    });
+    send("streamlit:componentReady", {apiVersion: 1});
+    height();
+  </script>
+</body>
+</html>

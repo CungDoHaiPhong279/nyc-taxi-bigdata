@@ -12,9 +12,11 @@ from nyc_taxi.dashboard.address_component import (
     AddressSelectionError, address_picker, new_address_state, process_address_event,
 )
 from nyc_taxi.dashboard.mapbox_client import MapboxClient, MapboxError
+from nyc_taxi.dashboard.geometry_assets import load_geometry_bundle
 from nyc_taxi.dashboard.prediction import InferenceClient
 from nyc_taxi.dashboard.route_fare import RouteFareCoordinator, execute_submission
-from nyc_taxi.dashboard.taxi_zones import GeometryError, TaxiZoneGeometry
+from nyc_taxi.dashboard.route_map import route_map
+from nyc_taxi.dashboard.taxi_zones import GeometryError
 
 
 def address_flow_enabled() -> bool:
@@ -30,14 +32,15 @@ def make_search_client():
 
 
 @st.cache_resource(max_entries=2, show_spinner=False)
-def load_geometry(path: str, sha256: str):
+def load_geometry(path: str, sha256: str, manifest_path: str = ""):
     # Only public, pinned geometry is cached process-wide; never user addresses.
-    return TaxiZoneGeometry.load(path, sha256)
+    return load_geometry_bundle(path or None, manifest_path or None, sha256 or None)
 
 
 def make_coordinator():
     geometry = load_geometry(os.environ.get("FARE_ADDRESS_GEOMETRY_PATH", ""),
-                             os.environ.get("FARE_ADDRESS_GEOMETRY_SHA256", ""))
+                             os.environ.get("FARE_ADDRESS_GEOMETRY_SHA256", ""),
+                             os.environ.get("FARE_ADDRESS_GEOMETRY_MANIFEST", ""))
     return RouteFareCoordinator(router=make_search_client(), geometry=geometry, predictor=InferenceClient())
 
 
@@ -48,8 +51,8 @@ def render_page() -> None:
                 "Quãng đường ô tô hiển thị bằng **km**; mô hình nhận **mile**. "
                 "Tuyến dự kiến có thể khác quãng đường taximeter đã dùng để đánh giá mô hình.")
     if os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") != "1":
-        st.info("Chặng 2A offline: chưa có dữ liệu geometry hoặc API live. "
-                "Luồng được kiểm bằng dữ liệu tổng hợp; không có giá thay thế khi chưa đủ cấu hình.")
+        st.info("Luồng địa chỉ đang offline: không tải thư viện/bản đồ hoặc gọi API thật. "
+                "Geometry đã pin được đóng gói riêng; không có giá thay thế khi chưa đủ cấu hình.")
 
     for slot, label in (("pickup", "Địa chỉ đón"), ("dropoff", "Địa chỉ đến")):
         key = "address_" + slot
@@ -109,6 +112,14 @@ def render_page() -> None:
         st.caption(f"{stored['pickup']['label']} → {stored['dropoff']['label']} · "
                    f"{stored['distance_km']:.3f} km · {stored['pickup_datetime']} NYC. "
                    "Thay đổi lựa chọn chưa làm thay đổi yêu cầu đã gửi này.")
+        online = address_flow_enabled() and os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") == "1"
+        # Use only the immutable submitted route, never the current form draft.
+        # A stable component key preserves the browser map across Streamlit reruns.
+        route_map(
+            stored.get("route_geometry"), submission_id=stored.get("submission_id"),
+            access_token=os.environ.get("MAPBOX_ACCESS_TOKEN", "") if online else "",
+            online=online, key="address_submitted_route_map",
+        )
         for warning in stored["warnings"]:
             st.warning(warning)
         prediction = stored["prediction"]

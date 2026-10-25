@@ -1,0 +1,4 @@
+# Optional, offline-after-install preparation tools; never install in dashboard.
+# Install into an isolated directory with pip --target, not the project runtime.
+pyshp==2.3.1
+pyproj==3.7.2

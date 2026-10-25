@@ -2088,12 +2088,88 @@ Directions/predict, kết quả giữ đúng inputs đã submit. Node kiểm syn
 thức component với DOM stub PASS; chưa phải browser render hoặc smoke live.
 Không pull/build/install, không khởi tạo Spark/model hoặc kết nối services thật.
 
-Chặng 2B cần chuẩn bị geometry chính thức, kiểm topology/CRS và pin SHA256 đầy đủ;
-đóng gói asset vào image ngoài `data/` (đường này hiện bị Docker ignore). Cần
-Mapbox account/billing và token server riêng qua `MAPBOX_ACCESS_TOKEN`, không gửi
-token vào browser/log. Các biến `FARE_ADDRESS_GEOMETRY_PATH`,
-`FARE_ADDRESS_GEOMETRY_SHA256` và hai feature/network flags phải được cấu hình
-tường minh ở dashboard sau kiểm tra; Chặng 2A chưa sửa Compose/startup/package.
-Sau đó mới build/cập nhật dashboard có mục tiêu, kiểm browser/session, token
+Tại checkpoint 2A, geometry/đóng gói và smoke live còn để bước 2B bên dưới.
+Token local đi qua `MAPBOX_ACCESS_TOKEN`, không gửi vào component/log; không yêu
+cầu hai token riêng. Hai feature/network flags vẫn phải được bật tường minh cho
+lượt thử riêng; Chặng 2A chưa sửa Compose/startup/package. Sau đó mới build
+dashboard thử có mục tiêu, kiểm browser/session, token
 restrictions, attribution và smoke live có giới hạn. AppTest/mock chỉ xác minh
 wiring, không phải bằng chứng chất lượng routing hoặc sai số fare end-to-end.
+
+## Địa chỉ → routing → fare: checkpoint Chặng 2B (chuẩn bị nhẹ)
+
+Geometry chính thức từ [TLC](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)
+được lưu ngoài `data/`, tại `assets/taxi_zones/`. ZIP nguồn 1.022.574bytes; GeoJSON
+WGS84 3.868.898bytes, SHA256:
+`6513c39044b8dee18c00af0dd6f97919d681b1e85efbd2d6980786c4cfbb8c9c`.
+Đủ 263 LocationIDs địa lý, khớp lookup (264/265 không có polygon); 240 Polygon,
+23 MultiPolygon, 354 phần, 98.192 vertices và không có hole trong nguồn này.
+263/263 features hợp lệ theo kiểm tra topology độc lập; không sửa/simplify/bỏ
+polygon. Kiểm tra này không chứng nhận các zone khác nhau hoàn toàn không overlap;
+resolver vẫn từ chối điểm mơ hồ/biên. Chi tiết nguồn, CRS EPSG:2263 → WGS84,
+hashes và cách tái tạo vào thư mục thử mới nằm trong
+[PROVENANCE.md](assets/taxi_zones/PROVENANCE.md).
+
+`pyshp==2.3.1`, `pyproj==3.7.2` chỉ dùng khi chuẩn bị geometry, đã cài riêng vào
+`.sandbox/address-2b/20261025-geometry01/tools` (24,73MiB), không thêm GIS/Java/Spark
+vào dashboard. Topology dùng Microsoft.SqlServer.Types có sẵn trên máy; script
+không tự cài bộ GIS hay tự repair nếu thiếu validator/lỗi geometry.
+
+Dockerfile đã khai báo COPY component và assets vào image; Compose inference đã
+cấu hình đường dẫn geometry/manifest cùng token local hiện có. Loader xác minh
+SHA256 và manifest `validated` trước khi phục vụ. `.env.example` để token rỗng;
+`FARE_ADDRESS_ENABLED=0` và `FARE_ADDRESS_ALLOW_NETWORK=0` vẫn là mặc định.
+Không sửa `.env`, startup/package hoặc model artifacts, không bật flags cho
+dashboard đang chạy. Các thay đổi Docker/Compose này **chưa được triển khai**.
+
+Kiểm tra nhẹ đã chạy: **11/11 tests geometry asset/preparation PASS** trên host,
+runtime loader đọc đủ 263 IDs, full topology PASS; không chạy lại bộ tests 2A.
+RAM available trước bước này chỉ **1,128GiB (<2GiB)**, nên dừng trước build và
+chạy dashboard thử theo giới hạn tài nguyên. **Chưa build image mới**, chưa chạy
+geometry/UI tests trong image mới, chưa kiểm browser/map/attribution, prediction
+parity hay cache/rerun live; không có request Mapbox/map load bổ sung.
+
+Bước tiếp cần RAM available ≥2GiB và giữ ngân sách tăng thêm ≤1GiB: build có cache
+bằng tag thử mới (không pull/`--no-cache`, không thay service đang chạy), chạy
+dashboard tạm tại `127.0.0.1:18501` giới hạn 1CPU/768MiB, rồi kiểm UI thật và parity
+`/predict` ≤1e-9. Live budget tối đa 2 search sessions/4 Search requests,
+1 Directions/3 map loads, không retry tự động. Chưa thể kết luận toàn Chặng 2B PASS.
+
+### Bổ sung renderer offline, chưa build local
+
+Đã thêm component `route_map_frontend` dùng [Mapbox GL JS 3.15.0](https://github.com/mapbox/mapbox-gl-js/releases/tag/v3.15.0),
+style `mapbox://styles/mapbox/streets-v12`, giữ logo và attribution mặc định theo
+[hướng dẫn Mapbox](https://docs.mapbox.com/help/dive-deeper/attribution/).
+Không tải JS/CSS/style khi flags chưa bật hoặc chưa có tuyến/token hợp lệ.
+Khi online, component nhận **public token `pk.*` từ cấu hình runtime hiện có**;
+public token được gửi tới browser để tải bản đồ, khác component chọn địa chỉ vốn
+không nhận token. Secret token `sk.*` bị từ chối; không cần token thứ hai.
+Không hardcode token thật, log/persist token, response, địa chỉ hoặc tọa độ.
+
+Directions LineString được giữ nguyên trong snapshot bất biến cùng kết quả và
+UUID của lần submit. Bản đồ dùng snapshot đó, không gọi Directions để vẽ lại.
+Stable component key giữ cùng iframe/map qua rerun; cùng UUID/geometry không
+reload source, lần submit mới cập nhật source hiện có. Đổi draft chưa gửi không
+đổi tuyến/cước đã hiển thị. CDN timeout 15s và lỗi có thông báo an toàn, không tự
+retry khi rerun. Reload trang/browser vẫn có thể tạo map load mới; chưa đo live.
+
+Kiểm chứng bổ sung trên source hiện tại:
+
+- 71 route orchestration tests PASS trên host, gồm geometry bất biến và rerun.
+- 9 Node/DOM stub tests PASS, không network/browser/dependencies mới.
+- 39 tests PASS trong image có sẵn `nyc-taxi-dashboard:ml-p5-test`: 9 UI/AppTest,
+  19 map bridge, 8 packaging và 3 CI inventory cases. Hai AppTest dùng component
+  Python thật xác nhận ID/args ổn định qua rerun (không render iframe browser).
+  Container tạm network none, source read-only, tmpfs, 1CPU/768MiB, timeout180s;
+  tự xóa sau chạy, không Spark/model/database hay secrets local.
+- Geometry/checksum/topology và 11 tests chuẩn bị từ checkpoint được tái sử dụng,
+  không tải hoặc chạy lại.
+
+Job CI `compose-and-dashboard` hiện có thêm Node/DOM tests và smoke chạy bên
+trong image vừa build: kiểm full geometry SHA256, IDs 1–263 và các frontend assets
+đã COPY. Không thêm workflow/job. `scripts/check_dashboard_package.py` cũng có thể
+chạy offline từ source với `PYTHONPATH=src`; smoke source không chứng minh image.
+**Chưa build local hoặc chạy CI remote cho thay đổi này.** AppTest/DOM stub không
+chứng minh bản đồ, logo/attribution đã render thật; browser live, counts map loads,
+token restrictions và prediction parity ≤1e-9 vẫn cần lượt kiểm chứng riêng.
+Không gọi thêm Search/Directions/map load; hai flags vẫn mặc định tắt.

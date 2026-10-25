@@ -63,6 +63,12 @@ services:
     image: nyc-taxi-dashboard:ml-p4
     environment:
       FARE_INFERENCE_URL: http://fare-inference:8000
+      # Opt-in only; a normal start still shows the existing distance/zone form.
+      FARE_ADDRESS_ENABLED: ${FARE_ADDRESS_ENABLED:-0}
+      FARE_ADDRESS_ALLOW_NETWORK: ${FARE_ADDRESS_ALLOW_NETWORK:-0}
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+      FARE_ADDRESS_GEOMETRY_PATH: /app/assets/taxi_zones/taxi_zones.geojson
+      FARE_ADDRESS_GEOMETRY_MANIFEST: /app/assets/taxi_zones/manifest.json
     networks: ["default", "inference"]
     depends_on:
       fare-inference:

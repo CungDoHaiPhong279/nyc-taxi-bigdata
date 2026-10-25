@@ -6,7 +6,7 @@ geometry/router/predictor make this flow testable without any network access.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 import hashlib
 import json
@@ -24,6 +24,7 @@ METERS_PER_MILE = 1609.344
 NYC_BOUNDS = (-74.30, 40.45, -73.65, 40.95)
 NYC_BOROUGHS = frozenset({"Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"})
 MAX_SESSION_SUBMISSIONS = 32
+MAX_ROUTE_GEOMETRY_POINTS = 20_000
 _SESSION_KEY = "_route_fare_submissions"
 
 
@@ -58,7 +59,9 @@ class RouteFareEstimate:
     distance_km: float
     request: Mapping[str, Any]
     prediction: Mapping[str, Any]
+    route_geometry: Mapping[str, Any]
     warnings: tuple[str, ...]
+    submission_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """A fresh display copy; mutations cannot change the saved submission."""
@@ -67,7 +70,9 @@ class RouteFareEstimate:
             "pickup_datetime": self.pickup_datetime,
             "distance_meters": self.distance_meters, "distance_km": self.distance_km,
             "request": _thaw(self.request), "prediction": _thaw(self.prediction),
+            "route_geometry": _thaw(self.route_geometry),
             "warnings": list(self.warnings),
+            "submission_id": self.submission_id,
         }
 
 
@@ -76,6 +81,29 @@ class SubmissionOutcome:
     success: bool
     estimate: RouteFareEstimate | None = None
     error: str | None = None
+
+
+def _route_geometry(value: Any) -> Mapping[str, Any]:
+    """Preserve the one Directions result, also validating injected transports.
+
+    This is a bounded display snapshot, not another routing request or a repair
+    of a provider geometry. Reject malformed geometry before model inference so
+    the displayed route and fare always belong to the same complete result.
+    """
+    if not isinstance(value, dict) or value.get("type") != "LineString":
+        raise RouteFareError("Hình dạng tuyến đường không hợp lệ. Chưa gọi mô hình dự đoán.")
+    points = value.get("coordinates")
+    if not isinstance(points, list) or not 2 <= len(points) <= MAX_ROUTE_GEOMETRY_POINTS:
+        raise RouteFareError("Hình dạng tuyến đường không hợp lệ. Chưa gọi mô hình dự đoán.")
+    normalized = []
+    for point in points:
+        if not isinstance(point, list) or len(point) != 2:
+            raise RouteFareError("Hình dạng tuyến đường không hợp lệ. Chưa gọi mô hình dự đoán.")
+        try:
+            normalized.append(validate_coordinates(*point))
+        except (MapboxError, TypeError, ValueError, OverflowError):
+            raise RouteFareError("Hình dạng tuyến đường không hợp lệ. Chưa gọi mô hình dự đoán.") from None
+    return _freeze({"type": "LineString", "coordinates": normalized})
 
 
 def _selection(value: Any) -> dict[str, Any]:
@@ -172,6 +200,7 @@ class RouteFareCoordinator:
             valid_distance = False
         if not valid_distance:
             raise RouteFareError("Quãng đường routing phải hữu hạn và nằm trong giới hạn 0–200 mile của mô hình.")
+        route_geometry = _route_geometry(route.get("geometry"))
         # Never round either unit before inference.  Presentation rounding is UI-only.
         request = build_prediction_request(
             distance_miles=distance / METERS_PER_MILE, pickup_datetime=pickup_time,
@@ -188,7 +217,8 @@ class RouteFareCoordinator:
             pickup=_freeze({**pickup, **pickup_zone}), dropoff=_freeze({**dropoff, **dropoff_zone}),
             pickup_datetime=request["pickup_datetime"], distance_meters=float(distance),
             distance_km=distance / 1000, request=_freeze(request),
-            prediction=_freeze(prediction), warnings=tuple(warnings),
+            prediction=_freeze(prediction), route_geometry=route_geometry,
+            warnings=tuple(warnings),
         )
 
 
@@ -235,7 +265,9 @@ def execute_submission(
     outcome = SubmissionOutcome(False, error="Lần gửi trước chưa hoàn tất. Hãy gửi biểu mẫu mới nếu muốn thử lại.")
     entries[submission_id] = {"fingerprint": fingerprint, "outcome": outcome}
     try:
-        outcome = SubmissionOutcome(True, estimate=coordinator.estimate(payload))
+        outcome = SubmissionOutcome(
+            True, estimate=replace(coordinator.estimate(payload), submission_id=submission_id),
+        )
     except RouteFareError as error:
         outcome = SubmissionOutcome(False, error=str(error))
     except Exception:

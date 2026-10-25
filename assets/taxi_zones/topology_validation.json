@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "geojson_sha256": "6513c39044b8dee18c00af0dd6f97919d681b1e85efbd2d6980786c4cfbb8c9c",
+  "feature_count": 263,
+  "invalid": [],
+  "polygon_count": 354,
+  "hole_count": 0,
+  "validator": {
+    "name": "Microsoft.SqlServer.Types.SqlGeometry.STIsValid",
+    "assembly_version": "15.0.0.0",
+    "assembly_sha256": "331581c724077830abedd9c251f80ba1e0a58d6f6f3b34dd47a2166e9c490726",
+    "coordinates": "WGS84 longitude/latitude; planar OGC polygon topology",
+    "repaired_geometry": false
+  }
+}

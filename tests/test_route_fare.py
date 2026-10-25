@@ -13,7 +13,8 @@ from nyc_taxi.dashboard.prediction import (
     EVALUATION_RUN_ID, MODEL_SHA256, TRAINING_RUN_ID, PredictionError,
 )
 from nyc_taxi.dashboard.route_fare import (
-    MAX_SESSION_SUBMISSIONS, METERS_PER_MILE, RouteFareCoordinator, RouteFareError, execute_submission,
+    MAX_ROUTE_GEOMETRY_POINTS, MAX_SESSION_SUBMISSIONS, METERS_PER_MILE,
+    RouteFareCoordinator, RouteFareError, execute_submission,
 )
 from nyc_taxi.dashboard.taxi_zones import GeometryError
 
@@ -29,11 +30,14 @@ RESULT = {
     "model_sha256": MODEL_SHA256, "warnings": [],
     "unseen_categories": {"pickup": False, "dropoff": False},
 }
+ROUTE_GEOMETRY = {
+    "type": "LineString", "coordinates": [[-73.98, 40.75], [-73.96, 40.755], [-73.95, 40.76]],
+}
 
 
 def coordinator(*, distance=1234.56789, zones=None):
     router = Mock()
-    router.directions.return_value = {"distance_meters": distance}
+    router.directions.return_value = {"distance_meters": distance, "geometry": deepcopy(ROUTE_GEOMETRY)}
     geometry = Mock()
     geometry.resolve.side_effect = zones if zones is not None else [
         {"location_id": 161, "borough": "Manhattan", "zone": "Synthetic A"},
@@ -67,13 +71,21 @@ def test_exact_route_units_mapping_and_frozen_identity_snapshot():
     worker.predictor.predict.return_value["warnings"].append("Edited response")
     assert result.pickup["label"] == "Synthetic pickup A"
     assert result.prediction["warnings"] == ()
+    assert result.route_geometry["type"] == "LineString"
+    assert result.route_geometry["coordinates"] == tuple(tuple(point) for point in ROUTE_GEOMETRY["coordinates"])
+    worker.router.directions.return_value["geometry"]["coordinates"][0][0] = 0
+    assert result.route_geometry["coordinates"][0][0] == -73.98
+    with pytest.raises(TypeError):
+        result.route_geometry["coordinates"][0][0] = 0
     with pytest.raises(TypeError):
         result.request["distance_miles"] = 3
     with pytest.raises(FrozenInstanceError):
         result.distance_km = 3
     displayed = result.to_dict()
     displayed["pickup"]["label"] = "Edited display"
+    displayed["route_geometry"]["coordinates"][0][0] = 0
     assert result.pickup["label"] == "Synthetic pickup A"
+    assert result.route_geometry["coordinates"][0][0] == -73.98
 
 
 def test_injected_http_geometry_and_existing_predict_contract_together(monkeypatch, caplog):
@@ -104,7 +116,7 @@ def test_injected_http_geometry_and_existing_predict_contract_together(monkeypat
             return {"features": [{"geometry": {"type": "Point", "coordinates": coordinates[name]},
                                   "properties": {"name": name}}]}
         assert "/directions/v5/mapbox/driving/" in parsed.path
-        return {"code": "Ok", "routes": [{"distance": 1234.56789}]}
+        return {"code": "Ok", "routes": [{"distance": 1234.56789, "geometry": deepcopy(ROUTE_GEOMETRY)}]}
 
     api = MapboxClient("synthetic-not-a-real-token", http=provider_http)
     selections = []
@@ -144,6 +156,8 @@ def test_injected_http_geometry_and_existing_predict_contract_together(monkeypat
     inference_http.assert_called_once()
     assert len(calls) == 5 and len(selected_queries) == 2  # two searches/retrieves, one route
     assert outcome.estimate.prediction["model_sha256"] == MODEL_SHA256
+    assert outcome.estimate.to_dict()["route_geometry"] == ROUTE_GEOMETRY
+    assert outcome.estimate.submission_id == identifier
     assert caplog.text == ""
 
 
@@ -162,6 +176,39 @@ def test_bad_router_distance_never_predicts(distance):
     with pytest.raises(RouteFareError):
         worker.estimate(PAYLOAD)
     worker.predictor.predict.assert_not_called()
+
+
+@pytest.mark.parametrize("geometry", [
+    None, {}, {"type": "Polygon", "coordinates": []},
+    {"type": "LineString", "coordinates": []},
+    {"type": "LineString", "coordinates": [[-73.98, 40.75]]},
+    {"type": "LineString", "coordinates": [[-73.98, 40.75]] * (MAX_ROUTE_GEOMETRY_POINTS + 1)},
+    {"type": "LineString", "coordinates": [[-73.98, 40.75, 10], [-73.95, 40.76]]},
+    {"type": "LineString", "coordinates": [[True, 40.75], [-73.95, 40.76]]},
+    {"type": "LineString", "coordinates": [[float("nan"), 40.75], [-73.95, 40.76]]},
+    {"type": "LineString", "coordinates": [[float("inf"), 40.75], [-73.95, 40.76]]},
+    {"type": "LineString", "coordinates": [[-181, 40.75], [-73.95, 40.76]]},
+    {"type": "LineString", "coordinates": [[-73.98, 91], [-73.95, 40.76]]},
+    {"type": "LineString", "coordinates": [[10 ** 400, 40.75], [-73.95, 40.76]]},
+])
+def test_bad_router_geometry_never_predicts_or_exposes_provider_payload(geometry, caplog):
+    worker = coordinator()
+    worker.router.directions.return_value["geometry"] = geometry
+    with pytest.raises(RouteFareError, match="Hình dạng tuyến đường"):
+        worker.estimate(PAYLOAD)
+    worker.router.directions.assert_called_once()
+    worker.predictor.predict.assert_not_called()
+    assert caplog.text == ""
+
+
+def test_geometry_point_budget_accepts_boundary_without_simplifying():
+    worker = coordinator()
+    points = [[-73.98, 40.75]] * MAX_ROUTE_GEOMETRY_POINTS
+    worker.router.directions.return_value["geometry"] = {"type": "LineString", "coordinates": points}
+    estimate = worker.estimate(PAYLOAD)
+    assert len(estimate.route_geometry["coordinates"]) == MAX_ROUTE_GEOMETRY_POINTS
+    assert estimate.to_dict()["route_geometry"]["coordinates"] == points
+    worker.predictor.predict.assert_called_once()
 
 
 @pytest.mark.parametrize("when", [
@@ -254,6 +301,8 @@ def test_session_rerun_never_repeats_routing_or_prediction_and_rejects_edited_pa
     first = execute_submission(state, event, deepcopy(PAYLOAD), worker)
     second = execute_submission(state, event, deepcopy(PAYLOAD), worker)
     assert first.success and second is first
+    assert first.estimate.submission_id == event
+    assert first.estimate.to_dict()["route_geometry"] == ROUTE_GEOMETRY
     worker.router.directions.assert_called_once()
     worker.predictor.predict.assert_called_once()
     changed = deepcopy(PAYLOAD)
@@ -261,6 +310,7 @@ def test_session_rerun_never_repeats_routing_or_prediction_and_rejects_edited_pa
     with pytest.raises(RouteFareError):
         execute_submission(state, event, changed, worker)
     assert first.estimate.pickup["label"] == "Synthetic pickup A"
+    assert first.estimate.to_dict()["route_geometry"] == ROUTE_GEOMETRY
     worker.router.directions.assert_called_once()
 
 
