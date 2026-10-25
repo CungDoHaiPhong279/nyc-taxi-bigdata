@@ -2041,3 +2041,59 @@ bundle, install43files/rerun giữ hashes+mtime và PLAN/preflight exit0.
 Thiếu dependency build, mạng tải dữ liệu, tài nguyên và full acquisition → ETL →
 DB counts/indexes/view → serving/readiness/rerun trên môi trường trống vẫn cần
 kiểm chứng riêng. Xem [PACKAGE P2 report](reports/PACKAGE_P2_REPORT.md).
+
+## Địa chỉ → routing → fare: Chặng 2A offline
+
+Đã thêm Mapbox client (suggest/retrieve/Directions `driving`), resolver Taxi Zone
+GeoJSON WGS84 có checksum, bộ điều phối route → frozen inference và component
+browser cục bộ để chọn địa chỉ. HTTP, geometry và predictor đều có thể inject;
+tests chỉ dùng dữ liệu tổng hợp. Chưa có geometry thật, API live hay bản đồ tuyến
+được kiểm chứng trong trình duyệt. Không thay weights, preprocessing hoặc hợp
+đồng bốn fields của `/predict`.
+
+Mặc định `FARE_ADDRESS_ENABLED` tắt: form mile/zone hiện tại giữ nguyên. Khi đặt
+`FARE_ADDRESS_ENABLED=1`, trang dùng component tìm/chọn/xác nhận A/B và form ngày
+giờ Jan–Jun/2025. `FARE_ADDRESS_ALLOW_NETWORK` cũng mặc định tắt; bật giao diện
+riêng chưa thể phát sinh API thật. Không có tọa độ hoặc giá demo tự điền thay thế.
+
+Python giữ cùng UUID cho suggest → retrieve, đổi UUID khi kết thúc/hết hạn phiên;
+UUID sự kiện chặn replay khi rerun, gồm cả yêu cầu lỗi. Kết quả chỉ giữ trong
+session memory và gắn với inputs đã submit, không cache toàn cục hoặc ghi địa chỉ/
+tọa độ/response vào logs, DB hay disk. Component không nhận token; label được
+hiển thị bằng text, không chèn HTML. Mỗi phiên giới hạn thao tác/yêu cầu để không
+tăng bộ nhớ vô hạn. Người dùng retry bằng lần gửi mới.
+
+Backend kiểm tra tọa độ hữu hạn, vùng NYC và polygon duy nhất; điểm ngoài/biên/
+overlap bị từ chối. Gate chặn EWR, JFK ↔ Manhattan, ngoài năm borough và chuyến
+chưa xác nhận standard metered. JFK ↔ borough khác/LGA có cảnh báo phụ phí chưa
+bao gồm. Không suy đoán Ratecode từ Directions. Giới hạn model 0–200 mile;
+distance gốc được đổi `meters / 1000` để hiển thị km và `meters / 1609.344` cho
+model, không làm tròn trước inference. Model vẫn phục vụ `fare_amount` USD;
+Weather chưa tham gia. MAE June cũ không chứng nhận toàn luồng địa chỉ → giá.
+
+Các checks offline (host cần pytest; AppTest cần thêm Streamlit đã cài sẵn):
+
+```powershell
+.venv\Scripts\python.exe -B -m pytest -q -p no:cacheprovider -o addopts= tests/test_dashboard_mapbox.py tests/test_taxi_zone_geometry.py tests/test_route_fare.py tests/test_address_component.py
+.venv\Scripts\python.exe -B -m pytest -q -p no:cacheprovider -o addopts= tests/test_dashboard_address_ui.py
+```
+
+Kiểm chứng local 2A: **165 tests backend/bridge/CI inventory PASS**, **61 tests
+prediction contract PASS** từ lượt trước. Kiểm chứng UI bổ sung bằng image sẵn có
+`nyc-taxi-dashboard:ml-p5-test` (Python3.11.17/Streamlit1.66.0/pytest9.1.1):
+**20/20 ca PASS** trong 11,14s, gồm 5 ca mới (3 AppTest + 2 tests flag/offline)
+và 15 ca UI cũ. Container tạm network none, source read-only, tmpfs, 1CPU/768MiB,
+timeout180s; không chạy lại 165/61 tests đã PASS. Rerun không gọi thêm
+Directions/predict, kết quả giữ đúng inputs đã submit. Node kiểm syntax/giao
+thức component với DOM stub PASS; chưa phải browser render hoặc smoke live.
+Không pull/build/install, không khởi tạo Spark/model hoặc kết nối services thật.
+
+Chặng 2B cần chuẩn bị geometry chính thức, kiểm topology/CRS và pin SHA256 đầy đủ;
+đóng gói asset vào image ngoài `data/` (đường này hiện bị Docker ignore). Cần
+Mapbox account/billing và token server riêng qua `MAPBOX_ACCESS_TOKEN`, không gửi
+token vào browser/log. Các biến `FARE_ADDRESS_GEOMETRY_PATH`,
+`FARE_ADDRESS_GEOMETRY_SHA256` và hai feature/network flags phải được cấu hình
+tường minh ở dashboard sau kiểm tra; Chặng 2A chưa sửa Compose/startup/package.
+Sau đó mới build/cập nhật dashboard có mục tiêu, kiểm browser/session, token
+restrictions, attribution và smoke live có giới hạn. AppTest/mock chỉ xác minh
+wiring, không phải bằng chứng chất lượng routing hoặc sai số fare end-to-end.

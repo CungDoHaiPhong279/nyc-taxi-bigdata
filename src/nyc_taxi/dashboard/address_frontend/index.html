@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font: 14px sans-serif; margin: 4px; color: #262730; }
+    input { box-sizing: border-box; width: 100%; padding: 8px; margin: 6px 0; }
+    button { padding: 7px; margin: 3px 4px 3px 0; cursor: pointer; }
+    #choices button { display: block; text-align: left; }
+    #selected { margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <label id="label" for="query"></label>
+  <input id="query" type="text" maxlength="256" autocomplete="off" placeholder="Nhập địa chỉ tại NYC">
+  <button id="search" type="button">Tìm địa chỉ</button>
+  <div id="choices"></div>
+  <div id="selected" aria-live="polite"></div>
+  <script>
+    "use strict";
+    let args = {};
+    const send = (type, payload = {}) => window.parent.postMessage(
+      {isStreamlitMessage: true, type, ...payload}, "*");
+    const height = () => send("streamlit:setFrameHeight", {height: document.body.scrollHeight + 15});
+    const emit = (kind, payload = {}) => send("streamlit:setComponentValue", {
+      value: {event_id: crypto.randomUUID(), session_token: args.session_token, kind, ...payload},
+      dataType: "json"
+    });
+    const button = (text, callback) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.textContent = text; // upstream labels are text, never HTML
+      item.onclick = () => { item.disabled = true; callback(); };
+      return item;
+    };
+    document.getElementById("search").onclick = () => {
+      const query = document.getElementById("query").value.trim();
+      if (query) emit("suggest", {query});
+    };
+    window.addEventListener("message", (event) => {
+      if (event.source !== window.parent || event.data.type !== "streamlit:render") return;
+      args = event.data.args;
+      document.getElementById("label").textContent = args.label;
+      const choices = document.getElementById("choices");
+      choices.replaceChildren();
+      (args.suggestions || []).forEach((candidate) => choices.appendChild(
+        button(candidate.label, () => emit("retrieve", {mapbox_id: candidate.mapbox_id}))
+      ));
+      if (args.retrieved) choices.appendChild(button(
+        "Dùng địa chỉ: " + args.retrieved.label,
+        () => emit("select", {selection: args.retrieved})
+      ));
+      document.getElementById("selected").textContent = args.selected
+        ? "Đã chọn: " + args.selected.label : "Chưa chọn địa chỉ.";
+      height();
+    });
+    send("streamlit:componentReady", {apiVersion: 1});
+    height();
+  </script>
+</body>
+</html>

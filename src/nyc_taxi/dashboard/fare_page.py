@@ -33,6 +33,12 @@ def load_model_metadata(base_url: str) -> dict:
 
 
 def render_page() -> None:
+    # The existing manual flow remains the default until address routing is
+    # explicitly enabled. Importing this branch never starts Spark or HTTP.
+    if os.environ.get("FARE_ADDRESS_ENABLED", "0") == "1":
+        from nyc_taxi.dashboard.address_page import render_page as render_address_page
+        render_address_page()
+        return
     st.title("Ước tính cước")
     st.caption("Mô hình lịch sử 2025 · Quãng đường do người dùng cung cấp · Không định tuyến hoặc dự báo ETA")
     st.markdown(
