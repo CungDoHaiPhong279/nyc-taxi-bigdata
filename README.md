@@ -2458,3 +2458,14 @@ mount để kiểm, chưa bake vào image; không chạy lại toàn CI. Chưa a
 preparation nguồn thật, training, metrics, dashboard integration hoặc hỗ trợ
 inference hiện tại. Chi tiết nguồn, hashes, lệnh và blockers:
 [PRETRIP V2 offline report](plans/PRETRIP_V2_OFFLINE_REPORT.md).
+
+Preparation v2 hiện nhận budget byte bắt buộc từ CLI và thực thi quota trước
+ghi: nguồn dùng lại tính một lần, cộng outputs/partial files, temporary files
+và checkpoint. Giữ riêng 64 KiB cho metadata/FAILED checkpoint; atomic JSON
+tính cả file cũ + scratch, Parquet header/footer cùng đi qua guarded sink.
+Lỗi báo used/remaining/reserved/available bytes và stop reason, không tự tăng
+budget. Đây là **logical bytes của file tác vụ quản lý**, không phải giới hạn
+biến động toàn ổ C/VHDX/pagefile. PLAN vẫn không ghi. Bổ sung đã kiểm bằng
+**37 tests preparation/CLI + 20 quota/inventory**, dữ liệu tổng hợp nhỏ; không
+chạy lại toàn bộ 112 tests. Peak 313,569 MiB vẫn là dự trù, 512 MiB chưa được
+duyệt và RAM chưa đo thực; chưa acquisition/training/metrics/deploy.

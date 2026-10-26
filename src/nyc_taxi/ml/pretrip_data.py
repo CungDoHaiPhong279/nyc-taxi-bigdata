@@ -19,6 +19,8 @@ from numbers import Real
 from pathlib import Path
 from typing import Any
 
+from nyc_taxi.ml.pretrip_budget import ManagedBudgetExceeded, ManagedFileBudget
+
 
 SOURCE_MONTHS = ("2026-06", "2026-07", "2026-08")
 SPLITS = ("train", "validation", "test")
@@ -138,16 +140,15 @@ def _cohort_failure(row: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _write_json(path: Path, value: Mapping[str, Any], *, exclusive: bool = False) -> None:
+def _write_json(path: Path, value: dict[str, Any], budget: ManagedFileBudget, *, exclusive: bool = False) -> None:
     # Only private files created by this invocation are updated. No row-level
     # data, input values, exception messages or service configuration are logged.
-    with path.open("x" if exclusive else "w", encoding="utf-8", newline="\n") as stream:
-        json.dump(value, stream, indent=2, sort_keys=True, allow_nan=False)
-        stream.write("\n")
+    budget.write_json(path, value, exclusive=exclusive)
 
 
 def prepare_samples(
     source_paths: Mapping[str, Path | str], output_dir: Path | str, *,
+    disk_budget_bytes: int,
     seed: int = 42, sample_modulus: int = 1_000_000,
     sample_buckets: int = 10_000, caps: Mapping[str, int] | None = None,
     batch_size: int = 8192, calendar: Any = None,
@@ -159,6 +160,8 @@ def prepare_samples(
     writable output path traversing a symlink. Failures retain a metadata-only
     FAILED checkpoint and any partial output, never remove or overwrite them.
     Caps stop preparation rather than truncating or changing seed/sample rate.
+    Explicit disk_budget_bytes covers unique sources and every owned live file,
+    including Parquet footer and atomic metadata temps; not physical C/VHDX.
     """
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -197,6 +200,9 @@ def prepare_samples(
         raise PreparationError("output directory already exists; choose a new attempt directory")
     if any(parent.is_symlink() for parent in destination.parents):
         raise PreparationError("output directory must not traverse a symlink")
+    # Refuse before mkdir if sources already consume the limit or the dedicated
+    # metadata/FAILED-checkpoint pool cannot be reserved. No implicit budget.
+    budget = ManagedFileBudget(inputs.values(), destination, disk_budget_bytes)
     destination.mkdir(parents=True, exist_ok=False)
     counts: dict[str, Any] = {
         "input_rows": 0, "waterfall_kept": dict.fromkeys(COHORT_STAGES, 0),
@@ -239,12 +245,12 @@ def prepare_samples(
         "outputs": {},
     }
     checkpoint = destination / "preparation_checkpoint.json"
-    _write_json(checkpoint, report, exclusive=True)
     # Bounds are enforced before retaining the next distinct journey, so memory
     # is O(batch_size + sum(caps)); there is no full-fact pandas conversion/cache.
     retained: dict[str, dict[str, Any]] = {}
     feature_keys: tuple[str, ...] | None = None
     try:
+        _write_json(checkpoint, report, budget, exclusive=True)
         for month, path in inputs.items():
             _assert_source_snapshot(path, source_snapshots[month])
             source_digest = _file_sha256(path)
@@ -253,7 +259,7 @@ def prepare_samples(
                 "bytes": source_snapshots[month][0], "sha256": source_digest,
                 "mtime_ns": source_snapshots[month][1],
             }
-            _write_json(checkpoint, report)
+            _write_json(checkpoint, report, budget)
             parquet = pq.ParquetFile(path)
             missing = sorted(set(READ_COLUMNS) - set(parquet.schema_arrow.names))
             if missing:
@@ -317,7 +323,7 @@ def prepare_samples(
                         "pickup_datetime_local": row["tpep_pickup_datetime"],
                     }
                     counts["selected_rows"][split] += 1
-                _write_json(checkpoint, report)
+                _write_json(checkpoint, report, budget)
             _assert_source_snapshot(path, source_snapshots[month])
         for month, path in inputs.items():
             _assert_source_snapshot(path, source_snapshots[month])
@@ -331,6 +337,8 @@ def prepare_samples(
             features_path = destination / f"{split}_features.parquet"
             labels_path = destination / f"{split}_labels.parquet"
             feature_writer = label_writer = None
+            feature_sink = label_sink = None
+            output_error = None
             try:
                 for start in range(0, len(keys), batch_size):
                     selected_keys = keys[start:start + batch_size]
@@ -345,15 +353,28 @@ def prepare_samples(
                         } for key in selected_keys
                     ])
                     if feature_writer is None:
-                        feature_writer = pq.ParquetWriter(features_path, feature_table.schema)
-                        label_writer = pq.ParquetWriter(labels_path, label_table.schema)
+                        feature_sink = budget.open_file(features_path)
+                        feature_writer = pq.ParquetWriter(feature_sink, feature_table.schema)
+                        label_sink = budget.open_file(labels_path)
+                        label_writer = pq.ParquetWriter(label_sink, label_table.schema)
                     feature_writer.write_table(feature_table)
                     label_writer.write_table(label_table)
+            except BaseException as error:
+                output_error = error
+                raise
             finally:
-                if feature_writer is not None:
-                    feature_writer.close()
-                if label_writer is not None:
-                    label_writer.close()
+                # close() writes Parquet footers through the same guarded sink.
+                # A secondary footer failure must not hide the original stop.
+                close_error = None
+                for output in (feature_writer, label_writer, feature_sink, label_sink):
+                    if output is not None:
+                        try:
+                            output.close()
+                        except Exception as error:
+                            if close_error is None:
+                                close_error = error
+                if output_error is None and close_error is not None:
+                    raise close_error
             report["outputs"][split] = {
                 "features": features_path.name, "labels": labels_path.name,
                 "rows": len(keys),
@@ -369,14 +390,25 @@ def prepare_samples(
             _assert_source_snapshot(path, source_snapshots[month])
         report["source_snapshot_verified"] = True
         report["status"] = "PREPARED_NOT_TRAINED"
-        _write_json(destination / "preparation_report.json", report, exclusive=True)
-        _write_json(checkpoint, report)
+        _write_json(destination / "preparation_report.json", report, budget, exclusive=True)
+        _write_json(checkpoint, report, budget)
         return report
     except Exception as error:
         report["status"] = "FAILED"
         report["error_type"] = type(error).__name__
+        report["stop_reason"] = budget.stop_reason or "preparation_failed"
         # Do not serialize exception text: it can contain paths or input values.
-        _write_json(checkpoint, report)
+        try:
+            _write_json(checkpoint, report, budget)
+        except ManagedBudgetExceeded:
+            # A future expanded report cannot spend the space required by the
+            # bounded FAILED checkpoint. Partial Parquet remains for diagnosis.
+            compact = {"status": "FAILED", "error_type": type(error).__name__,
+                       "stop_reason": budget.stop_reason or "preparation_failed"}
+            _write_json(checkpoint, compact, budget)
+        error.budget_usage = budget.snapshot()
+        if budget.stop_reason is not None:
+            error.stop_reason = budget.stop_reason
         raise
 
 

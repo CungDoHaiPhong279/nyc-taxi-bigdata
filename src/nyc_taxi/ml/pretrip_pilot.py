@@ -21,6 +21,21 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 MONTHS = ("2026-06", "2026-07", "2026-08")
 MIB = 1024 * 1024
 RECOMMENDED_PEAK_MIB = 512
+BUDGET_STOP_REASONS = frozenset({
+    "managed_file_budget_exceeded", "source_files_exceed_budget",
+    "metadata_reserve_unavailable", "metadata_reserve_exceeded",
+})
+_BUDGET_USAGE_INTEGERS = (
+    "limit_bytes", "sources_bytes", "managed_bytes", "used_bytes",
+    "remaining_bytes", "reserved_bytes", "available_write_bytes",
+)
+_PLAN_STOP_CODES = frozenset({
+    "invalid_source_manifest", "unsupported_source_url", "invalid_source_length",
+    "runtime_symlink_or_junction", "output_outside_private_runtime",
+    "output_already_exists_no_overwrite", "head_and_execute_are_separate_steps",
+    "explicit_preparation_disk_budget_required", "local_sources_missing_no_automatic_download",
+    "source_size_unmeasured_review_required", "local_source_size_differs_from_head_snapshot",
+})
 
 
 class PilotPlanError(ValueError):
@@ -75,6 +90,7 @@ def estimate_peak(sources: dict) -> dict[str, Any]:
             "future image/build/download staging and all training artifacts",
         ],
         "scope": "preparation only; existing runtime, no Spark, no model or ETL copies",
+        "estimate_is_actual_enforcement": False,
     }
 
 
@@ -136,7 +152,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--source-dir", type=Path, default=Path(".sandbox/pretrip-v2/sources"))
     result.add_argument("--output-dir", type=Path, default=Path(".sandbox/pretrip-v2/pilot-2026-06-08"))
     result.add_argument("--execute", action="store_true", help="Prepare a bounded sample only, never train")
-    result.add_argument("--disk-budget-mib", type=int, help="Explicitly acknowledged preparation disk budget; PLAN does not grant one")
+    result.add_argument(
+        "--disk-budget-mib", type=int,
+        help="Explicit managed-file logical-byte budget including local sources and outputs; not whole-drive physical growth",
+    )
     result.add_argument("--head", action="store_true", help="Optional HEAD metadata only; otherwise PLAN is entirely offline")
     return result
 
@@ -166,6 +185,17 @@ def run(arguments: argparse.Namespace, *, project_root: Path = PROJECT_ROOT,
         "local_sources": [{"month": month, "exists": path.is_file()} for month, path in paths.items()],
         "head_snapshot_is_content_verification": False,
         "peak_budget": estimate_peak(sources),
+        "managed_file_budget": {
+            "limit_bytes": arguments.disk_budget_mib * MIB if arguments.disk_budget_mib is not None else None,
+            "enforced": bool(arguments.execute),
+            "scope": "logical bytes of local source files plus managed sample/output/metadata files",
+            "not_covered": [
+                "whole C drive physical allocation", "Docker VHDX growth",
+                "pagefile/swap", "unrelated processes or files",
+            ],
+            "plan_writes_files": False,
+            "estimate_is_enforced_usage": False,
+        },
         "holdout": "prepared only; no fit/prediction/evaluation",
     }
     if arguments.head:
@@ -189,16 +219,40 @@ def run(arguments: argparse.Namespace, *, project_root: Path = PROJECT_ROOT,
         from nyc_taxi.ml.pretrip_data import prepare_samples
         preparer = prepare_samples
     return preparer(paths, output, seed=42, sample_modulus=1000000,
-                    sample_buckets=10000, caps=report["caps"], batch_size=8192, calendar=calendar)
+                    sample_buckets=10000, caps=report["caps"], batch_size=8192,
+                    calendar=calendar, disk_budget_bytes=arguments.disk_budget_mib * MIB)
+
+
+def _failure_report(error: Exception) -> dict[str, Any]:
+    """Expose only stable error codes and explicitly numeric budget counters."""
+    reason = getattr(error, "stop_reason", None)
+    code = "preparation_failed_see_private_checkpoint"
+    if isinstance(error, PilotPlanError) and str(error) in _PLAN_STOP_CODES:
+        code = str(error)
+    if isinstance(reason, str) and reason in BUDGET_STOP_REASONS:
+        code = reason
+    report: dict[str, Any] = {
+        "status": "FAILED", "code": code, "error_type": type(error).__name__,
+    }
+    usage = getattr(error, "budget_usage", None)
+    if isinstance(usage, dict):
+        safe_usage = {name: usage[name] for name in _BUDGET_USAGE_INTEGERS
+                      if name in usage and type(usage[name]) is int}
+        usage_reason = usage.get("stop_reason")
+        if isinstance(usage_reason, str) and usage_reason in BUDGET_STOP_REASONS:
+            safe_usage["stop_reason"] = usage_reason
+        if safe_usage:
+            report["budget_usage"] = safe_usage
+    return report
 
 
 def main(argv: list[str] | None = None) -> int:
     arguments = parser().parse_args(argv)
     try:
         report = run(arguments)
+        serialized = json.dumps(report, ensure_ascii=True, allow_nan=False)
     except Exception as error:
-        code = str(error) if isinstance(error, PilotPlanError) else "preparation_failed_see_private_checkpoint"
-        print(json.dumps({"status": "FAILED", "code": code, "error_type": type(error).__name__}))
+        print(json.dumps(_failure_report(error), ensure_ascii=True, allow_nan=False))
         return 1
-    print(json.dumps(report, ensure_ascii=True, allow_nan=False))
+    print(serialized)
     return 0

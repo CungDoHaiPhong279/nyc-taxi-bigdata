@@ -14,6 +14,7 @@ import pytest
 from nyc_taxi.ml import pretrip_data as data
 from nyc_taxi.ml import pretrip_features
 from nyc_taxi.ml.pretrip_features import FEATURE_COLUMNS
+from nyc_taxi.ml.pretrip_budget import METADATA_RESERVE_BYTES, ManagedBudgetExceeded
 
 
 RAW_SCHEMA = pa.schema([
@@ -56,6 +57,7 @@ def sources(tmp_path, *, additional=None, rows=None):
 
 
 def prepare(tmp_path, paths, **kwargs):
+    kwargs.setdefault("disk_budget_bytes", 1024 * 1024)
     return data.prepare_samples(
         paths, tmp_path / "attempt", sample_modulus=1, sample_buckets=1,
         batch_size=2, **kwargs,
@@ -193,11 +195,13 @@ def test_dedup_and_sample_content_deterministic_across_row_order_and_batch_size(
               for month in (6, 7, 8)}
     first = data.prepare_samples(
         sources(left, rows=values), left / "attempt",
+        disk_budget_bytes=1024 * 1024,
         sample_modulus=1, sample_buckets=1, batch_size=1,
     )
     second = data.prepare_samples(
         sources(right, rows={key: list(reversed(rows)) for key, rows in values.items()}),
-        right / "attempt", sample_modulus=1, sample_buckets=1, batch_size=3,
+        right / "attempt", disk_budget_bytes=1024 * 1024,
+        sample_modulus=1, sample_buckets=1, batch_size=3,
     )
     assert first["counts"] == second["counts"]
     for split in data.SPLITS:
@@ -343,3 +347,91 @@ def test_requires_exact_three_month_source_configuration(tmp_path, source_keys):
     with pytest.raises(data.PreparationError, match="exactly"):
         prepare(tmp_path, changed)
     assert not (tmp_path / "attempt").exists()
+
+
+def _task_used_bytes(paths, output):
+    unique = {(path.stat().st_dev, path.stat().st_ino): path for path in paths.values()}
+    return sum(path.stat().st_size for path in unique.values()) + sum(
+        path.stat().st_size for path in output.rglob("*") if path.is_file()
+    )
+
+
+def test_existing_sources_consume_budget_before_output_directory_is_created(tmp_path):
+    paths = sources(tmp_path)
+    source_bytes = sum(path.stat().st_size for path in paths.values())
+    with pytest.raises(ManagedBudgetExceeded) as caught:
+        prepare(tmp_path, paths, disk_budget_bytes=source_bytes - 1)
+    assert caught.value.stop_reason == "source_files_exceed_budget"
+    assert caught.value.budget_usage["used_bytes"] == source_bytes
+    assert not (tmp_path / "attempt").exists()
+    with pytest.raises(ManagedBudgetExceeded, match="metadata_reserve_unavailable"):
+        prepare(tmp_path, paths, disk_budget_bytes=source_bytes + METADATA_RESERVE_BYTES - 1)
+    assert not (tmp_path / "attempt").exists()
+
+
+@pytest.mark.parametrize("data_allowance", [0, 7, 200, 2000])
+def test_parquet_budget_stop_keeps_failed_checkpoint_without_exceeding_limit(tmp_path, data_allowance):
+    paths = sources(tmp_path)
+    source_bytes = sum(path.stat().st_size for path in paths.values())
+    limit = source_bytes + METADATA_RESERVE_BYTES + data_allowance
+    with pytest.raises(Exception) as caught:
+        prepare(tmp_path, paths, disk_budget_bytes=limit)
+    checkpoint = json.loads((tmp_path / "attempt/preparation_checkpoint.json").read_text())
+    assert checkpoint["status"] == "FAILED"
+    assert checkpoint["stop_reason"] == "managed_file_budget_exceeded"
+    usage = checkpoint["disk_budget"]
+    actual = _task_used_bytes(paths, tmp_path / "attempt")
+    assert actual == usage["used_bytes"] <= limit
+    assert usage["remaining_bytes"] == limit - actual
+    assert usage["peak_used_bytes"] <= limit
+    assert usage["sources_bytes"] == source_bytes
+    assert caught.value.budget_usage["used_bytes"] == actual
+    assert caught.value.stop_reason == "managed_file_budget_exceeded"
+    assert not list((tmp_path / "attempt").glob("*.tmp"))
+    assert all(path.is_file() for path in paths.values())
+
+
+def test_successful_preparation_reports_actual_byte_usage_and_guarded_metadata_peak(tmp_path):
+    paths = sources(tmp_path)
+    report = prepare(tmp_path, paths)
+    usage = report["disk_budget"]
+    actual = _task_used_bytes(paths, tmp_path / "attempt")
+    checkpoint = json.loads((tmp_path / "attempt/preparation_checkpoint.json").read_text())
+    assert actual == usage["used_bytes"] == checkpoint["disk_budget"]["used_bytes"]
+    assert usage["remaining_bytes"] == 1024 * 1024 - actual
+    assert usage["peak_used_bytes"] <= usage["limit_bytes"]
+    assert usage["peak_used_bytes"] > actual  # old + temporary checkpoint counted
+    assert usage["reserved_bytes"] > 0
+
+
+def test_preparation_requires_explicit_byte_budget_instead_of_silent_default(tmp_path):
+    paths = sources(tmp_path)
+    with pytest.raises(TypeError, match="disk_budget_bytes"):
+        data.prepare_samples(paths, tmp_path / "attempt")
+    assert not (tmp_path / "attempt").exists()
+
+
+def test_parquet_exact_data_ceiling_passes_and_one_byte_less_fails_on_footer(tmp_path):
+    paths = sources(tmp_path)
+    source_bytes = sum(path.stat().st_size for path in paths.values())
+    reference = prepare(tmp_path, paths)
+    data_bytes = sum(path.stat().st_size for path in (tmp_path / "attempt").glob("*.parquet"))
+    limit = source_bytes + METADATA_RESERVE_BYTES + data_bytes
+    completed = data.prepare_samples(
+        paths, tmp_path / "exact", disk_budget_bytes=limit,
+        sample_modulus=1, sample_buckets=1, batch_size=2,
+    )
+    assert completed["counts"] == reference["counts"]
+    assert completed["disk_budget"]["available_write_bytes"] == 0
+    assert completed["disk_budget"]["used_bytes"] == _task_used_bytes(paths, tmp_path / "exact")
+    with pytest.raises(Exception) as caught:
+        data.prepare_samples(
+            paths, tmp_path / "one-byte-short", disk_budget_bytes=limit - 1,
+            sample_modulus=1, sample_buckets=1, batch_size=2,
+        )
+    assert caught.value.stop_reason == "managed_file_budget_exceeded"
+    checkpoint = json.loads((tmp_path / "one-byte-short/preparation_checkpoint.json").read_text())
+    assert checkpoint["status"] == "FAILED"
+    assert checkpoint["counts"]["selected_rows"] == dict(train=1, validation=1, test=1)
+    assert checkpoint["disk_budget"]["peak_used_bytes"] <= limit - 1
+    assert checkpoint["disk_budget"]["used_bytes"] == _task_used_bytes(paths, tmp_path / "one-byte-short")

@@ -44,6 +44,11 @@ def test_default_plan_is_offline_and_does_not_open_parquet_or_create_outputs(pro
     assert report["seed"] == 42 and report["sample_percent"] == 1
     assert report["caps"] == {"train": 100000, "validation": 50000, "test": 50000}
     assert report["split"] == {"train": "2026-06", "validation": "2026-07", "test": "2026-08"}
+    assert report["managed_file_budget"]["limit_bytes"] is None
+    assert report["managed_file_budget"]["enforced"] is False
+    assert report["managed_file_budget"]["plan_writes_files"] is False
+    assert report["managed_file_budget"]["estimate_is_enforced_usage"] is False
+    assert "logical bytes" in report["managed_file_budget"]["scope"]
     assert not (project / ".sandbox").exists()
     preparer.assert_not_called()
     network.assert_not_called()
@@ -56,6 +61,7 @@ def test_peak_estimate_separates_measured_source_bytes_from_unmeasured_allowance
     assert budget["components"]["bronze_silver_gold_copies_bytes"] == 0
     assert budget["components"]["spark_shuffle_bytes"] == 0
     assert budget["budget_granted"] is False and budget["unmeasured"]
+    assert budget["estimate_is_actual_enforcement"] is False
     source["files"][0]["content_length_bytes"] = None
     unknown = pilot.estimate_peak(source)
     assert unknown["components"]["local_sources_bytes_measured"] is None
@@ -109,11 +115,100 @@ def test_execute_dispatches_fixed_sampling_and_stops_on_source_size_drift(projec
     assert prepare.call_args.kwargs["sample_modulus"] == 1000000
     assert prepare.call_args.kwargs["sample_buckets"] == 10000
     assert prepare.call_args.kwargs["batch_size"] == 8192
+    assert prepare.call_args.kwargs["disk_budget_bytes"] == 512 * pilot.MIB
     assert not (project / ".sandbox/pretrip-v2/pilot-2026-06-08").exists()
     (project / ".sandbox/pretrip-v2/sources/yellow_tripdata_2026-06.parquet").write_bytes(b"changed")
     with pytest.raises(pilot.PilotPlanError, match="local_source_size_differs"):
         pilot.run(args, project_root=project, preparer=prepare)
     prepare.assert_called_once()
+
+
+def test_plan_with_acknowledged_budget_does_not_enforce_write_or_prepare(project):
+    prepare = Mock(side_effect=AssertionError("PLAN must not prepare"))
+    report = pilot.run(
+        pilot.parser().parse_args(["--disk-budget-mib", "1024"]),
+        project_root=project, preparer=prepare,
+    )
+    assert report["managed_file_budget"]["limit_bytes"] == 1024 * pilot.MIB
+    assert report["managed_file_budget"]["enforced"] is False
+    assert "Docker VHDX growth" in report["managed_file_budget"]["not_covered"]
+    assert "pagefile/swap" in report["managed_file_budget"]["not_covered"]
+    assert not (project / ".sandbox").exists()
+    prepare.assert_not_called()
+
+
+def test_execute_passes_exact_user_budget_bytes_not_estimated_or_default_budget(project):
+    local_sources(project)
+    prepare = Mock(return_value={"status": "PREPARED_NOT_TRAINED"})
+    arguments = pilot.parser().parse_args(["--execute", "--disk-budget-mib", "1025"])
+    pilot.run(arguments, project_root=project, preparer=prepare)
+    prepare.assert_called_once()
+    assert prepare.call_args.kwargs["disk_budget_bytes"] == 1025 * 1024 * 1024
+
+
+@pytest.mark.parametrize("reason", sorted(pilot.BUDGET_STOP_REASONS))
+def test_main_emits_safe_budget_error_counters_and_allowlisted_reason(monkeypatch, capsys, reason):
+    error = ValueError("PRIVATE source row, token or full server response")
+    error.stop_reason = reason
+    error.budget_usage = {
+        "limit_bytes": 100, "sources_bytes": 20, "managed_bytes": 81,
+        "used_bytes": 101, "remaining_bytes": 0, "reserved_bytes": 8,
+        "available_write_bytes": 0, "stop_reason": reason,
+        "raw_response": "PRIVATE", "source_path": "PRIVATE",
+    }
+    monkeypatch.setattr(pilot, "run", Mock(side_effect=error))
+    assert pilot.main([]) == 1
+    printed = capsys.readouterr().out
+    report = json.loads(printed)
+    assert report["status"] == "FAILED"
+    assert report["code"] == reason
+    assert report["error_type"] == "ValueError"
+    assert report["budget_usage"] == {
+        name: value for name, value in error.budget_usage.items()
+        if name not in {"raw_response", "source_path"}
+    }
+    assert "PRIVATE" not in printed
+
+
+def test_main_rejects_non_allowlisted_budget_reason_and_non_numeric_counters(monkeypatch, capsys):
+    error = RuntimeError("PRIVATE exception")
+    error.stop_reason = "PRIVATE reason"
+    error.budget_usage = {
+        "limit_bytes": "PRIVATE", "sources_bytes": True,
+        "managed_bytes": float("nan"), "used_bytes": 42,
+        "stop_reason": "PRIVATE reason", "unknown": 999,
+    }
+    monkeypatch.setattr(pilot, "run", Mock(side_effect=error))
+    assert pilot.main([]) == 1
+    printed = capsys.readouterr().out
+    report = json.loads(printed)
+    assert report["code"] == "preparation_failed_see_private_checkpoint"
+    assert report["budget_usage"] == {"used_bytes": 42}
+    assert "PRIVATE" not in printed
+
+
+@pytest.mark.parametrize("report", [
+    {"status": "PREPARED_NOT_TRAINED", "bad": {"not-json"}},
+    {"status": "PREPARED_NOT_TRAINED", "bad": float("nan")},
+])
+def test_main_report_serialization_failure_is_exit_one_safe_json(monkeypatch, capsys, report):
+    monkeypatch.setattr(pilot, "run", Mock(return_value=report))
+    assert pilot.main([]) == 1
+    failure = json.loads(capsys.readouterr().out)
+    assert failure["status"] == "FAILED"
+    assert failure["code"] == "preparation_failed_see_private_checkpoint"
+    assert failure["error_type"] in {"TypeError", "ValueError"}
+
+
+def test_main_only_emits_allowlisted_plan_error_codes(monkeypatch, capsys):
+    monkeypatch.setattr(pilot, "run", Mock(side_effect=pilot.PilotPlanError("PRIVATE")))
+    assert pilot.main([]) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["code"] == "preparation_failed_see_private_checkpoint"
+    monkeypatch.setattr(pilot, "run", Mock(side_effect=pilot.PilotPlanError("invalid_source_length")))
+    assert pilot.main([]) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["code"] == "invalid_source_length"
 
 
 def test_preparation_failure_propagates_without_retry_or_deleting_checkpoint(project):

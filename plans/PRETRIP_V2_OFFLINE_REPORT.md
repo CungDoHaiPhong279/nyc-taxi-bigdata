@@ -159,3 +159,68 @@ C trống đo trước 87.195.643.904 bytes và sau 87.074.672.640 bytes (khoả
 81,208 → 81,095 GiB); chênh toàn ổ không được quy toàn bộ cho lượt này. RAM
 available trước 2.901.588 KiB, sau 2.722.160 KiB; đây là snapshots host, không
 phải peak RSS preparation. Không tự tăng/cấp lại ngân sách chuyển tiếp.
+
+## Bổ sung — giới hạn byte được thực thi trong preparation
+
+Bổ sung từ lượt kiểm chứng quota sau checkpoint offline `3eabf7f`. Các số
+177,569 MiB nguồn và 313,569 MiB peak dự trù ở trên giữ nguyên là HEAD/ước tính,
+**không phải số dùng thực hoặc quota tự được cấp**. 512 MiB vẫn là đề xuất cần
+duyệt riêng; RAM 384–768 MiB vẫn chưa được đo trên preparation nguồn thật.
+
+- CLI chuyển chính xác `--disk-budget-mib * 1.048.576` xuống `prepare_samples`
+  qua keyword bắt buộc `disk_budget_bytes`; API không có budget mặc định.
+  CLI giữ guard tối thiểu 512 MiB hiện có, không tự tăng số người dùng truyền.
+  PLAN chỉ mô tả scope/limit (nếu có), không mở nguồn hoặc tạo file/checkpoint.
+- `ml/pretrip_budget.py` đếm **logical byte-length**: tất cả Parquet nguồn của
+  tác vụ, kể cả nguồn có sẵn/dùng lại, cộng outputs, partial files, file tạm và
+  metadata/checkpoints còn tồn tại. Cùng file được đọc nhiều lần chỉ tính một
+  lần; hardlink dedup theo device/inode, fallback đường dẫn resolved chuẩn hóa.
+  Config/code có sẵn và file ngoài tác vụ không thuộc quota dữ liệu này.
+- Trước tạo output directory: nguồn vượt limit hoặc không chừa được pool
+  metadata **64 KiB** thì dừng, không ghi file mới. Nguồn đã vượt budget từ
+  trước có thể được báo used > limit; preparation không tạo ra phần vượt đó.
+- Data output ghi qua sink không buffer có kiểm growth **trước mỗi write hoặc
+  truncate**, bao gồm header, batch và footer khi Arrow writer đóng. Không
+  truyền pathname cho Arrow để bỏ qua guard. Ghi đè byte đã có không bị cộng
+  như append; mở file mới không ghi đè output cũ. Data writes không được tiêu
+  pool metadata đã giữ riêng.
+- Metadata JSON tối đa **16 KiB/document**; atomic replacement tính cả file cũ
+  và `.tmp` đồng thời trước `replace`. Hai metadata documents của preparation
+  và scratch tối đa 48 KiB, nằm trong pool 64 KiB để vẫn ghi được FAILED
+  checkpoint nhỏ. Oversized report bị chặn trước ghi; dùng compact FAILED
+  metadata nếu cần. Chỉ xóa metadata scratch do chính lần ghi lỗi tạo, giữ
+  checkpoint cũ, nguồn và partial Parquet. Lỗi footer/cleanup tiếp theo không
+  che mất stop reason ban đầu.
+- Checkpoint/report trả `disk_budget`: `limit_bytes`, `sources_bytes`,
+  `managed_bytes`, `used_bytes`, `remaining_bytes`, `reserved_bytes`,
+  `available_write_bytes`, `peak_used_bytes` và `stop_reason`. `remaining_bytes`
+  gồm phần còn bảo vệ cho metadata; data chỉ được dùng `available_write_bytes`.
+  Counters trong từng metadata document phản ánh snapshot sau atomic commit
+  document đó; kết quả trả về là snapshot cuối lần preparation. CLI lỗi chỉ
+  in counters/mã allowlist qua `budget_usage`, không in exception text/dữ liệu.
+- Mã dừng: `source_files_exceed_budget`, `metadata_reserve_unavailable`,
+  `managed_file_budget_exceeded`, `metadata_reserve_exceeded`. Không ghi FAILED
+  file nếu thiếu chỗ reserve ngay từ preflight; CLI vẫn báo counters và lý do.
+
+Giới hạn này **không bảo đảm physical allocation toàn ổ C, VHDX, pagefile/swap,
+filesystem overhead hay file/process ngoài tác vụ**. Không kiểm soát được ghi
+đồng thời từ process khác: nguồn phải giữ bất biến, output attempt phải riêng.
+Guard re-stat nguồn trước ghi và snapshot checks tiếp tục chặn nguồn đổi; nguồn
+bị process ngoài làm vượt budget hoặc lỗi I/O vật lý có thể ngăn checkpoint.
+Không tự xóa/giảm dữ liệu ngoài tác vụ để chữa tình huống đó.
+
+Kiểm chứng bổ sung thực tế bằng image sẵn có, network none, source read-only,
+tmpfs 128 MiB, 1 CPU/768 MiB, không install/build:
+
+- **37 tests preparation/CLI PASS (4,21 giây)**; 24 ca không liên quan bị
+  deselect. Không chạy lại feature/DST suite hoặc toàn bộ 112 tests cũ.
+- **20 tests quota/inventory PASS (0,79 giây)**: byte sát limit + byte tiếp
+  theo bị chặn, sources/reused/hardlink, seek/truncate, tmp + final, atomic peak,
+  metadata oversized/FAILED/cleanup và chặn metadata ghi đè data.
+- Tiny Parquet integration kiểm output allowance chính xác PASS; thiếu đúng
+  **1 byte** thì footer bị chặn, giữ FAILED checkpoint, actual/peak managed
+  bytes không vượt quota. Không tạo file lớn hoặc đọc dữ liệu/model thật.
+
+Chưa chạy acquisition, preparation nguồn thật hoặc training; chưa có metrics,
+chưa build/deploy. Không tự duyệt disk budget/RAM mới. Không sửa v1, PACKAGE P3,
+PBIX, `.env`, artifacts hoặc services.
