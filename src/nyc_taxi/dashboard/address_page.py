@@ -117,6 +117,8 @@ def render_page() -> None:
         # A stable component key preserves the browser map across Streamlit reruns.
         route_map(
             stored.get("route_geometry"), submission_id=stored.get("submission_id"),
+            pickup=[stored["pickup"]["longitude"], stored["pickup"]["latitude"]],
+            dropoff=[stored["dropoff"]["longitude"], stored["dropoff"]["latitude"]],
             access_token=os.environ.get("MAPBOX_ACCESS_TOKEN", "") if online else "",
             online=online, key="address_submitted_route_map",
         )

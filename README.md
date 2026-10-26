@@ -2096,7 +2096,7 @@ dashboard thử có mục tiêu, kiểm browser/session, token
 restrictions, attribution và smoke live có giới hạn. AppTest/mock chỉ xác minh
 wiring, không phải bằng chứng chất lượng routing hoặc sai số fare end-to-end.
 
-## Địa chỉ → routing → fare: checkpoint Chặng 2B (chuẩn bị nhẹ)
+## Địa chỉ → routing → fare: Chặng 2B — geometry và kiểm chứng live
 
 Geometry chính thức từ [TLC](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)
 được lưu ngoài `data/`, tại `assets/taxi_zones/`. ZIP nguồn 1.022.574bytes; GeoJSON
@@ -2122,18 +2122,10 @@ SHA256 và manifest `validated` trước khi phục vụ. `.env.example` để t
 Không sửa `.env`, startup/package hoặc model artifacts, không bật flags cho
 dashboard đang chạy. Các thay đổi Docker/Compose này **chưa được triển khai**.
 
-Kiểm tra nhẹ đã chạy: **11/11 tests geometry asset/preparation PASS** trên host,
-runtime loader đọc đủ 263 IDs, full topology PASS; không chạy lại bộ tests 2A.
-RAM available trước bước này chỉ **1,128GiB (<2GiB)**, nên dừng trước build và
-chạy dashboard thử theo giới hạn tài nguyên. **Chưa build image mới**, chưa chạy
-geometry/UI tests trong image mới, chưa kiểm browser/map/attribution, prediction
-parity hay cache/rerun live; không có request Mapbox/map load bổ sung.
-
-Bước tiếp cần RAM available ≥2GiB và giữ ngân sách tăng thêm ≤1GiB: build có cache
-bằng tag thử mới (không pull/`--no-cache`, không thay service đang chạy), chạy
-dashboard tạm tại `127.0.0.1:18501` giới hạn 1CPU/768MiB, rồi kiểm UI thật và parity
-`/predict` ≤1e-9. Live budget tối đa 2 search sessions/4 Search requests,
-1 Directions/3 map loads, không retry tự động. Chưa thể kết luận toàn Chặng 2B PASS.
+Checkpoint geometry: **11/11 tests geometry asset/preparation PASS** trên host,
+runtime loader đọc đủ 263 IDs, full topology PASS; không tải/kiểm tra lại geometry.
+Lượt chuẩn bị ban đầu dừng do giới hạn tài nguyên; các kết quả renderer, CI và
+live bên dưới là những lượt kiểm chứng tiếp theo, không phải đã đạt tại checkpoint đó.
 
 ### Bổ sung renderer offline, chưa build local
 
@@ -2151,7 +2143,8 @@ UUID của lần submit. Bản đồ dùng snapshot đó, không gọi Direction
 Stable component key giữ cùng iframe/map qua rerun; cùng UUID/geometry không
 reload source, lần submit mới cập nhật source hiện có. Đổi draft chưa gửi không
 đổi tuyến/cước đã hiển thị. CDN timeout 15s và lỗi có thông báo an toàn, không tự
-retry khi rerun. Reload trang/browser vẫn có thể tạo map load mới; chưa đo live.
+retry khi rerun. Reload trang/browser vẫn có thể tạo map load mới; không đồng
+nghĩa với rerun trong cùng phiên đã được kiểm chứng bên dưới.
 
 Kiểm chứng bổ sung trên source hiện tại:
 
@@ -2169,7 +2162,41 @@ Job CI `compose-and-dashboard` hiện có thêm Node/DOM tests và smoke chạy 
 trong image vừa build: kiểm full geometry SHA256, IDs 1–263 và các frontend assets
 đã COPY. Không thêm workflow/job. `scripts/check_dashboard_package.py` cũng có thể
 chạy offline từ source với `PYTHONPATH=src`; smoke source không chứng minh image.
-**Chưa build local hoặc chạy CI remote cho thay đổi này.** AppTest/DOM stub không
-chứng minh bản đồ, logo/attribution đã render thật; browser live, counts map loads,
-token restrictions và prediction parity ≤1e-9 vẫn cần lượt kiểm chứng riêng.
-Không gọi thêm Search/Directions/map load; hai flags vẫn mặc định tắt.
+CI remote của commit `e23225a` đã PASS cả ba jobs, gồm build/smoke image dashboard;
+không build local. AppTest/DOM stub không thay thế kiểm chứng browser thật.
+Hai flags vẫn mặc định tắt; dashboard chính **chưa triển khai luồng địa chỉ mới**.
+
+### Kết quả live và marker A/B
+
+Luồng browser Chrome thật đã **PASS**: Search → Directions → Taxi Zones → frozen
+inference → tuyến/bản đồ/cước → rerun. PU/DO LocationID **164/43**, quãng đường
+**6,061417 km**, cước cơ bản hiển thị **$21.04 USD** cho thời điểm local NYC
+15/01/2025 10:00. Model nhận `Directions meters / 1609.344` nguyên độ chính xác,
+không chuyển từ km đã làm tròn. Logo/attribution Mapbox hiển thị rõ.
+
+Đối chiếu response prediction gốc từ UI và một POST trực tiếp với **cùng bốn
+features live**: sai lệch tuyệt đối **0**. Rerun giữ đúng snapshot/UUID, tuyến và
+kết quả đã submit; không tăng requests. Tổng lượt live: **4 Search** (2 suggest,
+2 retrieve), **1 Directions**, **1 map load**, **2 POST /predict** (UI + parity).
+Live local dùng image sẵn có `nyc-taxi-dashboard:ml-p5-test` + source/assets
+read-only, **khác image mới được CI build/smoke**. Container/browser thử đã dọn;
+dashboard gốc được bật lại, không triển khai tính năng mới lên dashboard chính.
+
+**Lượt live trên chưa có marker A/B.** Marker bổ sung sau đó dùng tọa độ lựa chọn
+trong snapshot đã submit (không lấy điểm route đã snap hoặc draft đang sửa):
+**A = điểm đón**, **B = điểm đến**, nhãn text an toàn và màu phân biệt. Cùng UUID
+không tạo thêm map/marker; submit mới gỡ marker cũ rồi cập nhật trong cùng map.
+Chỉ kiểm chứng marker bằng tests bridge/AppTest và Node/DOM offline trong lượt
+bổ sung này; **chưa kiểm marker bằng browser live hoặc image build mới**.
+Không thêm Search/Directions/predict, dependency hoặc thay model/đổi đơn vị.
+
+Tests bị ảnh hưởng: **12/12 Node/DOM PASS** trên host, **51/51 Python PASS** (42 bridge +
+9 UI/AppTest, 8,54s) trong image test sẵn có, network none, source read-only,
+tmpfs, 1CPU/768MiB, timeout180s. Kiểm tra vị trí/nhãn A-B, thay tuyến, cùng UUID,
+draft không đổi marker và teardown; chỉ dùng tọa độ tổng hợp. Không chạy lại
+các bộ tests/CI khác, không gọi API live, mở browser hoặc build local.
+
+Đây là demo lịch sử standard-rate, ước tính `fare_amount` USD chưa gồm tip/toll/
+phụ phí, không phải tổng thanh toán hoặc giá hiện tại. Parity không chứng nhận
+accuracy toàn luồng địa chỉ → giá; không suy diễn đã sửa nguyên nhân Docker/VM
+dừng hoặc lỗi JVM cũ. Không lưu raw responses, token hay tọa độ live trong tài liệu/tests.

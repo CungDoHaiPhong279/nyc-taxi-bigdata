@@ -11,15 +11,20 @@ const html = fs.readFileSync(path.join(__dirname,
   "../src/nyc_taxi/dashboard/route_map_frontend/index.html"), "utf8");
 const source = html.match(/<script>\s*([\s\S]*?)\s*<\/script>/)[1];
 const geometry = {type: "LineString", coordinates: [[-73.980123456789, 40.75], [-73.97, 40.76]]};
+// Synthetic selected points deliberately differ from snapped route endpoints.
+const pickup = [-73.985678901234, 40.745678901234];
+const dropoff = [-73.965432109876, 40.765432109876];
 const args = (overrides = {}) => ({online: true, access_token: "pk.synthetic_public_value",
-  submission_id: "submitted-1", geometry: structuredClone(geometry), ...overrides});
+  submission_id: "submitted-1", geometry: structuredClone(geometry),
+  pickup: [...pickup], dropoff: [...dropoff], ...overrides});
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
 
-function harness({libraryError = false, deferredLibrary = false} = {}) {
+function harness({libraryError = false, deferredLibrary = false, markerFailureAt = null} = {}) {
   const appended = [];
   const messages = [];
   const instances = [];
+  const markerInstances = [];
   const listeners = {};
   const timers = new globalThis.Map();
   let timerId = 0;
@@ -27,7 +32,8 @@ function harness({libraryError = false, deferredLibrary = false} = {}) {
   const parent = {postMessage: (message) => messages.push(message)};
   const document = {
     body: {scrollHeight: 410}, getElementById: (id) => nodes[id],
-    createElement: (tagName) => ({tagName}),
+    createElement: (tagName) => ({tagName, attributes: {},
+      setAttribute(name, value) { this.attributes[name] = value; }}),
     head: {appendChild: (node) => {
       appended.push(node);
       if (node.tagName === "script" && !deferredLibrary)
@@ -50,13 +56,25 @@ function harness({libraryError = false, deferredLibrary = false} = {}) {
     fitBounds(bounds, options) { this.bounds.push({bounds: plain(bounds), options: plain(options)}); }
     remove() { this.removed = true; }
   }
-  const window = {parent, mapboxgl: {Map}, addEventListener: (type, callback) => { listeners[type] = callback; },
+  class Marker {
+    constructor(options) {
+      this.options = options; this.removed = 0;
+      this.index = markerInstances.length; markerInstances.push(this);
+    }
+    setLngLat(point) { this.point = plain(point); return this; }
+    addTo(map) {
+      if (this.index === markerFailureAt) throw new Error("Synthetic marker failure");
+      this.map = map; return this;
+    }
+    remove() { this.removed++; return this; }
+  }
+  const window = {parent, mapboxgl: {Map, Marker}, addEventListener: (type, callback) => { listeners[type] = callback; },
     setTimeout: (callback, milliseconds) => { timers.set(++timerId, {callback, milliseconds}); return timerId; },
     clearTimeout: (id) => timers.delete(id)};
   const context = vm.createContext({window, document, console: {log: () => assert.fail("Unexpected log"),
     warn: () => assert.fail("Unexpected warning"), error: () => assert.fail("Unexpected error log")}});
   vm.runInContext(source, context, {filename: "route_map_frontend/index.html"});
-  return {appended, messages, instances, nodes, timers,
+  return {appended, messages, instances, markerInstances, nodes, timers,
     render: async (value) => {
       listeners.message({source: parent, data: {type: "streamlit:render", args: value}});
       await tick();
@@ -74,6 +92,9 @@ test("offline default and invalid routes/tokens do not load any external resourc
   for (const value of [undefined, {}, args({online: false}), args({online: "true"}),
     args({access_token: ""}), args({access_token: "sk.synthetic_secret"}),
     args({access_token: "pk.bad\nvalue"}), args({geometry: null}),
+    args({pickup: null}), args({dropoff: undefined}), args({pickup: [0]}),
+    args({pickup: [NaN, 0]}), args({dropoff: [0, Infinity]}),
+    args({pickup: [true, 0]}), args({pickup: [181, 0]}), args({dropoff: [0, 91]}),
     args({geometry: {type: "LineString", coordinates: [[0, 0]]}}),
     args({geometry: {type: "LineString", coordinates: [[NaN, 0], [0, 0]]}}),
     args({geometry: {type: "LineString", coordinates: [[181, 0], [0, 0]]}})]) {
@@ -81,6 +102,7 @@ test("offline default and invalid routes/tokens do not load any external resourc
   }
   assert.equal(ui.appended.length, 0);
   assert.equal(ui.instances.length, 0);
+  assert.equal(ui.markerInstances.length, 0);
   assert.equal(ui.nodes.map.style.display, "none");
   assert.equal(ui.messages[0].type, "streamlit:componentReady");
 });
@@ -110,6 +132,39 @@ test("only explicit online render loads pinned JS/CSS and keeps standard attribu
   assert.equal(/<script[^>]+src=|<link[^>]+href=/.test(html), false);
 });
 
+test("markers A/B use submitted selections, distinct safe labels, and include both in bounds", async () => {
+  const ui = harness();
+  await ui.render(args({pickup_label: '<img src=x onerror="fail()">',
+    dropoff_label: '<script>fail()</script>'}));
+  const map = ui.instances[0]; map.events.load();
+  assert.equal(ui.markerInstances.length, 2);
+  const [a, b] = ui.markerInstances;
+  assert.deepEqual(a.point, pickup);
+  assert.deepEqual(b.point, dropoff);
+  assert.notDeepEqual(a.point, geometry.coordinates[0]);
+  assert.notDeepEqual(b.point, geometry.coordinates[1]);
+  assert.equal(a.map, map);
+  assert.equal(b.map, map);
+  assert.equal(a.options.anchor, "center");
+  assert.equal(b.options.anchor, "center");
+  assert.equal(a.options.element.textContent, "A");
+  assert.equal(b.options.element.textContent, "B");
+  assert.match(a.options.element.title, /Pickup/);
+  assert.match(b.options.element.title, /Dropoff/);
+  for (const marker of [a, b]) {
+    const element = marker.options.element;
+    assert.equal(element.attributes.role, "img");
+    assert.equal(element.attributes["aria-label"], element.title);
+    assert.equal(/[<>]|fail\(/.test(element.title), false);
+    assert.equal("innerHTML" in element, false);
+  }
+  assert.notEqual(a.options.element.className, b.options.element.className);
+  assert.deepEqual(map.bounds[0].bounds, [[pickup[0], pickup[1]], [dropoff[0], dropoff[1]]]);
+  assert.equal(map.bounds[0].options.padding, 40);
+  assert.equal(map.options.attributionControl, true);
+  assert.equal(map.options.logoPosition, "bottom-left");
+});
+
 test("same submitted route survives reruns/draft inputs without new map/source or requests", async () => {
   const ui = harness();
   await ui.render(args());
@@ -122,6 +177,8 @@ test("same submitted route survives reruns/draft inputs without new map/source o
   assert.equal(map.added.length, 1);
   assert.equal(map.updated.length, 0);
   assert.equal(map.bounds.length, 1);
+  assert.equal(ui.markerInstances.length, 2);
+  assert.equal(ui.markerInstances.every((marker) => marker.removed === 0), true);
   assert.equal(ui.messages.some((message) => message.type === "streamlit:setComponentValue"), false);
   assert.equal(/fetch\s*\(|XMLHttpRequest|\/directions\/|\/predict/.test(source), false);
   assert.equal(/localStorage|sessionStorage|console\./.test(source), false);
@@ -132,11 +189,22 @@ test("new submission reuses the map and updates the existing source from receive
   await ui.render(args());
   const map = ui.instances[0]; map.events.load();
   const next = {type: "LineString", coordinates: [[-73.9, 40.7], [-73.8, 40.8]]};
-  await ui.render(args({submission_id: "submitted-2", geometry: next}));
+  const nextPickup = [-73.91, 40.69];
+  const nextDropoff = [-73.79, 40.81];
+  await ui.render(args({submission_id: "submitted-2", geometry: next,
+    pickup: nextPickup, dropoff: nextDropoff}));
   assert.equal(ui.instances.length, 1);
   assert.equal(map.added.length, 1);
   assert.equal(map.updated.length, 1);
   assert.deepEqual(map.updated[0].geometry, next);
+  assert.equal(map.bounds.length, 2);
+  assert.equal(ui.markerInstances.length, 4);
+  assert.deepEqual(ui.markerInstances.map((marker) => marker.removed), [1, 1, 0, 0]);
+  assert.deepEqual(ui.markerInstances.slice(2).map((marker) => marker.point), [nextPickup, nextDropoff]);
+  assert.deepEqual(map.bounds[1].bounds, [nextPickup, nextDropoff]);
+  await ui.render(args({submission_id: "submitted-2", geometry: next,
+    pickup: nextPickup, dropoff: nextDropoff}));
+  assert.equal(ui.markerInstances.length, 4);
   assert.equal(map.bounds.length, 2);
 });
 
@@ -149,15 +217,32 @@ test("same submission cannot be relabelled with mutated draft geometry", async (
   assert.match(ui.nodes.status.textContent, /Không thể hiển thị bản đồ/);
 });
 
+test("same submission cannot acquire mutated pickup or dropoff marker coordinates", async () => {
+  for (const field of ["pickup", "dropoff"]) {
+    const ui = harness();
+    await ui.render(args());
+    const map = ui.instances[0]; map.events.load();
+    await ui.render(args({[field]: [0, 0]}));
+    assert.equal(map.updated.length, 0);
+    assert.equal(map.bounds.length, 1);
+    assert.equal(ui.markerInstances.length, 2);
+    assert.deepEqual(ui.markerInstances.map((marker) => marker.point), [pickup, dropoff]);
+    assert.match(ui.nodes.status.textContent, /Không thể hiển thị bản đồ/);
+  }
+});
+
 test("rerun during library loading creates only one map for the latest submission", async () => {
   const ui = harness({deferredLibrary: true});
   await ui.render(args());
-  await ui.render(args({submission_id: "submitted-2"}));
+  const nextPickup = [-73.99, 40.74];
+  await ui.render(args({submission_id: "submitted-2", pickup: nextPickup}));
   await ui.completeLibrary();
   assert.equal(ui.appended.length, 2);
   assert.equal(ui.instances.length, 1);
   ui.instances[0].events.load();
   assert.equal(ui.instances[0].added.length, 1);
+  assert.equal(ui.markerInstances.length, 2);
+  assert.deepEqual(ui.markerInstances[0].point, nextPickup);
 });
 
 test("load failure is safe and never retries or exposes upstream errors on rerun", async () => {
@@ -181,6 +266,18 @@ test("switching offline removes the map without loading resources again", async 
   assert.equal(map.removed, true);
   assert.equal(ui.nodes.map.style.display, "none");
   assert.equal(ui.appended.length, 2);
+  assert.deepEqual(ui.markerInstances.map((marker) => marker.removed), [1, 1]);
+});
+
+test("a partial marker failure removes both candidates without retrying on rerun", async () => {
+  const ui = harness({markerFailureAt: 1});
+  await ui.render(args());
+  const map = ui.instances[0]; map.events.load();
+  assert.deepEqual(ui.markerInstances.map((marker) => marker.removed), [1, 1]);
+  assert.match(ui.nodes.status.textContent, /Không thể hiển thị bản đồ/);
+  await ui.render(args());
+  assert.equal(ui.markerInstances.length, 2);
+  assert.equal(ui.instances.length, 1);
 });
 
 test("CDN loading has a bounded deadline and timeout cannot retry on rerun", async () => {

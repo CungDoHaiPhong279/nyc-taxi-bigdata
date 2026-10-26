@@ -8,6 +8,11 @@
     body { margin: 0; font: 14px sans-serif; color: #262730; }
     #map { width: 100%; height: 360px; display: none; }
     #status { margin: 8px 0; }
+    .submitted-point { width: 30px; height: 30px; border: 2px solid #fff;
+      border-radius: 50%; color: #fff; text-align: center; line-height: 30px;
+      font-weight: 700; box-shadow: 0 1px 5px #0008; }
+    .submitted-point-pickup { background: #0f6b40; }
+    .submitted-point-dropoff { background: #b42318; }
   </style>
 </head>
 <body>
@@ -25,6 +30,7 @@
     let mapReady = false;
     let pending = null;
     let displayed = null;
+    let markers = [];
     let failed = false;
     let renderRevision = 0;
     const status = document.getElementById("status");
@@ -37,15 +43,21 @@
       status.textContent = "Không thể hiển thị bản đồ. Kiểm tra cấu hình/kết nối; không tự gọi lại dịch vụ.";
       height();
     };
+    const validPoint = (point) => Array.isArray(point) && point.length === 2
+      && point.every((value) => typeof value === "number" && Number.isFinite(value))
+      && point[0] >= -180 && point[0] <= 180 && point[1] >= -90 && point[1] <= 90;
+    const clearMarkers = () => {
+      for (const marker of markers) marker.remove();
+      markers = [];
+    };
     const valid = (args) => args && args.online === true
       && typeof args.access_token === "string" && /^pk\.[A-Za-z0-9._-]+$/.test(args.access_token)
       && typeof args.submission_id === "string" && args.submission_id.length > 0
       && args.submission_id.length <= 128 && args.geometry && args.geometry.type === "LineString"
       && Array.isArray(args.geometry.coordinates) && args.geometry.coordinates.length >= 2
       && args.geometry.coordinates.length <= 20000
-      && args.geometry.coordinates.every((point) => Array.isArray(point) && point.length === 2
-        && point.every((value) => typeof value === "number" && Number.isFinite(value))
-        && point[0] >= -180 && point[0] <= 180 && point[1] >= -90 && point[1] <= 90);
+      && args.geometry.coordinates.every(validPoint)
+      && validPoint(args.pickup) && validPoint(args.dropoff);
     const loadLibrary = () => {
       if (libraryPromise) return libraryPromise;
       libraryPromise = new Promise((resolve, reject) => {
@@ -83,7 +95,32 @@
           layout: {"line-join": "round", "line-cap": "round"},
           paint: {"line-color": "#1565c0", "line-width": 5}});
       }
-      const coordinates = pending.geometry.coordinates;
+      clearMarkers();
+      try {
+        const points = [
+          {letter: "A", role: "pickup", point: pending.pickup,
+            title: "A \u2014 \u0110i\u1ec3m \u0111\u00f3n (Pickup)"},
+          {letter: "B", role: "dropoff", point: pending.dropoff,
+            title: "B \u2014 \u0110i\u1ec3m \u0111\u1ebfn (Dropoff)"},
+        ];
+        for (const point of points) {
+          const element = document.createElement("div");
+          element.className = "submitted-point submitted-point-" + point.role;
+          // Fixed text only: address strings never enter HTML, titles, or labels.
+          element.textContent = point.letter;
+          element.title = point.title;
+          element.setAttribute("role", "img");
+          element.setAttribute("aria-label", point.title);
+          const marker = new window.mapboxgl.Marker({element, anchor: "center"});
+          markers.push(marker);
+          marker.setLngLat(point.point).addTo(map);
+        }
+      } catch (error) {
+        clearMarkers();
+        throw error;
+      }
+      // Search selections can differ from Directions' snapped route endpoints.
+      const coordinates = [...pending.geometry.coordinates, pending.pickup, pending.dropoff];
       const bounds = [[Math.min(...coordinates.map((p) => p[0])), Math.min(...coordinates.map((p) => p[1]))],
         [Math.max(...coordinates.map((p) => p[0])), Math.max(...coordinates.map((p) => p[1]))]];
       map.fitBounds(bounds, {padding: 40, maxZoom: 15, duration: 0});
@@ -96,6 +133,7 @@
       if (!valid(args)) {
         pending = null;
         displayed = null;
+        clearMarkers();
         if (map) map.remove();
         map = null;
         mapReady = false;
@@ -104,15 +142,15 @@
         height();
         return;
       }
-      const fingerprint = JSON.stringify(args.geometry);
+      const snapshot = {geometry: args.geometry, pickup: args.pickup, dropoff: args.dropoff};
+      const fingerprint = JSON.stringify(snapshot);
       // The immutable submission identity must never acquire draft coordinates.
       if ((displayed && displayed.id === args.submission_id && displayed.fingerprint !== fingerprint)
           || (pending && pending.id === args.submission_id && pending.fingerprint !== fingerprint)) {
         safeFailure();
         return;
       }
-      pending = {id: args.submission_id, fingerprint,
-        geometry: JSON.parse(fingerprint)};
+      pending = {id: args.submission_id, fingerprint, ...JSON.parse(fingerprint)};
       if (failed) return;
       if (map) {
         try { applyPending(); } catch (_) { safeFailure(); }

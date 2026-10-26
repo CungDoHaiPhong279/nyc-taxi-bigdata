@@ -64,6 +64,8 @@ def test_opt_in_ui_submits_once_and_keeps_submitted_snapshot_through_rerun(ui):
     rendered_kwargs = deepcopy(address_page.route_map.call_args.kwargs)
     assert rendered_args[0] == snapshot["route_geometry"]
     assert rendered_kwargs["submission_id"] == snapshot["submission_id"]
+    for slot in ("pickup", "dropoff"):
+        assert rendered_kwargs[slot] == [snapshot[slot]["longitude"], snapshot[slot]["latitude"]]
     assert rendered_kwargs["key"] == "address_submitted_route_map"
     assert rendered_kwargs["online"] is False and rendered_kwargs["access_token"] == ""
     app.session_state["address_pickup"]["selected"]["label"] = "Edited draft"
@@ -125,6 +127,8 @@ def test_online_map_uses_runtime_public_token_and_saved_route_not_draft(ui, monk
     assert rendered_kwargs["online"] is True
     assert rendered_kwargs["access_token"] == "pk.synthetic-offline-only"
     assert rendered_kwargs["submission_id"] == saved["submission_id"]
+    for slot in ("pickup", "dropoff"):
+        assert rendered_kwargs[slot] == [saved[slot]["longitude"], saved[slot]["latitude"]]
     app.session_state["address_dropoff"]["selected"]["longitude"] = -73.85
     app.date_input[0].set_value(date(2025, 1, 1)).run(timeout=10)
     assert not app.exception and app.session_state["address_fare_result"] == saved
@@ -176,9 +180,12 @@ def test_real_map_component_bridge_keeps_identity_and_submitted_args_on_rerun(ui
         stored = app.session_state["address_fare_result"]
         assert saved_args["geometry"] == stored["route_geometry"]
         assert saved_args["submission_id"] == stored["submission_id"]
+        assert saved_args["pickup"] == [stored["pickup"]["longitude"], stored["pickup"]["latitude"]]
+        assert saved_args["dropoff"] == [stored["dropoff"]["longitude"], stored["dropoff"]["latitude"]]
     else:
         assert "geometry" not in saved_args and "access_token" not in saved_args
     app.session_state["address_pickup"]["selected"]["label"] = "Edited draft"
+    app.session_state["address_pickup"]["selected"]["longitude"] = -73.8
     app.run(timeout=10)
     assert not app.exception
     rerun = app.get("component_instance")[0].proto
