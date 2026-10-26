@@ -1,0 +1,57 @@
+{
+  "contract_version": "pretrip-v2-zone-time-1",
+  "model_status": "not_trained_or_deployed",
+  "purpose": "Experimental pretrip standard-metered NYC yellow-taxi base fare_amount USD; not a final bill, quote guarantee, or evaluated current model.",
+  "timezone": "America/New_York",
+  "numeric_features": [
+    "pickup_hour_sin", "pickup_hour_cos", "pickup_dow_sin", "pickup_dow_cos",
+    "is_weekend", "is_holiday"
+  ],
+  "categorical_features": ["pickup_zone", "dropoff_zone"],
+  "feature_derivation": {
+    "hour": "Integer NYC local hour 0..23; sin/cos with period 24, no UTC hour or fractional-minute conversion.",
+    "day_of_week": "Monday=0..Sunday=6; sin/cos with period 7.",
+    "weekend": "Saturday or Sunday in NYC local time.",
+    "holiday": "Membership in the checksum-pinned nationwide observed OPM calendar.",
+    "zones": "String categories from integer named TLC LocationID domain 1..263, not ordered geographic magnitudes.",
+    "unknown_category": "A valid zone unseen during train remains its string value; future fitted categorical preprocessing must use a train-only unknown bucket. Invalid/unknown TLC IDs 264/265 are rejected."
+  },
+  "calendar": {
+    "file": "config/pretrip_v2_calendar.json",
+    "version": "us-opm-nationwide-observed-2025-2027-v1",
+    "sha256": "00dd5c8f442955879ade701c726106f12ef0e03669f818c5c06c6a5b067decac",
+    "coverage_start": "2025-01-01",
+    "coverage_end": "2027-12-31",
+    "missing_coverage": "reject; never implicitly set future unknown dates to non-holiday"
+  },
+  "time_policy": {
+    "now": "Freeze an aware UTC submit instant, convert to America/New_York once at submit, store UUID/offset/fold/calendar/tzdb identity; rerun reuses the snapshot.",
+    "scheduled_max_horizon_seconds": 604800,
+    "past_clock_tolerance_seconds": 60,
+    "serving": "Offset-aware local ISO timestamp plus America/New_York; offset must agree with the zone, ambiguous local time requires fold 0/1, nonexistent local time is rejected.",
+    "historical": "TLC NTZ stays NYC local wall time without inventing an instant or DST fold; repeated fall hour preserves wall features; nonexistent spring hour is rejected.",
+    "tzdb_artifact_requirement": "A fitted artifact must pin the actual America/New_York TZif SHA256 reported by timezone_identity(), plus provider/package version where available. Serving must fail on a mismatch; no fitted v2 artifact exists yet."
+  },
+  "prohibited_predictors": [
+    "recorded_trip_distance", "trip_distance", "actual_duration", "dropoff_datetime",
+    "fare_amount", "total_amount", "tip_amount", "tolls_amount", "fees",
+    "payment_type", "final_ratecode", "source_month", "lineage", "load_id"
+  ],
+  "request_policy": "Exact required snapshot fields; missing fields and unknown extras fail, including route distance in this zone-time-only experiment. A caller cannot omit submit time, clock mode, DST fold or pinned identity to bypass guards.",
+  "required_request_fields": [
+    "pickup_location_id", "dropoff_location_id", "pickup_datetime", "timezone", "submission_id",
+    "contract_version", "calendar_version", "calendar_sha256", "tzdb_sha256",
+    "submitted_at", "mode", "fold"
+  ],
+  "v1_policy": "No change to frozen v1 helpers, 2025 domain, model identity or current production /predict contract. This v2 builder is not connected to dashboard or serving.",
+  "pilot": {
+    "train": ["2026-06-01", "2026-07-01"],
+    "validation": ["2026-07-01", "2026-08-01"],
+    "holdout": ["2026-08-01", "2026-09-01"],
+    "boundaries": "Half-open by actual pickup NYC local datetime, not source month.",
+    "sampling_fraction": 0.01,
+    "seed": 42,
+    "caps": {"train": 100000, "validation": 50000, "holdout": 50000},
+    "holdout_policy": "Preparation/counts/overlap only; do not fit preprocessing or tune on holdout, and do not evaluate until the candidate/cohort/features/gates are locked."
+  }
+}

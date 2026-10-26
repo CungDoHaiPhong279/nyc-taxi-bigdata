@@ -1,0 +1,38 @@
+{
+  "version": "tlc-yellow-jun-aug-2026-head-20261027-v1",
+  "official_index": "https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page",
+  "observed_on": "2026-10-27",
+  "timezone": "Asia/Saigon",
+  "measurement": "HEAD, native Windows HTTPS verification, no redirects or body reads",
+  "parquet_body_bytes_downloaded": 0,
+  "content_checksum_verified": false,
+  "files": [
+    {
+      "month": "2026-06",
+      "split": "train",
+      "url": "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-06.parquet",
+      "head_status": 200,
+      "content_length_bytes": 65465637,
+      "last_modified": "Thu, 17 Sep 2026 18:34:43 GMT",
+      "etag": "\"91b7716b26443cce54f6225273edf8e8-4\""
+    },
+    {
+      "month": "2026-07",
+      "split": "validation",
+      "url": "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-07.parquet",
+      "head_status": 200,
+      "content_length_bytes": 61685033,
+      "last_modified": "Thu, 17 Sep 2026 21:03:03 GMT",
+      "etag": "\"2ff2995562ee9e1af375eea6020fdef1-4\""
+    },
+    {
+      "month": "2026-08",
+      "split": "test",
+      "url": "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-08.parquet",
+      "head_status": 200,
+      "content_length_bytes": 59043961,
+      "last_modified": "Thu, 01 Oct 2026 13:38:15 GMT",
+      "etag": "\"29cbf7399f1d6ffc4b505639ccbb0c8d-4\""
+    }
+  ]
+}

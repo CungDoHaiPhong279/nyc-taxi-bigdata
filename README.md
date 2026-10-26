@@ -2424,3 +2424,37 @@ inference v2 cùng artifact/features/calendar có phiên bản. **Đi ngay** l�
 để tái hiện 2025; không ánh xạ ngày hiện tại về 2025 hoặc lấy MAE June làm cam kết.
 Trước khi phục vụ hiện tại phải đánh giá model mới và xử lý train-serving distance
 gap; chỉ chỉnh UI/nới lịch không đủ điều kiện. Chưa tải dữ liệu hoặc train v2.
+
+#### PRETRIP V2 — contract và preparation offline
+
+Đã thêm contract/feature builder v2 riêng cho PU/DO categorical, giờ/ngày địa
+phương NYC dạng cyclic, weekend và calendar holiday có phiên bản/checksum.
+Train và serve dùng cùng derivation; snapshot submit giữ clock/UUID/offset/fold,
+kiểm DST và coverage calendar. Không dùng recorded distance, duration/dropoff,
+fare/phí/payment làm predictors; v1 và `/predict` đang chạy không thay đổi.
+
+CLI mặc định chỉ PLAN, không download, mở Parquet hay tạo output:
+
+```powershell
+python .\scripts\prepare_pretrip_pilot.py
+```
+
+Preparation tương lai đọc trực tiếp bảy cột TLC Parquet theo batch, sample hash
+1% seed 42 trước dedup; actual pickup June/July/August 2026 lần lượt là
+train/validation/holdout, caps 100k/50k/50k. Outputs chỉ ở runtime riêng
+`.sandbox/pretrip-v2/<attempt>/`, labels tách khỏi features; không sửa dữ liệu
+Gold/PostgreSQL. Vượt caps, split rỗng, identity/calendar sai hoặc attempt tồn
+tại thì dừng, không overwrite/đổi seed. Holdout chỉ preparation/counts.
+
+HEAD ba file đo tổng **186.194.631 bytes (177,569 MiB)**, chưa tải nội dung hay
+xác minh schema/checksum nguồn. Tổng thành phần peak preparation tối giản dự
+trù **313,569 MiB**, đề xuất envelope riêng **512 MiB disk**, RAM **384–768 MiB
+ước tính**; chưa được cấp thêm ngân sách hoặc đo peak thực. Không bao gồm
+image build, training, filesystem/VHDX overhead chưa đo.
+
+**112 tests v2/inventory PASS** trên fixture tổng hợp bằng image sẵn có,
+network none/source read-only; PLAN offline PASS từ cwd khác. Code v2 được
+mount để kiểm, chưa bake vào image; không chạy lại toàn CI. Chưa acquisition,
+preparation nguồn thật, training, metrics, dashboard integration hoặc hỗ trợ
+inference hiện tại. Chi tiết nguồn, hashes, lệnh và blockers:
+[PRETRIP V2 offline report](plans/PRETRIP_V2_OFFLINE_REPORT.md).

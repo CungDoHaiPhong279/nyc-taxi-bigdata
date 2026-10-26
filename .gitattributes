@@ -16,3 +16,6 @@
 /assets/taxi_zones/*.geojson text eol=lf
 /assets/taxi_zones/*.json text eol=lf
 /assets/taxi_zones/*.md text eol=lf
+/config/pretrip_v2_calendar.json text eol=lf
+/config/pretrip_v2_contract.json text eol=lf
+/config/pretrip_v2_sources.json text eol=lf
