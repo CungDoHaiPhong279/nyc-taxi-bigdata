@@ -26,6 +26,10 @@ _WGS84_NAMES = {
 class GeometryError(RuntimeError):
     """Safe error without user coordinates, file contents or filesystem paths."""
 
+    def __init__(self, message: str, *, code: str = "invalid_geometry") -> None:
+        super().__init__(message)
+        self.code = code
+
 
 def validate_coordinates(longitude: Any, latitude: Any) -> tuple[float, float]:
     """Validate numeric WGS84 coordinates; booleans are not numbers here."""
@@ -203,11 +207,11 @@ class TaxiZoneGeometry:
                     continue
                 relation = _polygon_relation(point, rings)
                 if relation == 0:
-                    raise GeometryError("Location lies on an ambiguous Taxi Zone boundary.")
+                    raise GeometryError("Location lies on an ambiguous Taxi Zone boundary.", code="boundary")
                 if relation == 1:
                     matches.append(metadata)
         if len(matches) > 1:
-            raise GeometryError("Location matches overlapping Taxi Zones; choose an unambiguous point.")
+            raise GeometryError("Location matches overlapping Taxi Zones; choose an unambiguous point.", code="overlap")
         if not matches:
-            raise GeometryError("Location is outside the supported Taxi Zones.")
+            raise GeometryError("Location is outside the supported Taxi Zones.", code="outside_zones")
         return dict(matches[0])

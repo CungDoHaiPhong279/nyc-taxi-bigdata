@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <style>
-    body { margin: 0; font: 14px sans-serif; color: #262730; }
+    :root { --route-bg: #fff; --route-fg: #262730;
+      --route-font: "Segoe UI", Arial, sans-serif; color-scheme: light; }
+    body { margin: 0; font: 16px/1.5 var(--route-font);
+      color: var(--route-fg); background: var(--route-bg); }
     #map { width: 100%; height: 360px; display: none; }
     #status { margin: 8px 0; }
     .submitted-point { width: 30px; height: 30px; border: 2px solid #fff;
@@ -38,9 +41,28 @@
     const send = (type, payload = {}) => window.parent.postMessage(
       {isStreamlitMessage: true, type, ...payload}, "*");
     const height = () => send("streamlit:setFrameHeight", {height: document.body.scrollHeight + 8});
+    const showStatus = (message) => {
+      status.textContent = message;
+      status.hidden = false;
+    };
+    const applyTheme = (value) => {
+      const background = value && typeof value.backgroundColor === "string" ? value.backgroundColor : "";
+      const digits = /^#[0-9a-f]{6}$/i.test(background) ? background.slice(1)
+        : /^#[0-9a-f]{3}$/i.test(background) ? background.slice(1).split("").map((part) => part + part).join("") : null;
+      const dark = Boolean(value && value.base === "dark") || Boolean(digits &&
+        (parseInt(digits.slice(0, 2), 16) * .2126 + parseInt(digits.slice(2, 4), 16) * .7152 +
+          parseInt(digits.slice(4, 6), 16) * .0722) < 128);
+      const style = document.documentElement.style;
+      style.setProperty("--route-bg", dark ? "#0e1117" : "#fff");
+      style.setProperty("--route-fg", dark ? "#fafafa" : "#262730");
+      const font = value && typeof value.font === "string" ? value.font.trim() : "";
+      style.setProperty("--route-font", font.length > 0 && font.length <= 200 && /^[a-zA-Z0-9 "'_,.\-]+$/.test(font)
+        ? font : '"Segoe UI", Arial, sans-serif');
+      style.colorScheme = dark ? "dark" : "light";
+    };
     const safeFailure = () => {
       failed = true;
-      status.textContent = "Không thể hiển thị bản đồ. Kiểm tra cấu hình/kết nối; không tự gọi lại dịch vụ.";
+      showStatus("Không thể hiển thị bản đồ. Kiểm tra cấu hình/kết nối; không tự gọi lại dịch vụ.");
       height();
     };
     const validPoint = (point) => Array.isArray(point) && point.length === 2
@@ -125,7 +147,8 @@
         [Math.max(...coordinates.map((p) => p[0])), Math.max(...coordinates.map((p) => p[1]))]];
       map.fitBounds(bounds, {padding: 40, maxZoom: 15, duration: 0});
       displayed = {id: pending.id, fingerprint: pending.fingerprint};
-      status.textContent = "Tuyến đường của lần ước tính đã gửi; thay đổi biểu mẫu chưa cập nhật kết quả này.";
+      status.textContent = "";
+      status.hidden = true;
       height();
     };
     const render = async (args) => {
@@ -138,7 +161,7 @@
         map = null;
         mapReady = false;
         mapElement.style.display = "none";
-        status.textContent = "Bản đồ chưa bật hoặc cấu hình/tuyến đường không hợp lệ.";
+        showStatus("Bản đồ chưa bật hoặc cấu hình/tuyến đường không hợp lệ.");
         height();
         return;
       }
@@ -156,7 +179,7 @@
         try { applyPending(); } catch (_) { safeFailure(); }
         return;
       }
-      status.textContent = "Đang tải bản đồ của tuyến đã gửi…";
+      showStatus("Đang tải bản đồ của tuyến đã gửi…");
       try {
         const gl = await loadLibrary();
         if (revision !== renderRevision || !pending || failed) return;
@@ -176,6 +199,7 @@
     };
     window.addEventListener("message", (event) => {
       if (event.source !== window.parent || !event.data || event.data.type !== "streamlit:render") return;
+      applyTheme(event.data.theme);
       void render(event.data.args);
     });
     send("streamlit:componentReady", {apiVersion: 1});

@@ -19,6 +19,10 @@ MAPBOX_ORIGIN = "https://api.mapbox.com"
 MAX_RESPONSE_BYTES = 1_048_576
 SEARCH_TIMEOUT_SECONDS = 10
 ROUTING_TIMEOUT_SECONDS = 20
+# Explicit NYC bounds/proximity avoid Mapbox's default IP-based search bias.
+# These are fixed regional search settings, never coordinates from a user's trip.
+NYC_SEARCH_BBOX = "-74.3,40.45,-73.65,40.95"
+NYC_SEARCH_PROXIMITY = "-73.9857,40.7484"
 
 
 class MapboxError(RuntimeError):
@@ -62,7 +66,12 @@ def _text(value: Any, *, maximum: int = 1000) -> str:
 
 def _label(properties: dict[str, Any]) -> str:
     name = _text(properties.get("name"), maximum=300)
-    address = properties.get("full_address") or properties.get("place_formatted")
+    address = properties.get("full_address")
+    if not address:
+        # full_address is optional. Keep the street when only address and the
+        # regional context are returned, so similarly named POIs are distinct.
+        parts = [properties.get("address"), properties.get("place_formatted")]
+        address = ", ".join(_text(part) for part in parts if part)
     if address:
         address = _text(address)
         return address if address.startswith(name) else f"{name}, {address}"
@@ -129,13 +138,17 @@ class MapboxClient:
     def suggest(self, query: str, session_token: str) -> list[dict[str, str]]:
         session_token = _session_token(session_token)
         if (
-            not isinstance(query, str) or not 2 <= len(query.strip()) <= 250
-            or any(ord(character) < 32 or ord(character) == 127 for character in query)
+            not isinstance(query, str) or len(query) > 250 or not 1 <= len(query.strip()) <= 250
+            or any(ord(character) < 32 or 127 <= ord(character) <= 159 for character in query)
         ):
-            raise MapboxError("Địa chỉ tìm kiếm phải có từ 2 đến 250 ký tự hợp lệ.")
+            raise MapboxError("Địa chỉ tìm kiếm phải có từ 1 đến 250 ký tự hợp lệ.")
         result = self._request(
             "/search/searchbox/v1/suggest",
-            {"q": query.strip(), "session_token": session_token, "country": "US", "limit": 5},
+            {
+                "q": query.strip(), "session_token": session_token,
+                "country": "US", "limit": 5, "types": "address,poi",
+                "bbox": NYC_SEARCH_BBOX, "proximity": NYC_SEARCH_PROXIMITY,
+            },
             timeout=SEARCH_TIMEOUT_SECONDS,
         )
         rows = result.get("suggestions")

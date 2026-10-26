@@ -15,6 +15,7 @@ from nyc_taxi.dashboard.prediction import (
 from nyc_taxi.dashboard.route_fare import (
     MAX_ROUTE_GEOMETRY_POINTS, MAX_SESSION_SUBMISSIONS, METERS_PER_MILE,
     RouteFareCoordinator, RouteFareError, execute_submission,
+    validate_address_support, validate_standard_route,
 )
 from nyc_taxi.dashboard.taxi_zones import GeometryError
 
@@ -50,6 +51,102 @@ def coordinator(*, distance=1234.56789, zones=None):
 
 def zone(location_id, borough="Queens"):
     return {"location_id": location_id, "borough": borough, "zone": "Synthetic zone"}
+
+
+def test_address_support_checks_local_geometry_only_and_returns_fresh_zone():
+    worker = coordinator()
+    source = zone(161, "Manhattan")
+    worker.geometry.resolve.side_effect = None
+    worker.geometry.resolve.return_value = source
+    supported = validate_address_support(PAYLOAD["pickup"], worker.geometry)
+    assert supported == source and supported is not source
+    supported["zone"] = "Edited local copy"
+    assert source["zone"] == "Synthetic zone"
+    worker.geometry.resolve.assert_called_once_with(-73.98, 40.75)
+    worker.router.directions.assert_not_called()
+    worker.predictor.predict.assert_not_called()
+
+
+@pytest.mark.parametrize("code", ["outside_zones", "boundary", "overlap", "invalid_geometry"])
+def test_address_support_distinguishes_safe_geometry_errors_without_remote_calls(code, caplog):
+    worker = coordinator()
+    worker.geometry.resolve.side_effect = GeometryError("SYNTHETIC_PRIVATE_METADATA", code=code)
+    with pytest.raises(RouteFareError) as caught:
+        validate_address_support(PAYLOAD["pickup"], worker.geometry)
+    assert caught.value.code == code
+    assert "SYNTHETIC_PRIVATE_METADATA" not in str(caught.value)
+    assert not caplog.text
+    worker.router.directions.assert_not_called()
+    worker.predictor.predict.assert_not_called()
+
+
+@pytest.mark.parametrize("selection,code", [
+    (None, "invalid_selection"),
+    ({"label": "", "longitude": -73.98, "latitude": 40.75}, "invalid_selection"),
+    ({"label": "Synthetic", "longitude": True, "latitude": 40.75}, "invalid_selection"),
+    ({"label": "Synthetic", "longitude": -75, "latitude": 40.75}, "outside_nyc"),
+])
+def test_address_support_invalid_selection_stops_before_geometry(selection, code):
+    worker = coordinator()
+    with pytest.raises(RouteFareError) as caught:
+        validate_address_support(selection, worker.geometry)
+    assert caught.value.code == code
+    worker.geometry.resolve.assert_not_called()
+    worker.router.directions.assert_not_called()
+    worker.predictor.predict.assert_not_called()
+
+
+@pytest.mark.parametrize("resolved,code", [
+    (None, "invalid_geometry"),
+    (zone(264), "outside_zones"),
+    (zone(1, "EWR"), "special_rate"),
+    (zone(161, "Outside NYC"), "outside_nyc"),
+])
+def test_address_support_validates_geometry_metadata(resolved, code):
+    worker = coordinator()
+    worker.geometry.resolve.side_effect = None
+    worker.geometry.resolve.return_value = resolved
+    with pytest.raises(RouteFareError) as caught:
+        validate_address_support(PAYLOAD["pickup"], worker.geometry)
+    assert caught.value.code == code
+    worker.router.directions.assert_not_called()
+    worker.predictor.predict.assert_not_called()
+
+
+@pytest.mark.parametrize("pickup,dropoff", [
+    (zone(132), zone(237, "Manhattan")),
+    (zone(161, "Manhattan"), zone(132)),
+    (zone(1, "EWR"), zone(161, "Manhattan")),
+])
+def test_local_standard_route_gate_rejects_special_rates(pickup, dropoff):
+    with pytest.raises(RouteFareError) as caught:
+        validate_standard_route(pickup, dropoff)
+    assert caught.value.code == "special_rate"
+
+
+@pytest.mark.parametrize("pickup,dropoff", [
+    (zone(161, "Manhattan"), zone(237, "Manhattan")),
+    (zone(132), zone(100, "Brooklyn")),
+    (zone(138), zone(161, "Manhattan")),
+])
+def test_local_standard_route_gate_keeps_current_supported_routes(pickup, dropoff):
+    assert validate_standard_route(pickup, dropoff) is None
+
+
+def test_coordinator_uses_the_same_special_route_gate_before_routing():
+    worker = coordinator(zones=[zone(132), zone(237, "Manhattan")])
+    with pytest.raises(RouteFareError) as caught:
+        worker.estimate(PAYLOAD)
+    assert caught.value.code == "special_rate"
+    worker.router.directions.assert_not_called()
+    worker.predictor.predict.assert_not_called()
+
+
+def test_safe_error_message_construction_remains_backwards_compatible():
+    assert str(RouteFareError("Safe message")) == "Safe message"
+    assert RouteFareError("Safe message").code is None
+    assert str(GeometryError("Safe geometry message")) == "Safe geometry message"
+    assert GeometryError("Safe geometry message").code == "invalid_geometry"
 
 
 def test_exact_route_units_mapping_and_frozen_identity_snapshot():
@@ -124,9 +221,7 @@ def test_injected_http_geometry_and_existing_predict_contract_together(monkeypat
         state = new_address_state()
         for kind, fields in (("suggest", {"query": name}), ("retrieve", {"mapbox_id": "synthetic-id"})):
             process_address_event(state, {"event_id": str(uuid4()), "session_token": state["session_token"],
-                                          "kind": kind, **fields}, api)
-        process_address_event(state, {"event_id": str(uuid4()), "session_token": state["session_token"],
-                                      "kind": "select", "selection": deepcopy(state["retrieved"])}, api)
+                                          "kind": kind, "query": name, "version": 1, **fields}, api)
         selections.append(state["selected"])
 
     def polygon(location, west, east):

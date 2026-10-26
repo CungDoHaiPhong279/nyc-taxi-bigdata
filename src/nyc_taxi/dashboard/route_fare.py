@@ -31,6 +31,10 @@ _SESSION_KEY = "_route_fare_submissions"
 class RouteFareError(ValueError):
     """A safe, user-facing failure; upstream response details are never reused."""
 
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
 
 def _freeze(value: Any) -> Any:
     if isinstance(value, Mapping):
@@ -108,21 +112,21 @@ def _route_geometry(value: Any) -> Mapping[str, Any]:
 
 def _selection(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise RouteFareError("Hãy chọn đủ địa chỉ đón và địa chỉ đến từ danh sách tìm kiếm.")
+        raise RouteFareError("Hãy chọn địa chỉ từ danh sách gợi ý.", code="invalid_selection")
     label = value.get("label")
     if (
         not isinstance(label, str) or not label.strip() or len(label) > 500
         or any(ord(character) < 32 for character in label)
     ):
-        raise RouteFareError("Lựa chọn địa chỉ không hợp lệ. Hãy chọn lại từ danh sách tìm kiếm.")
+        raise RouteFareError("Lựa chọn địa chỉ không hợp lệ. Hãy chọn lại từ danh sách gợi ý.", code="invalid_selection")
     longitude, latitude = value.get("longitude"), value.get("latitude")
     try:
         validate_coordinates(longitude, latitude)
     except (MapboxError, TypeError, ValueError, OverflowError):
-        raise RouteFareError("Tọa độ địa chỉ không hợp lệ.") from None
+        raise RouteFareError("Tọa độ địa chỉ không hợp lệ. Hãy chọn lại từ danh sách gợi ý.", code="invalid_selection") from None
     west, south, east, north = NYC_BOUNDS
     if not west <= longitude <= east or not south <= latitude <= north:
-        raise RouteFareError("Địa chỉ nằm ngoài vùng NYC được hỗ trợ.")
+        raise RouteFareError("Địa chỉ nằm ngoài vùng NYC được hỗ trợ. Hãy chọn một địa chỉ trong NYC.", code="outside_nyc")
     return {"label": label.strip(), "longitude": float(longitude), "latitude": float(latitude)}
 
 
@@ -145,19 +149,50 @@ def _pickup_time(value: Any) -> datetime:
 def _zone(geometry: Any, selected: Mapping[str, Any]) -> dict[str, Any]:
     try:
         result = geometry.resolve(selected["longitude"], selected["latitude"])
-    except GeometryError:
-        raise RouteFareError("Không xác định duy nhất được Taxi Zone. Điểm ngoài vùng hoặc trên ranh giới chưa được hỗ trợ.") from None
+    except GeometryError as error:
+        failures = {
+            "outside_zones": "Điểm này nằm ngoài vùng Taxi Zones mà mô hình hỗ trợ. Hãy chọn địa chỉ hoặc cổng vào cụ thể khác trong vùng hỗ trợ.",
+            "boundary": "Điểm này nằm trên ranh giới Taxi Zones nên chưa xác định được khu vực. Hãy chọn địa chỉ hoặc cổng vào cụ thể khác.",
+            "overlap": "Điểm này thuộc vùng ranh giới chồng lấn nên chưa xác định duy nhất được Taxi Zone. Hãy chọn địa chỉ hoặc cổng vào cụ thể khác.",
+        }
+        if error.code in failures:
+            raise RouteFareError(failures[error.code], code=error.code) from None
+        raise RouteFareError("Chưa kiểm tra được vùng hỗ trợ do geometry không hợp lệ hoặc chưa sẵn sàng. Không tự thay bằng khu vực gần nhất.", code="invalid_geometry") from None
+    return _validated_zone(result)
+
+
+def _validated_zone(result: Any) -> dict[str, Any]:
+    """Validate local metadata without trusting text from injected geometry."""
     if not isinstance(result, dict):
-        raise RouteFareError("Thông tin Taxi Zone không hợp lệ.")
+        raise RouteFareError("Thông tin Taxi Zone không hợp lệ.", code="invalid_geometry")
     location_id = result.get("location_id")
     borough, zone = result.get("borough"), result.get("zone")
     if type(location_id) is not int or not 1 <= location_id <= 263:
-        raise RouteFareError("Địa chỉ không thuộc Taxi Zone được mô hình hỗ trợ.")
+        raise RouteFareError("Địa chỉ không thuộc Taxi Zone được mô hình hỗ trợ. Hãy chọn địa chỉ khác.", code="outside_zones")
     if location_id == 1:
-        raise RouteFareError("Tuyến Newark/EWR áp dụng cước đặc biệt, không thuộc standard-rate của mô hình.")
+        raise RouteFareError("Tuyến Newark/EWR áp dụng cước đặc biệt, không thuộc standard-rate của mô hình.", code="special_rate")
     if not isinstance(borough, str) or borough not in NYC_BOROUGHS or not isinstance(zone, str) or not zone.strip():
-        raise RouteFareError("Địa chỉ không thuộc năm borough NYC được hỗ trợ.")
+        raise RouteFareError("Địa chỉ không thuộc năm borough NYC được hỗ trợ. Hãy chọn địa chỉ khác trong NYC.", code="outside_nyc")
     return {"location_id": location_id, "borough": borough, "zone": zone}
+
+
+def validate_address_support(selection: Any, geometry: Any) -> dict[str, Any]:
+    """Check one selection locally, without Search, routing or model requests.
+
+    The returned zone is a fresh validated mapping. Boundary, hole and outside
+    points remain rejected; there is no snapping or nearest-zone fallback.
+    """
+    return _zone(geometry, _selection(selection))
+
+
+def validate_standard_route(pickup_zone: Any, dropoff_zone: Any) -> None:
+    """Fail closed on known special-rate pairs using local zone metadata only."""
+    pickup_zone, dropoff_zone = _validated_zone(pickup_zone), _validated_zone(dropoff_zone)
+    if (
+        pickup_zone["location_id"] == 132 and dropoff_zone["borough"] == "Manhattan"
+        or dropoff_zone["location_id"] == 132 and pickup_zone["borough"] == "Manhattan"
+    ):
+        raise RouteFareError("Tuyến JFK ↔ Manhattan dùng cước cố định, không thuộc standard-rate của mô hình.", code="special_rate")
 
 
 class RouteFareCoordinator:
@@ -174,12 +209,9 @@ class RouteFareCoordinator:
         pickup_time = _pickup_time(payload.get("pickup_datetime"))
         if payload.get("standard_rate") is not True:
             raise RouteFareError("Hãy xác nhận chuyến yellow taxi dùng cước đồng hồ standard-rate; không hỗ trợ cước thỏa thuận, nhóm hoặc upfront.")
-        pickup_zone, dropoff_zone = _zone(self.geometry, pickup), _zone(self.geometry, dropoff)
-        if (
-            pickup_zone["location_id"] == 132 and dropoff_zone["borough"] == "Manhattan"
-            or dropoff_zone["location_id"] == 132 and pickup_zone["borough"] == "Manhattan"
-        ):
-            raise RouteFareError("Tuyến JFK ↔ Manhattan dùng cước cố định, không thuộc standard-rate của mô hình.")
+        pickup_zone = validate_address_support(pickup, self.geometry)
+        dropoff_zone = validate_address_support(dropoff, self.geometry)
+        validate_standard_route(pickup_zone, dropoff_zone)
         warnings = [
             "Quãng đường là tuyến ô tô dự kiến; có thể khác quãng đường đồng hồ taxi thực tế.",
             "Đây là demo lịch sử Jan–Jun/2025. Cước cơ bản USD chưa gồm tip, toll và phụ phí.",

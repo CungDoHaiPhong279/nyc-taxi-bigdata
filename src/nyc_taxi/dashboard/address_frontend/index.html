@@ -4,56 +4,211 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { font: 14px sans-serif; margin: 4px; color: #262730; }
-    input { box-sizing: border-box; width: 100%; padding: 8px; margin: 6px 0; }
-    button { padding: 7px; margin: 3px 4px 3px 0; cursor: pointer; }
-    #choices button { display: block; text-align: left; }
-    #selected { margin-top: 6px; }
+    :root { color-scheme: light dark; --bg: #fff; --fg: #262730; --muted: #475467;
+      --border: #9ca3af; --active: #e6f0ff; --accent: #155eef;
+      --font-family: "Segoe UI", Arial, sans-serif; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0e1117; --fg: #fafafa; --muted: #d0d5dd;
+        --border: #667085; --active: #243b60; --accent: #92b8ff; }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; overflow: visible; background: var(--bg); color: var(--fg); }
+    body { font: 16px/1.5 var(--font-family); padding: 4px; }
+    label { display: block; font-weight: 600; margin-bottom: 8px; }
+    input { width: 100%; border: 1px solid var(--border); border-radius: 7px;
+      min-height: 48px; padding: 11px 12px; background: var(--bg); color: var(--fg); font: inherit; }
+    input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    #choices { list-style: none; margin: 8px 0 0; padding: 0; border: 1px solid var(--border);
+      border-radius: 7px; background: var(--bg); color: var(--fg); }
+    #choices[hidden] { display: none; }
+    #choices li { min-height: 48px; padding: 11px 12px; cursor: pointer; overflow-wrap: anywhere; white-space: normal; }
+    #choices li + li { border-top: 1px solid var(--border); }
+    #choices li[aria-selected="true"], #choices li:hover { background: var(--active); }
+    #status { min-height: 24px; margin-top: 8px; color: var(--fg); overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
   <label id="label" for="query"></label>
-  <input id="query" type="text" maxlength="256" autocomplete="off" placeholder="Nhập địa chỉ tại NYC">
-  <button id="search" type="button">Tìm địa chỉ</button>
-  <div id="choices"></div>
-  <div id="selected" aria-live="polite"></div>
+  <input id="query" type="text" maxlength="250" autocomplete="off" spellcheck="false"
+    role="combobox" aria-autocomplete="list" aria-controls="choices" aria-expanded="false"
+    placeholder="Nhập địa chỉ hoặc địa điểm tại NYC">
+  <ul id="choices" role="listbox" hidden></ul>
+  <div id="status" role="status" aria-live="polite"></div>
   <script>
     "use strict";
-    let args = {};
+    // Each iframe has independent query/session state. No HTTP client, token,
+    // browser storage, or address logging is used by this component.
+    const input = document.getElementById("query");
+    const choices = document.getElementById("choices");
+    const status = document.getElementById("status");
+    let args = {}, initialized = false, session = "", query = "", version = 0;
+    let timer = null, rows = [], active = -1, phase = "idle", selected = null;
+    let retrieving = null, composing = false, dismissed = null;
+    const retiredSessions = [], suggests = [], retrieves = [];
     const send = (type, payload = {}) => window.parent.postMessage(
       {isStreamlitMessage: true, type, ...payload}, "*");
-    const height = () => send("streamlit:setFrameHeight", {height: document.body.scrollHeight + 15});
+    const height = () => send("streamlit:setFrameHeight", {height: document.body.scrollHeight + 12});
+    const validQuery = (value) => typeof value === "string" && value.length <= 250 &&
+      value.trim().length >= 1 && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
+    const remember = (items, key) => {
+      if (items.includes(key)) return false;
+      items.push(key); if (items.length > 64) items.shift(); return true;
+    };
+    const eventKey = (extra = "") => JSON.stringify([session, version, query, extra]);
     const emit = (kind, payload = {}) => send("streamlit:setComponentValue", {
-      value: {event_id: crypto.randomUUID(), session_token: args.session_token, kind, ...payload},
+      value: {event_id: crypto.randomUUID(), session_token: session, kind, query, version, ...payload},
       dataType: "json"
     });
-    const button = (text, callback) => {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.textContent = text; // upstream labels are text, never HTML
-      item.onclick = () => { item.disabled = true; callback(); };
-      return item;
-    };
-    document.getElementById("search").onclick = () => {
-      const query = document.getElementById("query").value.trim();
-      if (query) emit("suggest", {query});
-    };
-    window.addEventListener("message", (event) => {
-      if (event.source !== window.parent || event.data.type !== "streamlit:render") return;
-      args = event.data.args;
-      document.getElementById("label").textContent = args.label;
-      const choices = document.getElementById("choices");
-      choices.replaceChildren();
-      (args.suggestions || []).forEach((candidate) => choices.appendChild(
-        button(candidate.label, () => emit("retrieve", {mapbox_id: candidate.mapbox_id}))
-      ));
-      if (args.retrieved) choices.appendChild(button(
-        "Dùng địa chỉ: " + args.retrieved.label,
-        () => emit("select", {selection: args.retrieved})
-      ));
-      document.getElementById("selected").textContent = args.selected
-        ? "Đã chọn: " + args.selected.label : "Chưa chọn địa chỉ.";
+    const online = () => args.online === true;
+    const cancelTimer = () => { if (timer !== null) window.clearTimeout(timer); timer = null; };
+    function closeChoices() {
+      rows = []; active = -1; choices.replaceChildren(); choices.hidden = true;
+      input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant");
+    }
+    function showStatus() {
+      const messages = {idle: "Gõ ít nhất một ký tự để tìm địa chỉ tại NYC.",
+        searching: "Đang tìm địa chỉ…", retrieving: "Đang xác nhận địa chỉ…",
+        empty: "Không có kết quả. Hãy thử tên hoặc địa chỉ khác.",
+        error: "Không thể tìm/chọn địa chỉ. Hãy kiểm tra kết nối hoặc sửa từ khóa.",
+        offline: "Tìm địa chỉ trực tuyến chưa được bật."};
+      status.textContent = selected ? "Đã chọn địa chỉ."
+        : phase === "results" ? "Chọn một kết quả hoặc dùng phím lên/xuống và Enter."
+        : messages[phase] || messages.idle;
+      input.setAttribute("aria-busy", phase === "searching" || phase === "retrieving" ? "true" : "false");
       height();
+    }
+    function highlight(index) {
+      active = index;
+      Array.from(choices.children).forEach((node, position) => {
+        node.setAttribute("aria-selected", String(position === active));
+      });
+      if (active >= 0) input.setAttribute("aria-activedescendant", "address-option-" + active);
+      else input.removeAttribute("aria-activedescendant");
+    }
+    function choose(index) {
+      const candidate = rows[index];
+      if (!online() || !candidate || retrieving !== null || !validQuery(query)) return;
+      const key = eventKey(candidate.mapbox_id);
+      if (!remember(retrieves, key)) return;
+      retrieving = key; cancelTimer(); closeChoices(); phase = "retrieving";
+      emit("retrieve", {mapbox_id: candidate.mapbox_id});
+      showStatus();
+    }
+    function showRows(candidates) {
+      if (dismissed === eventKey()) return;
+      const nextRows = (Array.isArray(candidates) ? candidates : []).filter((row) => row &&
+        typeof row.mapbox_id === "string" && row.mapbox_id.length > 0 &&
+        typeof row.label === "string" && row.label.length > 0).slice(0, 5);
+      if (!choices.hidden && JSON.stringify(rows) === JSON.stringify(nextRows)) return;
+      closeChoices(); rows = nextRows;
+      rows.forEach((candidate, index) => {
+        const option = document.createElement("li");
+        option.id = "address-option-" + index; option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", "false"); option.textContent = candidate.label;
+        option.onmousedown = (event) => event.preventDefault();
+        option.onclick = () => choose(index);
+        choices.appendChild(option);
+      });
+      choices.hidden = rows.length === 0;
+      input.setAttribute("aria-expanded", String(rows.length > 0));
+      phase = rows.length ? "results" : "empty";
+    }
+    function schedule() {
+      cancelTimer();
+      if (!online()) { phase = "offline"; showStatus(); return; }
+      if (!validQuery(query) || composing) { phase = "idle"; showStatus(); return; }
+      phase = "searching"; showStatus();
+      const scheduledVersion = version, scheduledQuery = query;
+      timer = window.setTimeout(() => {
+        timer = null;
+        if (!online() || version !== scheduledVersion || query !== scheduledQuery || !validQuery(query)) return;
+        if (remember(suggests, eventKey())) emit("suggest");
+      }, 400);
+    }
+    function edited() {
+      query = input.value; version += 1; selected = null; retrieving = null; dismissed = null;
+      cancelTimer(); closeChoices(); emit("edit"); schedule();
+    }
+    input.oninput = edited;
+    input.oncompositionstart = () => { composing = true; cancelTimer(); };
+    input.oncompositionend = () => { composing = false; schedule(); };
+    input.onkeydown = (event) => {
+      if (event.isComposing) return;
+      if (event.key === "Escape") { dismissed = eventKey(); cancelTimer(); closeChoices(); phase = selected ? "selected" : "idle"; showStatus(); return; }
+      if (!rows.length) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        highlight(event.key === "ArrowDown" ? (active + 1) % rows.length
+          : (active <= 0 ? rows.length - 1 : active - 1));
+      } else if (event.key === "Enter" && active >= 0) { event.preventDefault(); choose(active); }
+    };
+    function theme(value) {
+      // Reuse the native app's font stack when supplied; keep font configuration
+      // local and reject CSS functions/escapes instead of loading remote fonts.
+      const font = value && typeof value.font === "string" ? value.font.trim() : "";
+      const fontFamily = font.length > 0 && font.length <= 200 && /^[a-zA-Z0-9 "'_,.\-]+$/.test(font)
+        ? font : '"Segoe UI", Arial, sans-serif';
+      document.documentElement.style.setProperty("--font-family", fontFamily);
+      // Streamlit versions may send colors without a `base` field.
+      const background = value && typeof value.backgroundColor === "string" ? value.backgroundColor : "";
+      const digits = /^#[0-9a-f]{6}$/i.test(background) ? background.slice(1)
+        : /^#[0-9a-f]{3}$/i.test(background) ? background.slice(1).split("").map((item) => item + item).join("") : null;
+      const dark = Boolean(value && value.base === "dark") || Boolean(digits &&
+        (parseInt(digits.slice(0, 2), 16) * .2126 + parseInt(digits.slice(2, 4), 16) * .7152 +
+          parseInt(digits.slice(4, 6), 16) * .0722) < 128);
+      const colors = dark
+        ? {"--bg": "#0e1117", "--fg": "#fafafa", "--muted": "#d0d5dd", "--border": "#667085", "--active": "#243b60", "--accent": "#92b8ff"}
+        : {"--bg": "#fff", "--fg": "#262730", "--muted": "#475467", "--border": "#9ca3af", "--active": "#e6f0ff", "--accent": "#155eef"};
+      Object.entries(colors).forEach(([name, value]) => document.documentElement.style.setProperty(name, value));
+      document.documentElement.style.colorScheme = dark ? "dark" : "light";
+    }
+    window.addEventListener("message", (event) => {
+      if (event.source !== window.parent || !event.data || event.data.type !== "streamlit:render") return;
+      const next = event.data.args || {};
+      if (retiredSessions.includes(next.session_token)) return;
+      args = next; theme(event.data.theme);
+      document.getElementById("label").textContent = typeof args.label === "string" ? args.label : "Địa chỉ NYC";
+      const serverVersion = Number.isSafeInteger(args.version) && args.version >= 0 ? args.version : 0;
+      const serverQuery = typeof args.query === "string" ? args.query : "";
+      const nextSession = typeof args.session_token === "string" ? args.session_token : "";
+      if (!initialized) {
+        initialized = true; session = nextSession; version = serverVersion; query = serverQuery;
+        input.value = query;
+      } else if (nextSession && nextSession !== session) {
+        retiredSessions.push(session); if (retiredSessions.length > 16) retiredSessions.shift();
+        session = nextSession;
+        // An old retrieve may finish while newer text is being typed. Keep the
+        // newer draft and invalidate the server selection in the new session.
+        if (serverVersion < version) {
+          emit("edit");
+          // The previous debounce may already have fired with the retired
+          // token while retrieve was in flight. The new session must own the
+          // still-current draft; ordinary rerenders never enter this branch.
+          if (!selected) schedule();
+        }
+      }
+      const selectedResponse = serverVersion === version && args.selected &&
+        typeof args.selected.label === "string" &&
+        (serverQuery === query || (selected && selected.label === query));
+      const current = serverVersion === version && serverQuery === query;
+      if (!online()) { cancelTimer(); closeChoices(); phase = "offline"; }
+      if (selectedResponse) {
+        cancelTimer(); closeChoices(); retrieving = null;
+        selected = {label: args.selected.label}; query = selected.label;
+        if (input.value !== query) input.value = query;
+        phase = "selected";
+      } else if (current && args.status === "error") {
+        closeChoices(); retrieving = null; phase = "error";
+      } else if (current && online() && retrieving === null &&
+        args.suggestions_query === query && args.suggestions_version === version &&
+        (args.status === "results" || args.status === "empty")) {
+        showRows(args.suggestions);
+      } else if (current && args.status === "retrieving") {
+        closeChoices(); phase = "retrieving";
+      }
+      // Renders do not reassign draft text, focus or cursor and never replay an
+      // HTTP-producing event. Only user input schedules suggest.
+      showStatus();
     });
     send("streamlit:componentReady", {apiVersion: 1});
     height();

@@ -44,6 +44,59 @@ def test_search_keeps_supplied_uuid_through_suggest_and_retrieve():
     assert TOKEN not in repr(client)
 
 
+@pytest.mark.parametrize("query", ["m", " m ", "x" * 250])
+def test_autocomplete_accepts_one_character_and_uses_explicit_nyc_search(query):
+    calls = []
+    session = str(uuid4())
+
+    def transport(url, **options):
+        calls.append((parse_qs(urlsplit(url).query), options))
+        return {"suggestions": []}
+
+    assert MapboxClient(TOKEN, http=transport).suggest(query, session) == []
+    assert len(calls) == 1
+    parameters, options = calls[0]
+    assert parameters == {
+        "q": [query.strip()], "session_token": [session], "country": ["US"],
+        "limit": ["5"], "types": ["address,poi"],
+        "bbox": ["-74.3,40.45,-73.65,40.95"],
+        "proximity": ["-73.9857,40.7484"], "access_token": [TOKEN],
+    }
+    assert options == {"timeout": 10, "max_bytes": MAX_RESPONSE_BYTES}
+
+
+@pytest.mark.parametrize("query", [
+    "", " ", None, 1, "x" * 251, " " * 250 + "m", "m\n", "m\t", "m\x00", "m\x7f", "m\x85",
+])
+def test_autocomplete_rejects_empty_control_and_oversized_queries_without_http(query):
+    def transport(*args, **kwargs):
+        pytest.fail("invalid query must not perform HTTP")
+
+    with pytest.raises(MapboxError):
+        MapboxClient(TOKEN, http=transport).suggest(query, str(uuid4()))
+
+
+def test_suggestion_label_keeps_street_when_full_address_is_missing():
+    response = {"suggestions": [{
+        "mapbox_id": "synthetic-id", "name": "Synthetic Place",
+        "address": "123 Example Street", "place_formatted": "Synthetic region",
+    }]}
+    assert MapboxClient(TOKEN, http=lambda *args, **kwargs: response).suggest("m", str(uuid4())) == [{
+        "mapbox_id": "synthetic-id", "label": "Synthetic Place, 123 Example Street, Synthetic region",
+    }]
+
+
+@pytest.mark.parametrize("response", [
+    {}, {"suggestions": None}, {"suggestions": [None]},
+    {"suggestions": [{"mapbox_id": "id", "name": "unsafe\nlabel"}]},
+    {"suggestions": [{"mapbox_id": "id", "name": "Name", "address": "unsafe\x00street"}]},
+    {"suggestions": [{"mapbox_id": "id", "name": "Name"}] * 6},
+])
+def test_autocomplete_rejects_malformed_or_excess_results(response):
+    with pytest.raises(MapboxError):
+        MapboxClient(TOKEN, http=lambda *args, **kwargs: response).suggest("m", str(uuid4()))
+
+
 @pytest.mark.parametrize("session", ["", "not-a-uuid", "00000000-0000-0000-0000-000000000000", 42])
 def test_invalid_session_never_calls_transport(session):
     def transport(*args, **kwargs):

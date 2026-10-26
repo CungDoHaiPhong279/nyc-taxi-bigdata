@@ -2263,3 +2263,164 @@ Backup chính xác cho checkpoint này nằm trong thư mục ignored
 đổi mới sau checkpoint. Rollback có thể đổi dashboard ID/StartedAt; không tác
 động PostgreSQL/MLflow/inference/model. Chưa dùng rollback vì triển khai đạt.
 Kết quả live không chứng nhận accuracy địa chỉ → giá hay đã sửa lỗi Docker/JVM cũ.
+
+### Tìm địa chỉ bằng autocomplete thật (bản local)
+
+Hai ô đón/đến tự tìm bằng **Mapbox Search Box** sau khi ngừng gõ khoảng **400ms**,
+bắt đầu từ một ký tự hợp lệ; không cần nút tìm và không có danh sách địa điểm mẫu.
+Mỗi dropdown tối đa 5 kết quả có tên và địa chỉ phân biệt, giới hạn bằng NYC bbox/
+proximity, không dùng IP người dùng làm vị trí ưu tiên. Click kết quả hoặc dùng
+↑/↓ rồi Enter: backend retrieve, kiểm tra tọa độ và chọn/điền ô ngay, không có bước
+“Dùng địa chỉ”. Escape đóng danh sách; xóa/sửa chữ vô hiệu hóa lựa chọn cũ, xóa hết
+không gọi API. Có trạng thái đang tìm, rỗng, lỗi, offline và đã chọn; giữ focus/
+caret/draft qua rerun và hỗ trợ theme sáng/tối. Chỉ nút tính cước mới gọi routing/
+model; kết quả đã submit vẫn thuộc snapshot/UUID cũ khi thay đổi draft.
+
+Query/version và session tách riêng theo ô; response cũ không ghi đè query mới.
+Chỉ retrieve ID thuộc kết quả hiện tại; tọa độ do backend retrieve xác minh, không
+nhận tọa độ tùy ý từ browser. Session giữ qua các suggest và rotate sau retrieve;
+giữ giới hạn 50 suggest/180s, cửa sổ 128 event IDs cùng monotonic version để chống
+replay, không bỏ giới hạn hoặc tự retry. Counters suggest/retrieve giữ trong RAM,
+không chứa token, query, địa chỉ hoặc raw responses và không ghi logs/cache disk.
+
+Kiểm chứng local: 12 Node/DOM tests PASS, 55 bridge/UI AppTest PASS trong image
+test có sẵn, offline/read-only; 59 Mapbox tests PASS và 11 ca validation được kiểm
+lại sau bổ sung chặn C1 control characters (không cộng thành 70 ca khác nhau).
+Node test mới được thêm vào job packaging CI hiện có, không thêm job. Các kết quả
+trên là bằng chứng local trước commit, không thay cho CI của SHA mới.
+
+Dashboard chính hiện dùng image refresh local
+`nyc-taxi-dashboard:2b-autocomplete-20261026-01`, ID
+`sha256:39524a1b05168e70ce3e6ee7ffe0f6cb4d7b2ed0c42aae903dda3c3065797ac2`.
+Đây là checkpoint triển khai autocomplete trước các chỉnh UI/vùng/thông báo
+bên dưới; mã UI mới trong checkpoint nguồn này **chưa deploy**.
+Nền là production marker image ở mục trên; requirements/runtime không đổi, chỉ
+COPY 4 runtime files (layers mới 151.776bytes), không pull/install/dependency mới.
+Smoke offline PASS: `pip check`, geometry/frontend package, 26 hashes khớp source.
+Chỉ dashboard được recreate bằng `--no-deps --no-build --pull never`; `.env`, token,
+PostgreSQL/MLflow/inference/model giữ nguyên. Mở lại vẫn dùng `start.ps1 -WithInference`.
+Rollback riêng về pin `nyc-taxi-dashboard:2b-markers-18407c2` rồi chạy lại lệnh
+Compose dashboard ở trên; backup local ignored nằm trong
+`.sandbox/address-2b/autocomplete-20261026-01/`, không đổi `.env` khi rollback.
+
+Chrome thật/WebGL: `me` và `met` tự hiện 5 gợi ý theo đúng query/version, focus và
+caret không mất; gõ nhanh nhiều ký tự chỉ thêm một suggest. Hai ô độc lập, mỗi ô
+retrieve một lần rồi tự điền lựa chọn. Tổng **5 suggest, 2 retrieve** đếm bằng
+counters backend trước client calls; **1 Directions, 1 predict** qua một lần submit
+thành công (không retry/parity), **1 map instance/load** quan sát trên browser.
+Tuyến, A/B, logo/attribution và giá **$20.39** hiện được; rerun giữ cùng map/marker/
+UUID/kết quả, counters không tăng. Browser/profile/context và containers test/smoke
+đã dọn; giữ image/config cũ để rollback, không prune.
+
+**Chưa đạt đủ tiêu chí autocomplete một ký tự:** live `m` và `e` có phát suggest
+nhưng provider trả danh sách rỗng; không bịa gợi ý hay âm thầm đổi query. Tài liệu
+[Search Box API](https://docs.mapbox.com/api/search/search-box/#get-suggested-results)
+không bảo đảm một query luôn có kết quả; chưa xác định nguyên nhân response rỗng,
+không kết luận provider bắt buộc hai ký tự. Tiêu chí “m hiện địa điểm” chưa PASS.
+Ngoài ra automation DateInput chưa chốt: màn hình được đặt 15/01 nhưng snapshot
+thực tế dùng **15/06/2025 10:00 NYC**; không gọi predict lại để che khác biệt.
+Vì vậy không dùng lượt này để chứng nhận thao tác ngày hoặc PASS toàn luồng theo
+ngày dự định. Không thay model, chứng nhận accuracy hay kết luận đã sửa lỗi JVM.
+
+#### Chốt kiểm chứng bổ sung, không build/deploy lại
+
+Đã đối chiếu đúng **2 suggest bổ sung**, cùng `q=m`, `country=US`, `limit=5`,
+NYC bbox `-74.3,40.45,-73.65,40.95` (west/south/east/north) và proximity
+`-73.9857,40.7484` (longitude/latitude), chỉ khác `types`:
+
+- `types=address,poi`: HTTP 200, upstream 0 và parser 0.
+- Bỏ riêng `types`, vẫn giữ NYC: HTTP 200, upstream 5 nhưng parser hiện từ chối
+  biến thể response này. Không lưu raw response nên chưa chốt trường nào bị từ
+  chối hoặc 5 kết quả đó có phải địa điểm có thể retrieve; không gọi thêm để dò.
+
+Tham số production đúng; parser không lọc bỏ hàng hợp lệ để biến thành rỗng.
+Giới hạn đã quan sát là **`m` không trả address/poi với bộ lọc hiện tại**, không
+phải bằng chứng provider luôn rỗng với một ký tự. Không âm thầm bỏ types trên
+production, nới NYC, nối thêm chữ, dùng danh sách mẫu hoặc đổi yêu cầu sang hai
+ký tự. Tiêu chí `m` có địa điểm chọn được vẫn chưa đạt. Lượt này không retrieve,
+Directions, map load hay predict thật.
+
+Binding ngày phía ứng dụng đã kiểm bằng **2 AppTest mới PASS** (coordinator/client
+mock): `2025-01-15T10:00:00` và `2025-02-20T14:30:00` khớp payload submit,
+predictor mock và snapshot; đổi draft/rerun không gọi lại. Không tái hiện lỗi app,
+không sửa runtime. Automation cũ chỉ đặt native hidden input, phát input/change
+và blur, không xác nhận bằng Enter hoặc chọn lịch thật; DOM đúng không chứng minh
+widget state đã commit. Harness ignored được bổ sung thao tác các segment ngày
+hiển thị bằng keyboard rồi Enter/Tab; helper mới chỉ syntax-check, chưa chạy lại
+date browser/model và không tự coi DOM khớp là bằng chứng commit độc lập.
+
+Chrome thật, **dữ liệu tổng hợp và chặn toàn bộ HTTP(S)/WS(S)**: phím lên/xuống,
+Enter chọn đúng một lần, tự điền ô, Escape và rerender giữ focus/caret đều PASS.
+Theme tối đo contrast **18,11:1**; 5 nhãn dài xuống dòng nằm trọn trong chiều cao
+**410px** mà component yêu cầu. Đây là frontend thật với parent/frame-height
+mô phỏng, **không phải Search live hay kiểm lại bố cục iframe trong Streamlit**.
+Không request mạng ngoài; browser/profile tạm đã dọn. Không chạy lại các tests/CI
+cũ, không sửa `.env`, services hoặc model trong lượt kiểm chứng đó.
+
+#### Cải thiện biểu mẫu thời gian và thông báo vùng hỗ trợ
+
+Code hiện tại tách **Ngày đón / Giờ (00–23) / Phút (00–59)** trên cùng hàng,
+dùng lịch DD/MM/YYYY, giữ đủ từng phút và chỉ nhận tháng 1–6/2025, giờ địa phương
+New York. Giá trị gửi vào mô hình vẫn là datetime ISO không đổi timezone; kết quả
+ghi rõ địa chỉ, thời gian và khoảng cách của lần submit, không gắn nhầm với draft.
+
+Ô địa chỉ dùng chữ 16px, nhận font từ Streamlit theme với fallback hệ thống,
+vùng bấm rộng hơn và status rõ ở theme sáng/tối; không tải font/dependency mới.
+Thông tin quan trọng không còn dùng caption nhạt; model hash nằm trong chi tiết.
+
+Ngay sau khi chọn từng địa chỉ, ứng dụng kiểm geometry local đã pin và báo dưới
+đúng ô: hợp lệ trong Taxi Zones, ngoài vùng, nằm trên ranh giới hoặc chồng lấn.
+Khi một ô cần sửa, ô còn lại được giữ nguyên. Lỗi thiếu/sai geometry không được
+coi là bằng chứng địa chỉ ngoài vùng. Tuyến cước đặc biệt tiếp tục bị chặn;
+nút tính chỉ khả dụng khi đủ hai điểm và tuyến thuộc phạm vi hỗ trợ. Không tự
+dịch tọa độ, chọn zone gần nhất, mở rộng ranh giới hay thay model. Kiểm tra này
+không gọi thêm Search, Directions hoặc predict; cache theo lựa chọn/cấu hình
+trong từng session, xóa khi sửa hoặc bỏ lựa chọn. Coordinator vẫn kiểm lại đầu
+vào khi submit trước khi gọi dịch vụ.
+
+Kiểm chứng offline bằng image test sẵn có, không network, source readonly:
+3 file Python liên quan đã đạt **143 ca** sau sửa hai fixture/harness (form cần
+submit để commit giá trị; retrieve hiện tự hoàn tất lựa chọn, không còn bước
+`select` cũ). Sau sửa chỉ chạy lại **23 ca** UI/tích hợp bị ảnh hưởng; tests Node
+autocomplete/typography đạt **15/15**. Không chạy toàn suite, API/model thật,
+build hoặc deploy; giao diện mới **chưa có trong dashboard đang chạy** và chưa
+kiểm browser thật. Giới hạn query một ký tự đã ghi ở trên vẫn giữ nguyên.
+
+#### UI offline và định hướng dự đoán trước chuyến ở thời điểm hiện tại
+
+UI tiếp tục từ các thay đổi autocomplete/ngày giờ ở trên, không quay về production
+cũ. Đã bỏ dòng giải thích lặp bên dưới bản đồ, không lặp địa chỉ ở trạng thái đã
+chọn và phần kết quả chính. Model/inputs của kết quả nằm trong expander. Dòng loại
+cước/đơn vị/khoản chưa gồm được gộp; các cảnh báo theo ca (sân bay, unseen, quãng
+đường 0/xa, cước không dương/cực lớn) vẫn giữ. Kiểm vùng local ngay sau chọn địa
+chỉ và final gate trước predict không thay đổi.
+
+Khi chưa sửa inputs, không hiện thông báo kết quả cũ. Chỉ khi draft khác snapshot
+đã submit mới hiện **“Thông tin đã thay đổi. Bấm Ước tính để cập nhật.”** bằng alert
+theo theme, không opacity. Native date/hour/minute/confirmation widgets ở ngoài
+form để draft edit được ghi nhận ngay; chỉ nút **Ước tính** được phép routing/predict.
+Rerun/sửa draft không đổi nhãn, thời gian, route hoặc UUID của kết quả đã lưu;
+đổi lại đúng inputs cũ sẽ tắt thông báo mà không gọi lại dịch vụ.
+
+Lượt này chỉ kiểm tests bị ảnh hưởng: **37 AppTest**, **14 Node route-map tests**
+và **1 Node selected-status test** đạt; không chạy lại bộ 143 Python + 15 Node
+trước đó. Preview dùng Streamlit/Chrome thật và clients/dữ liệu tổng hợp trong
+runtime riêng, không token/DB/model/Mapbox thật. Ảnh MOCK và harness tạm nằm ở
+`.sandbox/address-2b/ui-pretrip-preview-20261026/`, không đưa vào Git. Đây không
+phải build/deploy hoặc kiểm accuracy; dashboard chính chưa nhận thay đổi UI này.
+
+Chrome zoom 100% đã kiểm dropdown 5 kết quả trong iframe Streamlit thật (font 16px,
+không tràn, giữ focus), trạng thái trống/lỗi vùng/kết quả mock, rerun giữ snapshot
+và sửa giờ/địa chỉ hiện đúng thông báo mà không gọi thêm mock routing/predict.
+Thông báo đo tương phản sáng **6,67:1**, tối **4,90:1**, opacity 1. Bản đồ preview
+là placeholder ghi MOCK, không phải kiểm Mapbox live. Container và Chrome/profile
+thử đã dọn; chỉ giữ ảnh/harness/metadata ignored khoảng 0,87 MiB. Bốn services gốc
+giữ ID/StartedAt và healthy; không sửa `.env`, dữ liệu hoặc model.
+
+Thiết kế tiếp theo: [Kế hoạch ước tính trước chuyến](plans/ML_PRETRIP_PLAN.md).
+Tách request mới chưa có nhãn khỏi dữ liệu completed để học/đánh giá; training và
+inference v2 cùng artifact/features/calendar có phiên bản. **Đi ngay** lấy
+`America/New_York` lúc submit, hẹn giờ là tùy chọn. Các guard/holiday v1 vẫn giữ
+để tái hiện 2025; không ánh xạ ngày hiện tại về 2025 hoặc lấy MAE June làm cam kết.
+Trước khi phục vụ hiện tại phải đánh giá model mới và xử lý train-serving distance
+gap; chỉ chỉnh UI/nới lịch không đủ điều kiện. Chưa tải dữ liệu hoặc train v2.

@@ -14,9 +14,34 @@ from nyc_taxi.dashboard.address_component import (
 from nyc_taxi.dashboard.mapbox_client import MapboxClient, MapboxError
 from nyc_taxi.dashboard.geometry_assets import load_geometry_bundle
 from nyc_taxi.dashboard.prediction import InferenceClient
-from nyc_taxi.dashboard.route_fare import RouteFareCoordinator, execute_submission
+from nyc_taxi.dashboard.route_fare import (
+    RouteFareCoordinator, RouteFareError, execute_submission,
+    validate_address_support, validate_standard_route,
+)
 from nyc_taxi.dashboard.route_map import route_map
 from nyc_taxi.dashboard.taxi_zones import GeometryError
+
+
+DIRTY_INPUTS_MESSAGE = "Thông tin đã thay đổi. Bấm Ước tính để cập nhật."
+_GENERAL_NOTICES = {
+    "Quãng đường là tuyến ô tô dự kiến; có thể khác quãng đường đồng hồ taxi thực tế.",
+    "Đây là demo lịch sử Jan–Jun/2025. Cước cơ bản USD chưa gồm tip, toll và phụ phí.",
+}
+
+
+def inputs_changed(stored: dict, draft: dict) -> bool:
+    """Compare draft inputs with the immutable submitted result, not map state."""
+    def address_identity(value):
+        if not isinstance(value, dict):
+            return None
+        return tuple(value.get(key) for key in ("label", "longitude", "latitude"))
+
+    return (
+        any(address_identity(draft.get(slot)) != address_identity(stored.get(slot))
+            for slot in ("pickup", "dropoff"))
+        or draft.get("pickup_datetime") != stored.get("pickup_datetime")
+        or draft.get("standard_rate") is not True
+    )
 
 
 def address_flow_enabled() -> bool:
@@ -31,68 +56,161 @@ def make_search_client():
     return MapboxClient(os.environ.get("MAPBOX_ACCESS_TOKEN", ""))
 
 
+class _DeferredSearchClient:
+    """Construct transport only after version/session guards inside the bridge."""
+
+    def suggest(self, query, session_token):
+        return make_search_client().suggest(query, session_token)
+
+    def retrieve(self, mapbox_id, session_token):
+        return make_search_client().retrieve(mapbox_id, session_token)
+
+
 @st.cache_resource(max_entries=2, show_spinner=False)
 def load_geometry(path: str, sha256: str, manifest_path: str = ""):
     # Only public, pinned geometry is cached process-wide; never user addresses.
     return load_geometry_bundle(path or None, manifest_path or None, sha256 or None)
 
 
+def get_geometry():
+    """Local, checksum-pinned support check; never constructs an HTTP client."""
+    return load_geometry(os.environ.get("FARE_ADDRESS_GEOMETRY_PATH", ""),
+                         os.environ.get("FARE_ADDRESS_GEOMETRY_SHA256", ""),
+                         os.environ.get("FARE_ADDRESS_GEOMETRY_MANIFEST", ""))
+
+
 def make_coordinator():
-    geometry = load_geometry(os.environ.get("FARE_ADDRESS_GEOMETRY_PATH", ""),
-                             os.environ.get("FARE_ADDRESS_GEOMETRY_SHA256", ""),
-                             os.environ.get("FARE_ADDRESS_GEOMETRY_MANIFEST", ""))
-    return RouteFareCoordinator(router=make_search_client(), geometry=geometry, predictor=InferenceClient())
+    return RouteFareCoordinator(router=make_search_client(), geometry=get_geometry(), predictor=InferenceClient())
+
+
+def selection_support(state: dict) -> dict | None:
+    """Keep at most one local support result per field in this user's session.
+
+    Editing/clearing a choice invalidates it. No addresses or coordinates enter
+    the process-wide geometry cache, logs or external services during this check.
+    Configuration changes also invalidate the result; geometry failures are not
+    cached as if they were evidence of an unsupported address.
+    """
+    selected = state.get("selected")
+    if selected is None:
+        state.pop("_zone_support", None)
+        return None
+    identity = (
+        tuple(selected.get(key) for key in ("label", "longitude", "latitude"))
+        if isinstance(selected, dict) else None,
+        *(os.environ.get(key, "") for key in (
+            "FARE_ADDRESS_GEOMETRY_PATH", "FARE_ADDRESS_GEOMETRY_SHA256",
+            "FARE_ADDRESS_GEOMETRY_MANIFEST",
+        )),
+    )
+    cached = state.get("_zone_support")
+    if cached is not None and cached["identity"] == identity:
+        return cached
+    try:
+        result = {"identity": identity, "zone": validate_address_support(selected, get_geometry()),
+                  "error": None, "code": None}
+    except RouteFareError as error:
+        result = {"identity": identity, "zone": None, "error": str(error), "code": error.code}
+    except (GeometryError, OSError, ValueError):
+        return {"zone": None, "code": "geometry_unavailable",
+                "error": "Chưa kiểm tra được vùng hỗ trợ. Cần kiểm tra cấu hình geometry; "
+                         "đây chưa phải kết luận địa chỉ nằm ngoài vùng."}
+    if result["code"] != "invalid_geometry":
+        state["_zone_support"] = result
+    return result
 
 
 def render_page() -> None:
     st.title("Ước tính cước từ địa chỉ")
-    st.caption("Demo lịch sử Jan–Jun/2025 · NYC · standard metered yellow taxi")
-    st.markdown("Ước tính **cước cơ bản `fare_amount`, USD**, chưa gồm tip, tolls và phụ phí. "
-                "Quãng đường ô tô hiển thị bằng **km**; mô hình nhận **mile**. "
-                "Tuyến dự kiến có thể khác quãng đường taximeter đã dùng để đánh giá mô hình.")
+    st.markdown("**Cước đồng hồ tiêu chuẩn · USD · chưa gồm tip, tolls và phụ phí.**")
+    st.write("Bản hiện tại dùng mô hình lịch sử tháng 1–6/2025, chưa phục vụ ngày hiện tại.")
     if os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") != "1":
-        st.info("Luồng địa chỉ đang offline: không tải thư viện/bản đồ hoặc gọi API thật. "
-                "Geometry đã pin được đóng gói riêng; không có giá thay thế khi chưa đủ cấu hình.")
+        st.info("Chế độ offline: tìm địa chỉ và bản đồ trực tuyến chưa được bật.")
 
+    st.subheader("1. Chọn điểm đón và điểm đến")
+    st.write("Gõ địa chỉ hoặc tên địa điểm, rồi chọn một gợi ý.")
+    support_by_slot = {}
     for slot, label in (("pickup", "Địa chỉ đón"), ("dropoff", "Địa chỉ đến")):
         key = "address_" + slot
         if key not in st.session_state:
             st.session_state[key] = new_address_state()
         state = st.session_state[key]
-        event = address_picker(state, label=label, key=key + "_picker")
-        if isinstance(event, dict) and event.get("event_id") not in state["events"] and len(state["events"]) >= 64:
-            state["error"] = "Phiên tìm kiếm đã đủ số thao tác. Hãy mở phiên trình duyệt mới."
-        elif isinstance(event, dict) and event.get("event_id") not in state["events"]:
+        event = address_picker(
+            state, label=label, key=key + "_picker",
+            online=address_flow_enabled() and os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") == "1",
+        )
+        if isinstance(event, dict) and event.get("event_id") not in state["events"]:
+            st.session_state.pop("address_fare_error", None)
             try:
-                process_address_event(state, event, make_search_client())
+                # Typing/clearing invalidates the draft without constructing an
+                # HTTP client. Only explicit debounced events may use Search.
+                client = _DeferredSearchClient() if event.get("kind") in {"suggest", "retrieve"} else None
+                process_address_event(state, event, client)
             except (AddressSelectionError, MapboxError):
                 # Remember rejected events too, so a rerun cannot retry HTTP.
                 if event.get("event_id") not in state["events"]:
-                    state["events"].append(event.get("event_id"))
+                    state["events"] = (state["events"] + [event.get("event_id")])[-128:]
                 state["selected"] = None
-                state["error"] = "Chưa thể tìm địa chỉ. Cần cấu hình API/geometry ở Chặng 2B."
+                state["suggestions"] = []
+                state["status"] = "error"
+                state["error"] = "Chưa thể tìm địa chỉ. Kiểm tra kết nối/cấu hình; không tự gọi lại."
             st.rerun()
         if state["error"]:
             st.error(state["error"])
 
-    with st.form("address_fare_form"):
-        pickup_date = st.date_input("Ngày đón NYC", value=date(2025, 6, 15),
-                                    min_value=date(2025, 1, 1), max_value=date(2025, 6, 30))
-        pickup_time = st.time_input("Giờ đón NYC", value=time(12))
-        standard = st.checkbox("Tôi xác nhận standard metered yellow taxi; không flat/negotiated/group fare.")
-        submitted = st.form_submit_button("Tính tuyến và ước tính cước", type="primary")
+        support = selection_support(state)
+        support_by_slot[slot] = support
+        if support is not None:
+            if support["zone"] is not None:
+                zone = support["zone"]
+                st.success(f"{label}: hợp lệ trong Taxi Zones · {zone['borough']} · {zone['zone']}")
+            else:
+                st.warning(f"{label}: {support['error']}")
+
+    route_error = None
+    can_submit = all(result is not None and result["zone"] is not None
+                     for result in support_by_slot.values())
+    if can_submit:
+        try:
+            validate_standard_route(support_by_slot["pickup"]["zone"], support_by_slot["dropoff"]["zone"])
+        except RouteFareError as error:
+            can_submit = False
+            route_error = str(error)
+            st.warning(route_error)
+    if not can_submit and route_error is None:
+        st.info("Chọn đủ hai địa chỉ hợp lệ trước khi tính cước. "
+                "Nếu một điểm chưa được hỗ trợ, chỉ cần sửa ô đó; điểm còn lại được giữ nguyên.")
+
+    st.subheader("2. Chọn thời gian đón")
+    st.write("Giờ địa phương New York · định dạng 24 giờ · chỉ tháng 1–6/2025.")
+    # Native widgets outside a form commit draft edits on rerun, so the stale
+    # notice is immediate. Only this explicit button can route or predict.
+    with st.container(border=True):
+        day_col, hour_col, minute_col = st.columns([2, 1, 1])
+        pickup_date = day_col.date_input(
+            "Ngày đón", value=date(2025, 6, 15), min_value=date(2025, 1, 1),
+            max_value=date(2025, 6, 30), format="DD/MM/YYYY", key="address_pickup_date",
+        )
+        hour = hour_col.selectbox("Giờ (00–23)", range(24), index=12,
+                                  format_func=lambda value: f"{value:02d}", key="address_pickup_hour")
+        minute = minute_col.selectbox("Phút (00–59)", range(60),
+                                      format_func=lambda value: f"{value:02d}", key="address_pickup_minute")
+        standard = st.checkbox("Tôi xác nhận đây là taxi vàng tính cước đồng hồ tiêu chuẩn, "
+                               "không phải cước cố định, thỏa thuận hoặc đi chung.")
+        submitted = st.button("Ước tính", type="primary", disabled=not can_submit, key="address_estimate_submit")
+    pickup_time = time(hour, minute)
+    payload = {"pickup": st.session_state.address_pickup["selected"],
+               "dropoff": st.session_state.address_dropoff["selected"],
+               "pickup_datetime": datetime.combine(pickup_date, pickup_time).isoformat(),
+               "standard_rate": standard}
     if submitted:
         st.session_state.pop("address_fare_result", None)
         st.session_state.pop("address_fare_error", None)
-        payload = {"pickup": st.session_state.address_pickup["selected"],
-                   "dropoff": st.session_state.address_dropoff["selected"],
-                   "pickup_datetime": datetime.combine(pickup_date, pickup_time).isoformat(),
-                   "standard_rate": standard}
         if payload["pickup"] is None or payload["dropoff"] is None:
             st.session_state.address_fare_error = "Hãy chọn và xác nhận đủ hai địa chỉ trước khi gửi."
         else:
             try:
-                with st.spinner("Đang tính tuyến và gọi mô hình đã chốt…"):
+                with st.spinner("Đang tính tuyến và ước tính cước…"):
                     outcome = execute_submission(st.session_state, str(uuid4()), payload, make_coordinator())
                 if outcome.success:
                     st.session_state.address_fare_result = outcome.estimate.to_dict()
@@ -107,11 +225,14 @@ def render_page() -> None:
         st.error(st.session_state.address_fare_error)
     stored = st.session_state.get("address_fare_result")
     if stored:
-        st.subheader("Kết quả cho yêu cầu gần nhất đã gửi")
+        if inputs_changed(stored, payload):
+            # Native Streamlit alert follows the theme's text/background colors;
+            # no opacity or washed-out custom text is applied.
+            st.info(DIRTY_INPUTS_MESSAGE)
+        st.subheader("Kết quả ước tính")
         st.metric("Ước tính cước cơ bản (USD)", f"${stored['prediction']['fare_amount_usd']:,.2f}")
-        st.caption(f"{stored['pickup']['label']} → {stored['dropoff']['label']} · "
-                   f"{stored['distance_km']:.3f} km · {stored['pickup_datetime']} NYC. "
-                   "Thay đổi lựa chọn chưa làm thay đổi yêu cầu đã gửi này.")
+        submitted_at = datetime.fromisoformat(stored["pickup_datetime"])
+        st.write(f"**{stored['distance_km']:.3f} km · {submitted_at:%d/%m/%Y %H:%M} — giờ New York**")
         online = address_flow_enabled() and os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") == "1"
         # Use only the immutable submitted route, never the current form draft.
         # A stable component key preserves the browser map across Streamlit reruns.
@@ -122,17 +243,26 @@ def render_page() -> None:
             access_token=os.environ.get("MAPBOX_ACCESS_TOKEN", "") if online else "",
             online=online, key="address_submitted_route_map",
         )
-        for warning in stored["warnings"]:
-            st.warning(warning)
         prediction = stored["prediction"]
+        case_warnings = [warning for warning in stored["warnings"] if warning not in _GENERAL_NOTICES]
+        for warning in dict.fromkeys(case_warnings):
+            st.warning(warning)
         unseen = any(prediction.get("unseen_categories", {}).values())
         if unseen:
             st.warning("Vùng này chưa có trong dữ liệu huấn luyện; kết quả có thể kém chính xác hơn.")
+        if stored["request"]["distance_miles"] == 0:
+            st.warning("Quãng đường bằng 0: kết quả có độ bất định lớn hơn, không phải báo giá bảo đảm.")
+        elif stored["request"]["distance_miles"] > 50:
+            st.warning("Chuyến xa trên 50 mile có ít bằng chứng đánh giá; không dùng như báo giá bảo đảm.")
         if prediction["fare_amount_usd"] <= 0:
             st.warning("Mô hình trả cước không dương; không tự cắt hoặc thay giá trị dự đoán.")
-        st.info("MAE lịch sử không phải bảo đảm sai số cho luồng địa chỉ → tuyến → giá. "
-                "Chuyến xa, quãng đường 0, cước cao và vùng chưa thấy có độ bất định lớn hơn.")
+        elif prediction["fare_amount_usd"] > 1000:
+            st.warning("Cước cao trên 1.000 USD thuộc nhóm hiếm; độ chính xác chưa được bảo đảm.")
         with st.expander("Chi tiết mô hình và yêu cầu đã gửi"):
+            st.text(f"{stored['pickup']['label']} → {stored['dropoff']['label']}")
+            st.caption(f"{stored['pickup_datetime']} NYC")
+            st.write("Mô hình lịch sử 2025; quãng đường ô tô dự kiến có thể khác quãng đường đồng hồ taxi. "
+                     "MAE lịch sử không bảo đảm sai số hiện tại hoặc sai số của từng chuyến.")
             st.write({"pickup_zone": stored["pickup"]["location_id"],
                       "dropoff_zone": stored["dropoff"]["location_id"],
                       "distance_miles": stored["request"]["distance_miles"],

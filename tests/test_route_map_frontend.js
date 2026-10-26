@@ -28,9 +28,11 @@ function harness({libraryError = false, deferredLibrary = false, markerFailureAt
   const listeners = {};
   const timers = new globalThis.Map();
   let timerId = 0;
-  const nodes = {map: {style: {}}, status: {textContent: ""}};
+  const nodes = {map: {style: {}}, status: {textContent: "", hidden: false}};
+  const themeStyle = {setProperty(name, value) { this[name] = value; }};
   const parent = {postMessage: (message) => messages.push(message)};
   const document = {
+    documentElement: {style: themeStyle},
     body: {scrollHeight: 410}, getElementById: (id) => nodes[id],
     createElement: (tagName) => ({tagName, attributes: {},
       setAttribute(name, value) { this.attributes[name] = value; }}),
@@ -74,9 +76,9 @@ function harness({libraryError = false, deferredLibrary = false, markerFailureAt
   const context = vm.createContext({window, document, console: {log: () => assert.fail("Unexpected log"),
     warn: () => assert.fail("Unexpected warning"), error: () => assert.fail("Unexpected error log")}});
   vm.runInContext(source, context, {filename: "route_map_frontend/index.html"});
-  return {appended, messages, instances, markerInstances, nodes, timers,
-    render: async (value) => {
-      listeners.message({source: parent, data: {type: "streamlit:render", args: value}});
+  return {appended, messages, instances, markerInstances, nodes, timers, themeStyle,
+    render: async (value, theme) => {
+      listeners.message({source: parent, data: {type: "streamlit:render", args: value, theme}});
       await tick();
     },
     foreignRender: async (value) => {
@@ -179,9 +181,45 @@ test("same submitted route survives reruns/draft inputs without new map/source o
   assert.equal(map.bounds.length, 1);
   assert.equal(ui.markerInstances.length, 2);
   assert.equal(ui.markerInstances.every((marker) => marker.removed === 0), true);
+  assert.equal(ui.nodes.status.hidden, true);
+  assert.equal(ui.nodes.status.textContent, "");
   assert.equal(ui.messages.some((message) => message.type === "streamlit:setComponentValue"), false);
   assert.equal(/fetch\s*\(|XMLHttpRequest|\/directions\/|\/predict/.test(source), false);
   assert.equal(/localStorage|sessionStorage|console\./.test(source), false);
+});
+
+test("successful map hides repeated explanation while loading, invalid and error statuses stay visible", async () => {
+  const ui = harness({deferredLibrary: true});
+  await ui.render(args());
+  assert.equal(ui.nodes.status.hidden, false);
+  assert.match(ui.nodes.status.textContent, /Đang tải bản đồ/);
+  await ui.completeLibrary();
+  ui.instances[0].events.load();
+  assert.equal(ui.nodes.status.hidden, true);
+  assert.equal(ui.nodes.status.textContent, "");
+  assert.equal(html.includes("Tuyến đường của lần ước tính đã gửi; thay đổi biểu mẫu chưa cập nhật kết quả này."), false);
+  assert.match(html, /aria-label="Tuyến đường của lần ước tính đã gửi"/);
+  ui.instances[0].events.error({error: new Error("Synthetic upstream error")});
+  assert.equal(ui.nodes.status.hidden, false);
+  assert.match(ui.nodes.status.textContent, /Không thể hiển thị bản đồ/);
+  await ui.render({online: false});
+  assert.equal(ui.nodes.status.hidden, false);
+  assert.match(ui.nodes.status.textContent, /Bản đồ chưa bật/);
+});
+
+test("status uses opaque contrasting light/dark theme colors and rejects remote font configuration", async () => {
+  const ui = harness();
+  await ui.render({online: false}, {base: "light", font: "Arial, sans-serif"});
+  assert.equal(ui.themeStyle["--route-bg"], "#fff");
+  assert.equal(ui.themeStyle["--route-fg"], "#262730");
+  assert.equal(ui.themeStyle["--route-font"], "Arial, sans-serif");
+  await ui.render({online: false}, {backgroundColor: "#0e1117", font: "url(https://invalid.example/font)"});
+  assert.equal(ui.themeStyle["--route-bg"], "#0e1117");
+  assert.equal(ui.themeStyle["--route-fg"], "#fafafa");
+  assert.equal(ui.themeStyle.colorScheme, "dark");
+  assert.equal(ui.themeStyle["--route-font"], '"Segoe UI", Arial, sans-serif');
+  assert.equal(/opacity\s*:/.test(html), false);
+  assert.equal(ui.appended.length, 0);
 });
 
 test("new submission reuses the map and updates the existing source from received geometry", async () => {

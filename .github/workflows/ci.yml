@@ -117,8 +117,8 @@ jobs:
         env:
           DOCKER_BUILDKIT: "1"
         run: docker build --target dashboard --progress=plain -f Dockerfile.dashboard -t nyc-taxi-dashboard:ci .
-      - name: Check route-map browser bridge using offline Node DOM stubs
-        run: node --test tests/test_route_map_frontend.js
+      - name: Check autocomplete and route-map bridges using offline Node DOM stubs
+        run: node --test tests/test_route_map_frontend.js tests/test_address_frontend.js
       - name: Check packaged dashboard dependencies and imports without network
         run: |
           docker run --rm --network none --read-only nyc-taxi-dashboard:ci python -m pip check

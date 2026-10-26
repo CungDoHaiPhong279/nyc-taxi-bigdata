@@ -30,17 +30,20 @@ def test_maps_polygon_with_metadata_without_nearest_fallback():
     assert zones.resolve(-73.95, 40.75) == {
         "location_id": 161, "borough": "Manhattan", "zone": "Synthetic zone",
     }
-    with pytest.raises(GeometryError, match="outside"):
+    with pytest.raises(GeometryError, match="outside") as caught:
         zones.resolve(-74.5, 40.75)
+    assert caught.value.code == "outside_zones"
 
 
 def test_hole_excludes_interior_and_rejects_boundary():
     zones = TaxiZoneGeometry(collection(feature(coordinates=[rectangle(), rectangle(-73.98, 40.72, -73.96, 40.74)])))
     assert zones.resolve(-73.94, 40.75)["location_id"] == 161
-    with pytest.raises(GeometryError, match="outside"):
+    with pytest.raises(GeometryError, match="outside") as outside:
         zones.resolve(-73.97, 40.73)
-    with pytest.raises(GeometryError, match="boundary"):
+    assert outside.value.code == "outside_zones"
+    with pytest.raises(GeometryError, match="boundary") as boundary:
         zones.resolve(-73.98, 40.73)
+    assert boundary.value.code == "boundary"
 
 
 def test_multipolygon_disjoint_parts():
@@ -62,20 +65,23 @@ def test_concave_polygon_does_not_use_bounding_box_as_membership():
 
 @pytest.mark.parametrize("point", [(-74, 40.75), (-74, 40.7), (-73.95, 40.8)])
 def test_outer_edges_and_vertices_fail_closed(point):
-    with pytest.raises(GeometryError, match="boundary"):
+    with pytest.raises(GeometryError, match="boundary") as caught:
         TaxiZoneGeometry(collection(feature())).resolve(*point)
+    assert caught.value.code == "boundary"
 
 
 def test_overlapping_features_fail_closed():
     zones = TaxiZoneGeometry(collection(feature(), feature(237)))
-    with pytest.raises(GeometryError, match="overlapping"):
+    with pytest.raises(GeometryError, match="overlapping") as caught:
         zones.resolve(-73.95, 40.75)
+    assert caught.value.code == "overlap"
 
 
 @pytest.mark.parametrize("point", [(True, 40.75), (-73.95, False), (math.inf, 40.75), (-73.95, math.nan), (181, 40.75), (-73.95, -91), ("-73.95", 40.75)])
 def test_invalid_coordinates_do_not_resolve(point):
-    with pytest.raises(GeometryError, match="coordinates"):
+    with pytest.raises(GeometryError, match="coordinates") as caught:
         TaxiZoneGeometry(collection(feature())).resolve(*point)
+    assert caught.value.code == "invalid_geometry"
 
 
 @pytest.mark.parametrize("location_id", [True, 0, 264, -1, "unknown"])
