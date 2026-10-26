@@ -2119,8 +2119,9 @@ Dockerfile đã khai báo COPY component và assets vào image; Compose inferenc
 cấu hình đường dẫn geometry/manifest cùng token local hiện có. Loader xác minh
 SHA256 và manifest `validated` trước khi phục vụ. `.env.example` để token rỗng;
 `FARE_ADDRESS_ENABLED=0` và `FARE_ADDRESS_ALLOW_NETWORK=0` vẫn là mặc định.
-Không sửa `.env`, startup/package hoặc model artifacts, không bật flags cho
-dashboard đang chạy. Các thay đổi Docker/Compose này **chưa được triển khai**.
+Tại checkpoint chuẩn bị, chưa sửa `.env` hoặc bật flags trên dashboard chính.
+Lượt triển khai riêng bên dưới chỉ cập nhật image dashboard và hai flags local;
+startup/package, model artifacts và mặc định tắt trong `.env.example` giữ nguyên.
 
 Checkpoint geometry: **11/11 tests geometry asset/preparation PASS** trên host,
 runtime loader đọc đủ 263 IDs, full topology PASS; không tải/kiểm tra lại geometry.
@@ -2164,7 +2165,8 @@ trong image vừa build: kiểm full geometry SHA256, IDs 1–263 và các front
 chạy offline từ source với `PYTHONPATH=src`; smoke source không chứng minh image.
 CI remote của commit `e23225a` đã PASS cả ba jobs, gồm build/smoke image dashboard;
 không build local. AppTest/DOM stub không thay thế kiểm chứng browser thật.
-Hai flags vẫn mặc định tắt; dashboard chính **chưa triển khai luồng địa chỉ mới**.
+Hai flags vẫn mặc định tắt. Tại checkpoint CI này dashboard chính chưa triển khai;
+kết quả triển khai local tiếp theo được ghi riêng bên dưới.
 
 ### Kết quả live và marker A/B
 
@@ -2186,8 +2188,8 @@ dashboard gốc được bật lại, không triển khai tính năng mới lên
 trong snapshot đã submit (không lấy điểm route đã snap hoặc draft đang sửa):
 **A = điểm đón**, **B = điểm đến**, nhãn text an toàn và màu phân biệt. Cùng UUID
 không tạo thêm map/marker; submit mới gỡ marker cũ rồi cập nhật trong cùng map.
-Chỉ kiểm chứng marker bằng tests bridge/AppTest và Node/DOM offline trong lượt
-bổ sung này; **chưa kiểm marker bằng browser live hoặc image build mới**.
+Tại lượt bổ sung marker, chỉ kiểm bằng tests bridge/AppTest và Node/DOM offline;
+kiểm chứng marker trên browser với image refresh được ghi riêng bên dưới.
 Không thêm Search/Directions/predict, dependency hoặc thay model/đổi đơn vị.
 
 Tests bị ảnh hưởng: **12/12 Node/DOM PASS** trên host, **51/51 Python PASS** (42 bridge +
@@ -2200,3 +2202,64 @@ các bộ tests/CI khác, không gọi API live, mở browser hoặc build local
 phụ phí, không phải tổng thanh toán hoặc giá hiện tại. Parity không chứng nhận
 accuracy toàn luồng địa chỉ → giá; không suy diễn đã sửa nguyên nhân Docker/VM
 dừng hoặc lỗi JVM cũ. Không lưu raw responses, token hay tọa độ live trong tài liệu/tests.
+
+### Triển khai dashboard chính: image refresh local có marker A/B
+
+Ngày 26/10/2026, dashboard chính được cập nhật riêng sang
+`nyc-taxi-dashboard:2b-markers-18407c2`, image ID
+`sha256:1e6f1fe2f82eb50a2ad3627e8b3811611c1d22690ecc6d653a66866d67f3b0df`.
+Đây là **image refresh local**, không phải chính image đã được CI build.
+Nền là image production cũ `nyc-taxi-dashboard:ml-p4`, ID
+`sha256:ebe17198e688f4d87b8457e03136b6d6dc4fd36e1dc43f2c43fccb4470e5877d`;
+không dùng image test, không pull hoặc chạy pip/apt/install. Requirements trong
+nền và repository khớp SHA256
+`73c07ff1d515c39f1d29dda1579272f7ccc3a5f2b1f430dcb79c282924c13962`.
+Context allowlist chỉ chứa runtime public, không `.env`, tests, model hay dữ liệu.
+USER/WORKDIR/ENV/CMD/healthcheck giữ đúng Dockerfile chính. Smoke offline PASS:
+`pip check`, geometry 263 IDs/frontend assets và hash của đủ 26 files runtime.
+Không sửa `Dockerfile.dashboard`; tag refresh này chỉ có trên máy local, chưa publish.
+
+Local `.env` có `FARE_ADDRESS_ENABLED=1`, `FARE_ADDRESS_ALLOW_NETWORK=1`; token và
+mọi giá trị khác được giữ nguyên. Triển khai chỉ nhắm dashboard:
+
+```powershell
+docker compose -p nyc-taxi-bigdata -f docker-compose.yml -f docker-compose.inference.yml up -d --no-deps --no-build --pull never dashboard
+```
+
+Chrome headless thật với WebGL đã kiểm marker **A đón/B đến**: đúng tọa độ trong
+snapshot, màu phân biệt, nằm trong khung bản đồ; tuyến, logo/attribution và cước
+**$21.04** đều hiển thị. Ngày/giờ đã submit đúng 15/01/2025 10:00 NYC, frozen model
+identity khớp. Lượt này dùng **image refresh đóng gói**, không mount source/assets.
+Ngân sách live dùng 2 suggest + 2 retrieve, 1 Directions, 1 map load và 1 POST
+predict; không retry hoặc chạy lại parity. Search được quan sát qua các sự kiện
+component đã hoàn tất, Directions/predict qua một lần submit thành công và nhánh
+không retry; không thu raw HTTP trace hoặc có access log backend để đếm độc lập.
+Rerun giữ **cùng object map và hai marker, UUID, tuyến, ngày/giờ và giá**; không
+thêm Search events, submit hoặc map instance. Browser/profile thử và context/smoke
+container đã dọn; image cũ và backup rollback local vẫn giữ, không prune.
+
+Analytics render đủ 4 KPI/3 biểu đồ. Lưu ý: lần mở đầu đã vào analytics mặc định
+và kích hoạt aggregate thường của ứng dụng; harness nhảy thẳng trang dự đoán
+không ngăn được lần đó. Không chạy thêm SQL COUNT/validation riêng trên fact.
+
+Mở lại trên máy đã có images/data/model, không cần export flags tạm:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1 -WithInference
+```
+
+Lệnh trên đã đạt exit 0 từ phiên không export hai flags: đọc `.env`, tái sử dụng
+cả bốn containers healthy, không drift/recreate. Không dùng `-Build` khi chỉ mở
+lại. Không bỏ `-WithInference`: startup thường dùng Compose base khác và sẽ báo
+drift với cấu hình inference này. Máy mới vẫn cần chuẩn bị dữ liệu/model và
+build dashboard theo Dockerfile chuẩn; tag refresh local không tự có sau clone.
+
+Rollback riêng dashboard: khôi phục image pin trong `docker-compose.inference.yml`
+về `nyc-taxi-dashboard:ml-p4`, bỏ riêng hai flags vừa thêm (hoặc đặt `0`), giữ
+token/cấu hình khác, rồi chạy lại đúng lệnh Compose `up ... dashboard` bên trên.
+Backup chính xác cho checkpoint này nằm trong thư mục ignored
+`.sandbox/address-2b/deploy-18407c2-20261026/` (`rollback.env`,
+`rollback-compose.inference.yml`); không chép đè toàn file backup nếu đã có thay
+đổi mới sau checkpoint. Rollback có thể đổi dashboard ID/StartedAt; không tác
+động PostgreSQL/MLflow/inference/model. Chưa dùng rollback vì triển khai đạt.
+Kết quả live không chứng nhận accuracy địa chỉ → giá hay đã sửa lỗi Docker/JVM cũ.

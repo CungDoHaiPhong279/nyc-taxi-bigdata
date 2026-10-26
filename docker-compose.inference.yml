@@ -60,7 +60,7 @@ services:
     stop_grace_period: 30s
 
   dashboard:
-    image: nyc-taxi-dashboard:ml-p4
+    image: nyc-taxi-dashboard:2b-markers-18407c2
     environment:
       FARE_INFERENCE_URL: http://fare-inference:8000
       # Opt-in only; a normal start still shows the existing distance/zone form.
