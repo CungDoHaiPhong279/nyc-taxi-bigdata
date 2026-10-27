@@ -19,6 +19,7 @@ from nyc_taxi.ml.pretrip_training_model import BASELINE_POLICY, GBT_PARAMETERS
 
 
 REFERENCE_MODEL_TREE_SHA256 = "2efee5c2c25769430078f15d9d2ab10db9022cba6fe9ee92dbe7559c8566bd05"
+ABSOLUTE_REFERENCE_MODEL_TREE_SHA256 = "3f9a9ef33c4dda83b07d18efa4bc79b983324cddf287d79a5581151d4785be81"
 REFERENCE_SAMPLE_IDENTITY_SHA256 = "7f9a0ad2ecf55b61acc91f087cdeb1827cbc420b829b1ce58073c28b17a68e86"
 REFERENCE_COUNTS = {"train": 26573, "validation": 23526}
 REFERENCE_BASELINE_MAE_USD = 5.1312024993624075
@@ -31,9 +32,10 @@ def _digest(value: Any) -> str:
                                      allow_nan=False).encode()).hexdigest()
 
 
-def _members(manifest: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+def _members(manifest: Mapping[str, Any], *, expected_tree: str | None = None) -> dict[str, Mapping[str, Any]]:
+    expected_tree = REFERENCE_MODEL_TREE_SHA256 if expected_tree is None else expected_tree
     if (manifest.get("version") != "pretrip-v2-training-artifacts-1"
-            or manifest.get("model_tree_sha256") != REFERENCE_MODEL_TREE_SHA256
+            or manifest.get("model_tree_sha256") != expected_tree
             or any(manifest.get(name) is not False for name in ("holdout_opened", "promoted", "deployed"))):
         raise ValueError("v21_reference_manifest_identity_drift")
     members = {}
@@ -169,6 +171,80 @@ def read_reference(root: Path, manifest: Mapping[str, Any]) -> dict[str, Any]:
             "dictionary_sha256": _digest(dictionaries),
             "baseline_validation_mae_usd": best_mae,
             "gate_threshold_mae_usd": REFERENCE_GATE_THRESHOLD_USD,
+            "metadata_hashes": {name: members[name]["sha256"] for name in
+                                ("training_config.json", "sample_lineage.json", "metrics.json", "baselines.json")}}
+
+
+def read_absolute_reference(root: Path, manifest: Mapping[str, Any],
+                            squared_reference: Mapping[str, Any]) -> dict[str, Any]:
+    """Audit saved absolute-OHE aggregates against the already pinned squared V2.
+
+    The caller first verifies the *complete* absolute bundle manifest, just as
+    for :func:`read_reference`. Only named metadata and the two small indexer
+    Parquets are opened here. No model is loaded, fit or predicted; no sample,
+    raw source or holdout file is opened. The old five-stage OHE layout is
+    intentional: a new native-categorical model must not become its reference.
+    """
+    if (squared_reference.get("model_tree_sha256") != REFERENCE_MODEL_TREE_SHA256
+            or squared_reference.get("sample_identity_sha256") != REFERENCE_SAMPLE_IDENTITY_SHA256):
+        raise ValueError("v22_absolute_squared_reference_identity_drift")
+    root = Path(root).absolute()
+    members = _members(manifest, expected_tree=ABSOLUTE_REFERENCE_MODEL_TREE_SHA256)
+    config = _json(root, members, "training_config.json")
+    lineage = _json(root, members, "sample_lineage.json")
+    evaluation = _json(root, members, "metrics.json")
+    baseline = _json(root, members, "baselines.json")
+    expected_parameters = {**GBT_PARAMETERS, "lossType": "absolute"}
+    if (config.get("loss_profile") != "absolute"
+            or config.get("gbt_parameters") != expected_parameters
+            or config.get("baseline_policy") != BASELINE_POLICY
+            or config.get("features") != list(FEATURE_COLUMNS)
+            or config.get("holdout_opened") is not False):
+        raise ValueError("v22_absolute_reference_configuration_drift")
+    if (config.get("sample_identity_sha256") != REFERENCE_SAMPLE_IDENTITY_SHA256
+            or lineage.get("sample_identity_sha256") != REFERENCE_SAMPLE_IDENTITY_SHA256
+            or lineage.get("sample_counts") != REFERENCE_COUNTS
+            or lineage != squared_reference["lineage"]):
+        raise ValueError("v22_absolute_reference_sample_or_lineage_drift")
+    if config.get("runtime") != squared_reference["runtime"]:
+        raise ValueError("v22_absolute_reference_runtime_drift")
+    if baseline != squared_reference["baselines"]:
+        raise ValueError("v22_absolute_reference_baseline_drift")
+    expected_gate = {"reference_baseline_mae_usd": REFERENCE_BASELINE_MAE_USD,
+                     "reference_gbt_max_mae_usd": REFERENCE_GATE_THRESHOLD_USD,
+                     "required_mae_improvement_percent": 10.0}
+    if config.get("gate_policy") != expected_gate:
+        raise ValueError("v22_absolute_reference_gate_drift")
+    for split, count in REFERENCE_COUNTS.items():
+        split_metrics = evaluation.get(split, {})
+        if (set(split_metrics) != {"global_median", "hierarchical_median", "gbt"}
+                or any(value.get("count") != count for value in split_metrics.values())):
+            raise ValueError("v22_absolute_reference_metric_count_drift")
+        if any(split_metrics[name] != squared_reference["metrics"][split][name]
+               for name in ("global_median", "hierarchical_median")):
+            raise ValueError("v22_absolute_reference_baseline_metrics_drift")
+    gbt_name = _single_stage_member(members, 4, "metadata", ".txt")
+    gbt_metadata = _json(root, members, gbt_name)
+    if (not gbt_metadata.get("class", "").endswith(".GBTRegressionModel")
+            or gbt_metadata.get("paramMap") != expected_parameters):
+        raise ValueError("v22_absolute_reference_effective_parameters_drift")
+    # Library defaultParamMap may still say squared. Only the effective
+    # paramMap must match the pinned absolute experiment configuration.
+    dictionaries = {name: _labels(root, members, index)
+                    for index, name in enumerate(CATEGORICAL_FEATURE_COLUMNS)}
+    if dictionaries != squared_reference["dictionaries"]:
+        raise ValueError("v22_absolute_reference_categorical_dictionary_drift")
+    return {"model_tree_sha256": ABSOLUTE_REFERENCE_MODEL_TREE_SHA256,
+            "squared_reference_model_tree_sha256": REFERENCE_MODEL_TREE_SHA256,
+            "sample_identity_sha256": REFERENCE_SAMPLE_IDENTITY_SHA256,
+            "sample_hashes_and_full_lineage_equal": True,
+            "baseline_artifact_equal": True, "baseline_metrics_equal": True,
+            "runtime_equal": True, "dictionary_sha256": _digest(dictionaries),
+            "category_counts": {name: len(labels) for name, labels in dictionaries.items()},
+            "gbt_parameters": expected_parameters, "metrics": evaluation,
+            "baseline_validation_mae_usd": REFERENCE_BASELINE_MAE_USD,
+            "gate_threshold_mae_usd": REFERENCE_GATE_THRESHOLD_USD,
+            "holdout_data_accessed": False, "raw_sources_accessed": False,
             "metadata_hashes": {name: members[name]["sha256"] for name in
                                 ("training_config.json", "sample_lineage.json", "metrics.json", "baselines.json")}}
 

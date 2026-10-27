@@ -218,7 +218,9 @@ def profile_from_saved_config(config: dict[str, Any]) -> str:
     from nyc_taxi.ml import pretrip_training_model as model_api
     parameters = config.get("gbt_parameters", {})
     profile = parameters.get("lossType")
-    if profile not in ("squared", "absolute") or parameters != model_api.gbt_parameters(profile):
+    encoding = config.get("encoding_profile", "one_hot")
+    if (profile not in ("squared", "absolute")
+            or parameters != model_api.gbt_parameters(profile, encoding_profile=encoding)):
         raise ValueError("saved_gbt_configuration_drift")
     if config.get("loss_profile", profile) != profile:
         raise ValueError("saved_loss_profile_mismatch")
@@ -228,11 +230,20 @@ def profile_from_saved_config(config: dict[str, Any]) -> str:
     return profile
 
 
-def saved_loss_metadata(root: Path, entries: list[dict[str, Any]], expected: str) -> dict[str, Any]:
+def encoding_from_saved_config(config: dict[str, Any]) -> str:
+    profile_from_saved_config(config)
+    return config.get("encoding_profile", "one_hot")
+
+
+def saved_loss_metadata(root: Path, entries: list[dict[str, Any]], expected: str,
+                        *, encoding_profile: str = "one_hot") -> dict[str, Any]:
     """Read the saved effective paramMap, not just a library default or CLI flag."""
+    from nyc_taxi.ml import pretrip_training_model as model_api
+    model_api.gbt_parameters(expected, encoding_profile=encoding_profile)
+    last_stage = "3_" if encoding_profile == "native" else "4_"
     selected = [entry for entry in entries if len(Path(entry["path"]).parts) == 5
                 and Path(entry["path"]).parts[:2] == ("pipeline", "stages")
-                and Path(entry["path"]).parts[2].startswith("4_")
+                and Path(entry["path"]).parts[2].startswith(last_stage)
                 and Path(entry["path"]).parts[3] == "metadata"
                 and Path(entry["path"]).name.startswith("part-")]
     if len(selected) != 1:
@@ -243,11 +254,14 @@ def saved_loss_metadata(root: Path, entries: list[dict[str, Any]], expected: str
         raise ValueError("saved_gbt_metadata_checksum_mismatch")
     metadata = json.loads(path.read_text())
     if (metadata.get("class") != "org.apache.spark.ml.regression.GBTRegressionModel"
-            or metadata.get("paramMap", {}).get("lossType") != expected):
+            or metadata.get("paramMap", {}).get("lossType") != expected
+            or (encoding_profile == "native" and metadata.get("paramMap", {}).get("maxBins") != 256)):
         raise ValueError("saved_effective_loss_drift")
     return {"path": entry["path"], "sha256": entry["sha256"],
             "paramMap_lossType": metadata["paramMap"]["lossType"],
-            "defaultParamMap_lossType": metadata.get("defaultParamMap", {}).get("lossType")}
+            "defaultParamMap_lossType": metadata.get("defaultParamMap", {}).get("lossType"),
+            "paramMap_maxBins": metadata["paramMap"].get("maxBins"),
+            "defaultParamMap_maxBins": metadata.get("defaultParamMap", {}).get("maxBins")}
 
 
 def parser() -> argparse.ArgumentParser:
@@ -263,7 +277,11 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--loss-profile", choices=("squared", "absolute"), default="squared",
                         help="Explicit loss-only experiment; default/legacy training remains squared")
     result.add_argument("--reference-artifacts", type=Path,
-                        help="Required for absolute training: pinned squared V2 artifacts mounted read-only")
+                        help="Required for experiments: pinned squared V2 artifacts mounted read-only")
+    result.add_argument("--encoding-profile", choices=("one_hot", "native"), default="one_hot",
+                        help="V2.2 native categorical + maxBins256, squared only; default OHE unchanged")
+    result.add_argument("--comparison-artifacts", type=Path,
+                        help="Required for native training: pinned absolute OHE V2.1 artifacts read-only")
     return result
 
 
@@ -271,9 +289,12 @@ def run(arguments: argparse.Namespace, *, project_root: Path = ROOT) -> dict[str
     from nyc_taxi.ml import pretrip_training_model as model_api
     root = project_root.resolve()
     output = private_output(arguments.output_dir, root)
-    parameters = model_api.gbt_parameters(arguments.loss_profile)
+    parameters = model_api.gbt_parameters(arguments.loss_profile, encoding_profile=arguments.encoding_profile)
     plan = {"status": "PLAN_NOT_EXECUTED", "mode": "reload_only" if arguments.reload_artifacts else "train_validation",
             "features": list(FEATURE_COLUMNS), "loss_profile": arguments.loss_profile, "gbt_parameters": parameters,
+            "encoding_profile": arguments.encoding_profile,
+            "experiment_changes": ["encoding_one_hot_to_native", "maxBins_32_to_256"]
+                                  if arguments.encoding_profile == "native" else [],
             "baseline_policy": dict(model_api.BASELINE_POLICY), "sample_splits": ["train", "validation"],
             "holdout_access": False, "raw_source_access": False, "default_execute": False,
             "envelope_bytes": ENVELOPE_BYTES, "prior_task_bytes": arguments.prior_task_bytes,
@@ -284,6 +305,9 @@ def run(arguments: argparse.Namespace, *, project_root: Path = ROOT) -> dict[str
         return plan
     if arguments.loss_profile == "absolute" and not arguments.reload_artifacts and not arguments.reference_artifacts:
         raise ValueError("absolute_profile_requires_explicit_reference_artifacts")
+    if (arguments.encoding_profile == "native" and not arguments.reload_artifacts
+            and (not arguments.reference_artifacts or not arguments.comparison_artifacts)):
+        raise ValueError("native_profile_requires_both_pinned_references")
     limit = artifact_budget(arguments.prior_task_bytes)
     budget = ManagedFileBudget((), output, limit)
     output.mkdir(parents=True, exist_ok=False)
@@ -315,8 +339,12 @@ def run(arguments: argparse.Namespace, *, project_root: Path = ROOT) -> dict[str
                 manifest = verify_bundle(bundle)
                 stored_config = json.loads((bundle / "training_config.json").read_text())
                 stored_profile = profile_from_saved_config(stored_config)
-                report.update(loss_profile=stored_profile, gbt_parameters=model_api.gbt_parameters(stored_profile))
-                report["saved_loss_metadata"] = saved_loss_metadata(bundle, manifest["files"], stored_profile)
+                stored_encoding = encoding_from_saved_config(stored_config)
+                report.update(loss_profile=stored_profile, encoding_profile=stored_encoding,
+                              experiment_changes=stored_config.get("experiment_changes", []),
+                              gbt_parameters=model_api.gbt_parameters(stored_profile, encoding_profile=stored_encoding))
+                report["saved_loss_metadata"] = saved_loss_metadata(
+                    bundle, manifest["files"], stored_profile, encoding_profile=stored_encoding)
                 reference = json.loads((bundle / "parity_reference.json").read_text())
                 inputs = json.loads((bundle / "parity_inputs.json").read_text())
                 baseline = json.loads((bundle / "baselines.json").read_text())
@@ -325,7 +353,10 @@ def run(arguments: argparse.Namespace, *, project_root: Path = ROOT) -> dict[str
                 spark = create_spark(owned_scratch)
             with phase("fresh_worker_reload"):
                 reloaded = model_api.load_pipeline(bundle / "pipeline")
-                actual = predictions(reloaded, spark_frame(spark, inputs, labels=False), "parity_id")
+                parity_frame = spark_frame(spark, inputs, labels=False)
+                report["vector_metadata"] = model_api.validate_vector_metadata(
+                    reloaded.transform(parity_frame), encoding_profile=stored_encoding)
+                actual = predictions(reloaded, parity_frame, "parity_id")
                 expected = [(row["parity_id"], row["prediction"]) for row in reference]
                 if [row[0] for row in actual] != [row[0] for row in expected]:
                     raise ValueError("reload_input_order_changed")
@@ -351,7 +382,8 @@ def run(arguments: argparse.Namespace, *, project_root: Path = ROOT) -> dict[str
                 baseline = model_api.fit_baselines(rows["train"])
                 write_document(budget, output / "baselines.json", baseline)
             reference = None
-            if arguments.loss_profile == "absolute":
+            comparison = None
+            if arguments.loss_profile == "absolute" or arguments.encoding_profile == "native":
                 from nyc_taxi.ml import pretrip_training_reference as reference_api
                 with phase("verify_pinned_squared_reference"):
                     reference_path = arguments.reference_artifacts
@@ -359,6 +391,14 @@ def run(arguments: argparse.Namespace, *, project_root: Path = ROOT) -> dict[str
                     reference_manifest = verify_bundle(reference_path)
                     reference = reference_api.read_reference(reference_path, reference_manifest)
                     report["v2_reference"] = reference_api.verify_current(reference, loaded, baseline)
+                if arguments.encoding_profile == "native":
+                    with phase("verify_pinned_absolute_comparison"):
+                        comparison_path = arguments.comparison_artifacts
+                        comparison_path = comparison_path if comparison_path.is_absolute() else root / comparison_path
+                        comparison = reference_api.read_absolute_reference(
+                            comparison_path, verify_bundle(comparison_path), reference)
+                        report["v21_comparison"] = {name: value for name, value in comparison.items() if name != "metrics"}
+                        report["native_category_guard"] = model_api.validate_native_categories(reference["dictionaries"])
             with phase("spark_start"):
                 owned_scratch = claim_scratch(arguments.scratch_dir)
                 spark = create_spark(owned_scratch)
@@ -377,7 +417,8 @@ def run(arguments: argparse.Namespace, *, project_root: Path = ROOT) -> dict[str
                         raise ValueError("joined_spark_row_count_changed")
             with phase("freeze_configuration_before_fit"):
                 sources = {path.name: sha256(path) for path in Path(__file__).parent.glob("pretrip_*.py")}
-                config = {"loss_profile": arguments.loss_profile, "gbt_parameters": parameters,
+                config = {"loss_profile": arguments.loss_profile, "encoding_profile": arguments.encoding_profile,
+                          "experiment_changes": report["experiment_changes"], "gbt_parameters": parameters,
                           "baseline_policy": dict(model_api.BASELINE_POLICY), "features": list(FEATURE_COLUMNS),
                           "code_commit_base": arguments.code_commit, "code_sha256": sources,
                           "runtime": report["runtime"], "holdout_opened": False,
@@ -385,18 +426,20 @@ def run(arguments: argparse.Namespace, *, project_root: Path = ROOT) -> dict[str
                           "gate_policy": {"required_mae_improvement_percent": 10.0,
                                           "reference_baseline_mae_usd": 5.1312024993624075 if reference else None,
                                           "reference_gbt_max_mae_usd": 4.618082249426167 if reference else None},
-                          "v2_reference": report.get("v2_reference")}
+                          "v2_reference": report.get("v2_reference"), "v21_comparison": report.get("v21_comparison")}
                 write_document(budget, output / "training_config.json", config)
                 report["prefit_configuration_sha256"] = sha256(output / "training_config.json")
             with phase("fixed_gbt_fit_once"):
                 report["fit_calls"] = 1
-                fitted = model_api.fit(frames["train"], loss_profile=arguments.loss_profile)
+                fitted = model_api.fit(frames["train"], loss_profile=arguments.loss_profile,
+                                       encoding_profile=arguments.encoding_profile)
                 actual_parameters = {name: fitted.stages[-1].getOrDefault(name) for name in model_api.GBT_PARAMETERS}
                 if actual_parameters != parameters:
                     raise ValueError("fitted_gbt_configuration_drift")
                 report["gbt_parameters"] = actual_parameters
                 report["gbt_tree_count"] = len(fitted.stages[-1].trees)
-                report["vector_metadata"] = model_api.validate_vector_metadata(fitted.transform(frames["train"]))
+                report["vector_metadata"] = model_api.validate_vector_metadata(
+                    fitted.transform(frames["train"]), encoding_profile=arguments.encoding_profile)
                 if reference:
                     report["dictionary_verification"] = reference_api.verify_dictionaries(reference, {
                         name: list(stage.labels) for name, stage in zip(
@@ -421,6 +464,9 @@ def run(arguments: argparse.Namespace, *, project_root: Path = ROOT) -> dict[str
                             if evaluation[name][baseline_name] != reference["metrics"][name][baseline_name]:
                                 raise ValueError("v2_baseline_evaluation_drift")
                     report["reference_squared_metrics"] = reference["metrics"]
+                if comparison:
+                    report["reference_absolute_metrics"] = {name: {"gbt": comparison["metrics"][name]["gbt"]}
+                                                             for name in rows}
             with phase("save_fixed_candidate"):
                 parity_inputs = [{**{key: row[key] for key in FEATURE_COLUMNS}, "parity_id": f"{name}-{index:04d}"}
                                  for name, values in rows.items() for index, row in enumerate(values[:8])]
@@ -434,7 +480,8 @@ def run(arguments: argparse.Namespace, *, project_root: Path = ROOT) -> dict[str
                 staging = arguments.scratch_dir / "fitted-pipeline"
                 model_api.save_pipeline(fitted, staging)
                 entries = publish_pipeline(budget, staging, output / "pipeline")
-                report["saved_loss_metadata"] = saved_loss_metadata(output, entries, arguments.loss_profile)
+                report["saved_loss_metadata"] = saved_loss_metadata(
+                    output, entries, arguments.loss_profile, encoding_profile=arguments.encoding_profile)
                 tree_hash = hashlib.sha256(json.dumps(entries, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
                 report["model_tree_sha256"] = tree_hash
                 if sha256(output / "training_config.json") != report["prefit_configuration_sha256"]:

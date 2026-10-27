@@ -2553,3 +2553,32 @@ không cấp lại; source/config RO trên image Spark sẵn có, không build/d
 **August chưa mở/predict/evaluate; chưa promote/phục vụ model V2.1; v1/services
 và các thay đổi PACKAGE P3/PBIX giữ nguyên.** Metrics, artifact identity và giới hạn:
 [PRETRIP V2.1 absolute report](plans/PRETRIP_V21_ABSOLUTE_REPORT.md).
+
+#### PRETRIP V2.2 — native categorical (validation gate, chưa phục vụ)
+
+Profile tường minh `--encoding-profile native`, squared loss, maxBins256:
+hai StringIndexer alphabetAsc/keep fit train → VectorAssembler sáu numeric +
+hai index → GBT. Không OHE/VectorIndexer trong pipeline native. Vector thực
+**8 chiều**, PU/DO là **nominal** với 118/225 categories gồm unknown, guard ≤256
+trước GBT fit. Đây là thay đổi **encoding kèm maxBins32→256**, không chỉ đổi một
+tham số. Defaults vẫn OHE/squared, PLAN; reload hai model cũ vẫn tương thích.
+
+100 tests chọn lọc PASS; đúng một real fit cùng June26.573/July23.526 rows,
+sample identity/hashes/alignment/dictionaries/baselines khớp hai attempt cũ.
+Actual seed42/maxIter20/maxDepth4/stepSize0.1, loss squared, maxBins256; config
+lưu bất biến trước fit. MAE validation **$4,491245**, baseline tốt nhất
+**$5,131202**, threshold **$4,618082249426167** → **PASS gate validation**,
+cải thiện **12,47%**. July đã dùng phát triển model, **không phải test độc lập**;
+không sửa các kết quả Gate FAIL của hai OHE attempts.
+
+Artifacts riêng `.sandbox/pretrip-v2/training-20261027-native-01/`, không overwrite.
+Fresh-worker reload 16 inputs khớp reference riêng với sai lệch0 ≤1e-9 và metadata
+nominal8D nguyên vẹn. Train46,963 giây/peak1079,82MiB; reload16,393 giây, cùng
+image/config2CPU/3GiB/heap1536. Runtime V2 tổng184,250MiB trong envelope2048MiB
+đã duyệt, không cấp lại. Source/config mountedRO, chưa bake/build/deploy.
+**August chưa mount/mở/predict/evaluate; chưa promote/deploy/nối app**, không
+tự thêm thí nghiệm sau kết quả. v1/services/P3/PBIX và hai artifact trees cũ giữ
+nguyên. Ứng viên/artifact identities và baselines đã khóa; August phải thắng
+baseline tốt nhất trên cùng rows, giữ đủ rows/predictions hữu hạn, không clip/drop
+hoặc sửa gate sau kết quả. Metrics đầy đủ, identities và giới hạn:
+[PRETRIP V2.2 native report](plans/PRETRIP_V22_NATIVE_REPORT.md).

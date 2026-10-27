@@ -45,6 +45,9 @@ TEST_FILES = (
     "tests/test_pretrip_v2_training_model.py",
     "tests/test_pretrip_v2_training.py",
     "tests/test_pretrip_v21_reference.py",
+    "tests/test_pretrip_v22_model.py",
+    "tests/test_pretrip_v22_reference.py",
+    "tests/test_pretrip_v22_training.py",
 )
 EXCLUDED_TEST_FILES = {
     "tests/test_bronze.py": "Spark/JVM tests remain outside the lightweight CI profile",
@@ -55,6 +58,7 @@ EXCLUDED_TEST_FILES = {
     "tests/test_ml_pilot_model.py": "tiny Spark/JVM ML fixture tests run separately in the worker; not ETL",
     "tests/test_ml_holdout_metrics.py": "tiny Spark/JVM frozen-holdout metric fixture tests run separately in the worker; no fit or ETL",
     "tests/test_pretrip_v2_training_spark.py": "tiny Spark/JVM v2 trainer fixture tests run separately in the worker; not ETL or real training",
+    "tests/test_pretrip_v22_spark.py": "tiny Spark/JVM native-categorical fixture tests run separately in the worker; not ETL or real training",
 }
 DESELECTED_TEST = (
     "tests/test_dashboard_queries.py::"

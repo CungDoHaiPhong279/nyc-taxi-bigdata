@@ -29,15 +29,44 @@ GBT_PARAMETERS = {
 BASELINE_POLICY = {"version": "pretrip-v2-medians-1", "hour_bin_width": 6, "minimum_group_count": 5}
 
 
-def gbt_parameters(loss_profile: str = "squared") -> dict[str, Any]:
-    """Return a fresh fixed parameter set for the explicit loss-only experiment.
+def gbt_parameters(loss_profile: str = "squared", *, encoding_profile: str = "one_hot") -> dict[str, Any]:
+    """Return a copy of one explicitly approved, predeclared experiment policy.
 
     The original V2 policy remains squared. A caller cannot mutate that policy
     through this copy, and no option exposes any other hyperparameter tuning.
     """
     if loss_profile not in ("squared", "absolute"):
         raise ValueError("V2 loss profile must be squared or absolute")
-    return {**GBT_PARAMETERS, "lossType": loss_profile}
+    if encoding_profile not in ("one_hot", "native"):
+        raise ValueError("V2 encoding profile must be one_hot or native")
+    if encoding_profile == "native" and loss_profile != "squared":
+        raise ValueError("V2 native encoding profile only permits squared loss")
+    return {**GBT_PARAMETERS, "lossType": loss_profile,
+            "maxBins": 256 if encoding_profile == "native" else GBT_PARAMETERS["maxBins"]}
+
+
+def validate_native_categories(labels_by_feature: Mapping[str, Sequence[str]], *, max_bins: int = 256) -> dict[str, int]:
+    """Count each train-only dictionary plus its reserved unknown category.
+
+    This check runs before the native regressor fit. It never silently raises
+    maxBins, drops categories, or consults validation rows.
+    """
+    if max_bins != 256 or isinstance(max_bins, bool):
+        raise ValueError("V2 native maxBins policy is fixed at 256")
+    if set(labels_by_feature) != set(CATEGORICAL_FEATURE_COLUMNS):
+        raise ValueError("V2 native categorical dictionaries violate the allowlist")
+    counts = {}
+    for name in CATEGORICAL_FEATURE_COLUMNS:
+        labels = labels_by_feature[name]
+        if (not isinstance(labels, (list, tuple)) or not labels
+                or any(not isinstance(label, str) or not label.isascii() or not label.isdigit()
+                       or str(int(label)) != label or not 1 <= int(label) <= 263 for label in labels)
+                or len(set(labels)) != len(labels) or list(labels) != sorted(labels)):
+            raise ValueError("V2 native dictionary must contain unique alphabetAsc zone labels")
+        counts[name] = len(labels) + 1
+        if counts[name] > max_bins:
+            raise ValueError("V2 native categories including unknown exceed maxBins=256")
+    return counts
 
 
 def project_model_inputs(dataframe: Any, include_label: bool = True) -> Any:
@@ -82,14 +111,14 @@ def project_model_inputs(dataframe: Any, include_label: bool = True) -> Any:
     return projected
 
 
-def make_pipeline(tiny_test: bool = False, *, loss_profile: str = "squared") -> Any:
+def make_pipeline(tiny_test: bool = False, *, loss_profile: str = "squared", encoding_profile: str = "one_hot") -> Any:
     """Create fresh estimators: categorical dictionaries fit the supplied train only.
 
     One-hot expanded zones preserve category semantics without treating their
     StringIndexer indices as geographic magnitudes. tiny_test changes one tree
     solely for offline synthetic tests, never for the actual CLI attempt.
     """
-    parameters = gbt_parameters(loss_profile)
+    parameters = gbt_parameters(loss_profile, encoding_profile=encoding_profile)
     from pyspark.ml import Pipeline
     from pyspark.ml.feature import OneHotEncoder, StringIndexer, VectorAssembler
     from pyspark.ml.regression import GBTRegressor
@@ -97,17 +126,22 @@ def make_pipeline(tiny_test: bool = False, *, loss_profile: str = "squared") -> 
     indexers = [StringIndexer(inputCol=name, outputCol=output, handleInvalid="keep",
                               stringOrderType="alphabetAsc")
                 for name, output in zip(CATEGORICAL_FEATURE_COLUMNS, INDEX_COLUMNS, strict=True)]
-    encoder = OneHotEncoder(inputCols=list(INDEX_COLUMNS), outputCols=list(ENCODED_COLUMNS),
-                            handleInvalid="keep", dropLast=False)
-    assembler = VectorAssembler(inputCols=[*NUMERIC_FEATURE_COLUMNS, *ENCODED_COLUMNS],
+    zone_columns = INDEX_COLUMNS if encoding_profile == "native" else ENCODED_COLUMNS
+    assembler = VectorAssembler(inputCols=[*NUMERIC_FEATURE_COLUMNS, *zone_columns],
                                 outputCol="features", handleInvalid="error")
     if tiny_test:
         parameters.update(maxIter=1, maxDepth=1)
-    return Pipeline(stages=[*indexers, encoder, assembler, GBTRegressor(**parameters)])
+    stages = list(indexers)
+    if encoding_profile == "one_hot":
+        stages.append(OneHotEncoder(inputCols=list(INDEX_COLUMNS), outputCols=list(ENCODED_COLUMNS),
+                                    handleInvalid="keep", dropLast=False))
+    stages.extend([assembler, GBTRegressor(**parameters)])
+    return Pipeline(stages=stages)
 
 
-def validate_vector_metadata(transformed_df: Any) -> dict[str, Any]:
-    """Fail if a vector contains anything but the six numeric and two OHE groups."""
+def validate_vector_metadata(transformed_df: Any, *, encoding_profile: str = "one_hot") -> dict[str, Any]:
+    """Require allowlisted numeric attributes and genuine categorical metadata."""
+    gbt_parameters(encoding_profile=encoding_profile)
     if "features" not in transformed_df.columns:
         raise ValueError("V2 allowlisted feature vector is missing")
     metadata = transformed_df.schema["features"].metadata.get("ml_attr", {})
@@ -118,6 +152,27 @@ def validate_vector_metadata(transformed_df: Any) -> dict[str, Any]:
             or [item.get("idx") for item in ordered] != list(range(len(ordered)))
             or names[:len(NUMERIC_FEATURE_COLUMNS)] != list(NUMERIC_FEATURE_COLUMNS)):
         raise ValueError("V2 feature vector metadata violates the strict allowlist")
+    if encoding_profile == "native":
+        attrs = metadata.get("attrs", {})
+        numeric = attrs.get("numeric", [])
+        nominal = attrs.get("nominal", [])
+        if (len(ordered) != len(FEATURE_COLUMNS) or set(attrs) != {"numeric", "nominal"}
+                or [item.get("name") for item in sorted(numeric, key=lambda item: item.get("idx", -1))]
+                    != list(NUMERIC_FEATURE_COLUMNS)
+                or [item.get("idx") for item in sorted(numeric, key=lambda item: item.get("idx", -1))]
+                    != list(range(len(NUMERIC_FEATURE_COLUMNS)))
+                or [item.get("name") for item in ordered[6:]] != list(INDEX_COLUMNS)
+                or {item.get("idx") for item in nominal} != {6, 7}):
+            raise ValueError("V2 native vector must have exactly six numeric and two nominal features")
+        labels_by_feature = {}
+        for name, attribute in zip(CATEGORICAL_FEATURE_COLUMNS, ordered[6:], strict=True):
+            values = attribute.get("vals")
+            if not isinstance(values, list) or len(values) < 2 or values[-1] != "__unknown":
+                raise ValueError("V2 native nominal metadata must retain the unknown bucket")
+            labels_by_feature[name] = values[:-1]
+        counts = validate_native_categories(labels_by_feature)
+        return {"input_feature_names": list(FEATURE_COLUMNS), "vector_dimensions": len(ordered),
+                "categorical_nominal_dimensions": counts}
     counts: dict[str, int] = {}
     position = len(NUMERIC_FEATURE_COLUMNS)
     binaries = {item.get("idx") for item in metadata.get("attrs", {}).get("binary", [])}
@@ -136,12 +191,25 @@ def validate_vector_metadata(transformed_df: Any) -> dict[str, Any]:
             "categorical_one_hot_dimensions": counts}
 
 
-def fit(train_df: Any, *, tinyfixture: bool = False, loss_profile: str = "squared") -> Any:
+def fit(train_df: Any, *, tinyfixture: bool = False, loss_profile: str = "squared", encoding_profile: str = "one_hot") -> Any:
     """Fit exactly once on the supplied train frame; no validation/test parameter."""
-    gbt_parameters(loss_profile)  # Reject an unknown profile before any Spark action.
+    gbt_parameters(loss_profile, encoding_profile=encoding_profile)  # Reject before any Spark action.
     projected = project_model_inputs(train_df)
-    model = make_pipeline(tiny_test=tinyfixture, loss_profile=loss_profile).fit(projected)
-    validate_vector_metadata(model.transform(projected))
+    pipeline = make_pipeline(tiny_test=tinyfixture, loss_profile=loss_profile, encoding_profile=encoding_profile)
+    if encoding_profile == "native":
+        from pyspark.ml import Pipeline, PipelineModel
+
+        stages = pipeline.getStages()
+        preprocessing = Pipeline(stages=stages[:-1]).fit(projected)
+        validate_native_categories({name: stage.labels for name, stage in
+                                    zip(CATEGORICAL_FEATURE_COLUMNS, preprocessing.stages[:2], strict=True)})
+        prepared = preprocessing.transform(projected)
+        validate_vector_metadata(prepared, encoding_profile="native")
+        regressor = stages[-1].fit(prepared)
+        model = PipelineModel(stages=[*preprocessing.stages, regressor])
+    else:
+        model = pipeline.fit(projected)
+    validate_vector_metadata(model.transform(projected), encoding_profile=encoding_profile)
     return model
 
 
@@ -149,12 +217,25 @@ def _assert_fitted_pipeline(model: Any) -> None:
     from pyspark.ml.feature import OneHotEncoderModel, StringIndexerModel, VectorAssembler
     from pyspark.ml.regression import GBTRegressionModel
 
-    if len(model.stages) != 5:
+    if len(model.stages) not in (4, 5):
         raise ValueError("V2 fitted pipeline stage count mismatch")
     for stage, source, output in zip(model.stages[:2], CATEGORICAL_FEATURE_COLUMNS, INDEX_COLUMNS, strict=True):
         if (not isinstance(stage, StringIndexerModel) or stage.getInputCol() != source
-                or stage.getOutputCol() != output or stage.getHandleInvalid() != "keep"):
+                or stage.getOutputCol() != output or stage.getHandleInvalid() != "keep"
+                or stage.getStringOrderType() != "alphabetAsc"):
             raise ValueError("V2 fitted categorical contract mismatch")
+    if len(model.stages) == 4:
+        assembler, regressor = model.stages[2:]
+        validate_native_categories({name: stage.labels for name, stage in
+                                    zip(CATEGORICAL_FEATURE_COLUMNS, model.stages[:2], strict=True)})
+        if (not isinstance(assembler, VectorAssembler)
+                or assembler.getInputCols() != [*NUMERIC_FEATURE_COLUMNS, *INDEX_COLUMNS]
+                or assembler.getOutputCol() != "features" or assembler.getHandleInvalid() != "error"
+                or not isinstance(regressor, GBTRegressionModel)
+                or regressor.getLossType() != "squared" or regressor.getMaxBins() != 256
+                or regressor.numFeatures != len(FEATURE_COLUMNS)):
+            raise ValueError("V2 native fitted vector/regression contract mismatch")
+        return
     encoder, assembler, regressor = model.stages[2:]
     if (not isinstance(encoder, OneHotEncoderModel) or encoder.getInputCols() != list(INDEX_COLUMNS)
             or encoder.getOutputCols() != list(ENCODED_COLUMNS) or encoder.getDropLast()
