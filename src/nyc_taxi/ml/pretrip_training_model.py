@@ -29,6 +29,17 @@ GBT_PARAMETERS = {
 BASELINE_POLICY = {"version": "pretrip-v2-medians-1", "hour_bin_width": 6, "minimum_group_count": 5}
 
 
+def gbt_parameters(loss_profile: str = "squared") -> dict[str, Any]:
+    """Return a fresh fixed parameter set for the explicit loss-only experiment.
+
+    The original V2 policy remains squared. A caller cannot mutate that policy
+    through this copy, and no option exposes any other hyperparameter tuning.
+    """
+    if loss_profile not in ("squared", "absolute"):
+        raise ValueError("V2 loss profile must be squared or absolute")
+    return {**GBT_PARAMETERS, "lossType": loss_profile}
+
+
 def project_model_inputs(dataframe: Any, include_label: bool = True) -> Any:
     """Keep only the eight contract features and optionally the separate label.
 
@@ -71,13 +82,14 @@ def project_model_inputs(dataframe: Any, include_label: bool = True) -> Any:
     return projected
 
 
-def make_pipeline(tiny_test: bool = False) -> Any:
+def make_pipeline(tiny_test: bool = False, *, loss_profile: str = "squared") -> Any:
     """Create fresh estimators: categorical dictionaries fit the supplied train only.
 
     One-hot expanded zones preserve category semantics without treating their
     StringIndexer indices as geographic magnitudes. tiny_test changes one tree
     solely for offline synthetic tests, never for the actual CLI attempt.
     """
+    parameters = gbt_parameters(loss_profile)
     from pyspark.ml import Pipeline
     from pyspark.ml.feature import OneHotEncoder, StringIndexer, VectorAssembler
     from pyspark.ml.regression import GBTRegressor
@@ -89,7 +101,6 @@ def make_pipeline(tiny_test: bool = False) -> Any:
                             handleInvalid="keep", dropLast=False)
     assembler = VectorAssembler(inputCols=[*NUMERIC_FEATURE_COLUMNS, *ENCODED_COLUMNS],
                                 outputCol="features", handleInvalid="error")
-    parameters = dict(GBT_PARAMETERS)
     if tiny_test:
         parameters.update(maxIter=1, maxDepth=1)
     return Pipeline(stages=[*indexers, encoder, assembler, GBTRegressor(**parameters)])
@@ -125,10 +136,11 @@ def validate_vector_metadata(transformed_df: Any) -> dict[str, Any]:
             "categorical_one_hot_dimensions": counts}
 
 
-def fit(train_df: Any, *, tinyfixture: bool = False) -> Any:
+def fit(train_df: Any, *, tinyfixture: bool = False, loss_profile: str = "squared") -> Any:
     """Fit exactly once on the supplied train frame; no validation/test parameter."""
+    gbt_parameters(loss_profile)  # Reject an unknown profile before any Spark action.
     projected = project_model_inputs(train_df)
-    model = make_pipeline(tiny_test=tinyfixture).fit(projected)
+    model = make_pipeline(tiny_test=tinyfixture, loss_profile=loss_profile).fit(projected)
     validate_vector_metadata(model.transform(projected))
     return model
 

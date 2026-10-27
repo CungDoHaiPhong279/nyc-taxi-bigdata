@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+import inspect
 import math
 import statistics
 
 import pytest
 
 from nyc_taxi.ml.pretrip_training_model import (
-    BASELINE_POLICY, GBT_PARAMETERS, fit_baselines, metrics, predict_baseline,
+    BASELINE_POLICY, GBT_PARAMETERS, fit, fit_baselines, gbt_parameters,
+    make_pipeline, metrics, predict_baseline,
 )
 
 
@@ -136,3 +138,35 @@ def test_actual_regressor_policy_is_fixed_before_metrics():
         "lossType": "squared", "subsamplingRate": 1.0, "minInstancesPerNode": 1,
         "maxBins": 32, "maxMemoryInMB": 128,
     }
+
+
+def test_loss_profile_defaults_preserve_original_squared_policy():
+    assert gbt_parameters() == GBT_PARAMETERS
+    assert inspect.signature(make_pipeline).parameters["loss_profile"].default == "squared"
+    assert inspect.signature(fit).parameters["loss_profile"].default == "squared"
+    assert GBT_PARAMETERS["lossType"] == "squared"
+
+
+def test_loss_profile_absolute_changes_only_effective_loss():
+    squared, absolute = gbt_parameters("squared"), gbt_parameters("absolute")
+    assert absolute["lossType"] == "absolute"
+    assert {name for name in squared if squared[name] != absolute[name]} == {"lossType"}
+    assert set(absolute) == set(squared)
+
+
+def test_loss_profile_parameter_copies_cannot_mutate_original_policy():
+    copy = gbt_parameters("absolute")
+    copy["maxIter"] = 999
+    copy["lossType"] = "unapproved"
+    assert gbt_parameters("absolute")["maxIter"] == 20
+    assert gbt_parameters()["lossType"] == GBT_PARAMETERS["lossType"] == "squared"
+
+
+@pytest.mark.parametrize("profile", ["", "Absolute", "huber", "squared_error", None, 0])
+def test_loss_profile_rejects_unapproved_values_before_spark(profile):
+    with pytest.raises(ValueError, match="loss profile"):
+        gbt_parameters(profile)
+    with pytest.raises(ValueError, match="loss profile"):
+        make_pipeline(loss_profile=profile)
+    with pytest.raises(ValueError, match="loss profile"):
+        fit(object(), loss_profile=profile)

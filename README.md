@@ -2526,3 +2526,30 @@ lại training để đổi kết quả. CLI trả 2 nếu model không qua gate
 **August 21.833 rows chưa mở/predict/evaluate; v1/dashboard/services không đổi.**
 Metrics đầy đủ, hashes, lỗi harness đã xử lý và giới hạn:
 [PRETRIP V2 training report](plans/PRETRIP_V2_TRAINING_REPORT.md).
+
+#### PRETRIP V2.1 — thí nghiệm absolute loss (chưa phục vụ)
+
+CLI vẫn mặc định **PLAN + squared**. Thí nghiệm tường minh thêm
+`--loss-profile absolute --reference-artifacts <artifact-squared-V2>`; chỉ
+effective loss đổi, không đổi tám features, preprocessing, baseline/fallback,
+sample/seed hoặc tham số GBT khác. Absolute execute kiểm pinned reference,
+hashes/lineage/alignment/dictionaries và ghi cấu hình bất biến **trước fit**.
+Reload đọc loss từ saved config; artifact squared V2 cũ vẫn tương thích/giữ nguyên.
+
+76 tests chọn lọc PASS (không chạy lại toàn 149 tests/CI cũ). Đã fit **đúng một**
+pilot trên cùng 26.573 June train/23.526 July validation, đủ 20 trees; metadata
+`paramMap.lossType="absolute"`, `defaultParamMap.lossType="squared"` chỉ là default
+thư viện. MAE validation absolute **$6,4684**, squared cũ **$6,3217**, baseline
+phân nhóm **$5,1312**; threshold **$4,618082249426167** → **Gate FAIL**, kém baseline
+26,06% và kém squared 2,32%. July là validation đã dùng phát triển model,
+**không phải test độc lập**. Không tuning/cấu hình bổ sung để vượt gate.
+
+Artifacts mới tại `.sandbox/pretrip-v2/training-20261027-absolute-01/`; config,
+metrics, hashes và references riêng, không overwrite squared. Fresh-worker
+reload 16 inputs khớp reference **của V2.1** với sai lệch 0 ≤ 1e-9, không fit.
+Train 55,873 giây, peak cgroup RAM 1289,13 MiB trong runtime cũ 2CPU/3GiB/heap1536;
+reload 19,383 giây. Toàn runtime V2 hiện 183,782 MiB trong **cùng envelope2048MiB**,
+không cấp lại; source/config RO trên image Spark sẵn có, không build/deploy.
+**August chưa mở/predict/evaluate; chưa promote/phục vụ model V2.1; v1/services
+và các thay đổi PACKAGE P3/PBIX giữ nguyên.** Metrics, artifact identity và giới hạn:
+[PRETRIP V2.1 absolute report](plans/PRETRIP_V21_ABSOLUTE_REPORT.md).

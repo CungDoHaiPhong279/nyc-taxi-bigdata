@@ -75,6 +75,133 @@ def test_plan_is_default_no_samples_spark_or_writes(tmp_path, monkeypatch, extra
     fit.assert_not_called()
 
 
+def test_loss_profile_parser_is_explicit_and_preserves_squared_default():
+    assert arguments().loss_profile == "squared"
+    assert arguments().reference_artifacts is None
+    assert arguments("--loss-profile", "absolute").loss_profile == "absolute"
+    assert arguments("--loss-profile", "squared").loss_profile == "squared"
+    assert arguments("--reference-artifacts", "/explicit/reference").reference_artifacts == Path("/explicit/reference")
+    with pytest.raises(SystemExit) as caught:
+        arguments("--loss-profile", "unapproved-loss")
+    assert caught.value.code == 2
+
+
+def test_absolute_plan_does_not_open_reference_samples_or_create_outputs(tmp_path, monkeypatch):
+    monkeypatch.setattr(trainer, "load_contract", lambda: {})
+    monkeypatch.setattr(trainer, "create_spark", Mock(side_effect=AssertionError("PLAN must not start Spark")))
+    monkeypatch.setattr(model_api, "fit", Mock(side_effect=AssertionError("PLAN must not fit")))
+    monkeypatch.setattr(Path, "open", Mock(side_effect=AssertionError("PLAN must not open any artifact/sample")))
+    monkeypatch.setattr(Path, "mkdir", Mock(side_effect=AssertionError("PLAN must not create outputs")))
+    original = deepcopy(model_api.GBT_PARAMETERS)
+    result = trainer.run(arguments("--loss-profile", "absolute", "--reference-artifacts", "/absent/v2-artifacts"),
+                         project_root=tmp_path)
+    assert result["status"] == "PLAN_NOT_EXECUTED"
+    assert result["loss_profile"] == "absolute"
+    assert result["gbt_parameters"] == {**original, "lossType": "absolute"}
+    assert model_api.GBT_PARAMETERS == original
+    assert result["baseline_policy"] == model_api.BASELINE_POLICY
+    assert result["features"] == list(trainer.FEATURE_COLUMNS)
+    assert result["holdout_access"] is result["raw_source_access"] is False
+
+
+def test_absolute_execute_requires_reference_before_output_or_spark(tmp_path, monkeypatch):
+    monkeypatch.setattr(trainer, "load_contract", lambda: {})
+    mkdir = Mock(side_effect=AssertionError("missing-reference guard must run before output creation"))
+    spark = Mock(side_effect=AssertionError("missing-reference guard must run before Spark"))
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    monkeypatch.setattr(trainer, "create_spark", spark)
+    with pytest.raises(ValueError, match="absolute_profile_requires_explicit_reference_artifacts"):
+        trainer.run(arguments("--execute", "--loss-profile", "absolute", "--prior-task-bytes", "0"),
+                    project_root=tmp_path)
+    mkdir.assert_not_called()
+    spark.assert_not_called()
+
+
+@pytest.mark.parametrize("loss", ["squared", "absolute"])
+def test_saved_config_recovers_effective_loss_including_legacy_squared(loss):
+    config = {"gbt_parameters": {**model_api.GBT_PARAMETERS, "lossType": loss}}
+    if loss == "absolute":
+        config["loss_profile"] = "absolute"
+    before = deepcopy(config)
+    assert trainer.profile_from_saved_config(config) == loss
+    assert config == before
+
+
+@pytest.mark.parametrize("mutation", ["iterations", "depth", "seed", "loss", "missing", "extra", "profile"])
+def test_saved_config_rejects_non_loss_drift_or_unapproved_loss(mutation):
+    config = {"gbt_parameters": dict(model_api.GBT_PARAMETERS)}
+    if mutation == "iterations":
+        config["gbt_parameters"]["maxIter"] = 21
+    elif mutation == "depth":
+        config["gbt_parameters"]["maxDepth"] = 5
+    elif mutation == "seed":
+        config["gbt_parameters"]["seed"] = 43
+    elif mutation == "loss":
+        config["gbt_parameters"]["lossType"] = "huber"
+    elif mutation == "missing":
+        del config["gbt_parameters"]["stepSize"]
+    elif mutation == "extra":
+        config["gbt_parameters"]["unapproved"] = 1
+    else:
+        config["loss_profile"] = "absolute"
+    with pytest.raises(ValueError):
+        trainer.profile_from_saved_config(config)
+
+
+def test_attempt_configuration_is_locked_before_first_fit_and_not_replaced(tmp_path, monkeypatch):
+    from nyc_taxi.ml import pretrip_training_data
+
+    scratch = tmp_path / "owned-scratch"
+    output = tmp_path / ".sandbox/pretrip-v2/config-before-fit/artifacts"
+    monkeypatch.setattr(trainer, "load_contract", lambda: {})
+    monkeypatch.setattr(trainer, "telemetry", lambda: {"synthetic": True})
+    monkeypatch.setattr(pretrip_training_data, "load_training_samples", lambda path: {
+        "train": [{}], "validation": [{}], "lineage": {"sample_identity_sha256": "0" * 64},
+    })
+    monkeypatch.setattr(model_api, "fit_baselines", lambda rows: {"synthetic": True})
+
+    def claim(path):
+        scratch.mkdir()
+        return scratch
+
+    fake_spark = Mock(version="synthetic-spark")
+    fake_spark.sparkContext.master = "local[2]"
+    java = fake_spark.sparkContext._jvm.java
+    java.lang.System.getProperty.return_value = "synthetic-java"
+    java.lang.Runtime.getRuntime.return_value.availableProcessors.return_value = 2
+    java.lang.Runtime.getRuntime.return_value.maxMemory.return_value = 1536 * trainer.MIB
+    frame = Mock()
+    frame.cache.return_value = frame
+    frame.count.return_value = 1
+    monkeypatch.setattr(trainer, "claim_scratch", claim)
+    monkeypatch.setattr(trainer, "create_spark", lambda path: fake_spark)
+    monkeypatch.setattr(trainer, "spark_frame", lambda *args, **kwargs: frame)
+    captured_config = []
+
+    def stop_at_first_fit(*args, **kwargs):
+        config_path = output / "training_config.json"
+        assert config_path.is_file(), "config must be persisted before fit begins"
+        captured_config.append(config_path.read_bytes())
+        config = json.loads(captured_config[0])
+        assert config["gbt_parameters"] == model_api.GBT_PARAMETERS
+        assert config["features"] == list(trainer.FEATURE_COLUMNS)
+        assert config["baseline_policy"] == model_api.BASELINE_POLICY
+        assert config["sample_identity_sha256"] == "0" * 64
+        raise RuntimeError("synthetic-stop-at-first-fit")
+
+    fit = Mock(side_effect=stop_at_first_fit)
+    monkeypatch.setattr(model_api, "fit", fit)
+    with pytest.raises(RuntimeError, match="synthetic-stop-at-first-fit"):
+        trainer.run(arguments("--execute", "--prior-task-bytes", "0", "--output-dir", str(output)),
+                    project_root=tmp_path)
+    fit.assert_called_once()
+    assert (output / "training_config.json").read_bytes() == captured_config[0]
+    checkpoint = json.loads((output / "training_checkpoint.json").read_text())
+    assert checkpoint["status"] == "FAILED" and checkpoint["fit_calls"] == 1
+    assert not scratch.exists()
+    fake_spark.stop.assert_called_once()
+
+
 @pytest.mark.parametrize("prior", [None, -1, True, 1.5, "100"])
 def test_execution_budget_requires_explicit_nonnegative_integer(prior):
     with pytest.raises(ValueError, match="explicit_prior_task_bytes_required"):
@@ -330,3 +457,30 @@ def test_telemetry_reads_only_explicit_cgroup_counters(monkeypatch):
     assert set(reads) == expected
     assert set(result) == expected | {"python_peak_rss_kib"}
     assert all(result[name] == "1" for name in expected)
+
+
+@pytest.mark.parametrize("effective", ["squared", "absolute"])
+def test_saved_metadata_loss_profile_uses_param_map_not_library_default(tmp_path, effective):
+    relative = "pipeline/stages/4_GBTRegressor_fixture/metadata/part-00000.txt"
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True)
+    target.write_text(json.dumps({"class": "org.apache.spark.ml.regression.GBTRegressionModel",
+                                  "paramMap": {"lossType": effective},
+                                  "defaultParamMap": {"lossType": "squared"}}))
+    entry = {"path": relative, "sha256": trainer.sha256(target)}
+    result = trainer.saved_loss_metadata(tmp_path, [entry], effective)
+    assert result["paramMap_lossType"] == effective
+    assert result["defaultParamMap_lossType"] == "squared"
+    with pytest.raises(ValueError, match="saved_effective_loss_drift"):
+        trainer.saved_loss_metadata(tmp_path, [entry], "absolute" if effective == "squared" else "squared")
+
+
+def test_saved_metadata_loss_profile_rejects_hash_or_ambiguous_metadata(tmp_path):
+    relative = "pipeline/stages/4_GBTRegressor_fixture/metadata/part-00000.txt"
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True)
+    target.write_text("{}")
+    with pytest.raises(ValueError, match="saved_gbt_metadata_checksum_mismatch"):
+        trainer.saved_loss_metadata(tmp_path, [{"path": relative, "sha256": "0" * 64}], "absolute")
+    with pytest.raises(ValueError, match="saved_gbt_metadata_not_unique"):
+        trainer.saved_loss_metadata(tmp_path, [], "absolute")

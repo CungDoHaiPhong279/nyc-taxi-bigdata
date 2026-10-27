@@ -44,6 +44,7 @@ TEST_FILES = (
     "tests/test_pretrip_v2_training_data.py",
     "tests/test_pretrip_v2_training_model.py",
     "tests/test_pretrip_v2_training.py",
+    "tests/test_pretrip_v21_reference.py",
 )
 EXCLUDED_TEST_FILES = {
     "tests/test_bronze.py": "Spark/JVM tests remain outside the lightweight CI profile",

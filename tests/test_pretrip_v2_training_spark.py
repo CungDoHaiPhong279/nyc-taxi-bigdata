@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import json
 import sys
 
 import pytest
@@ -11,7 +12,7 @@ from pyspark.sql.types import DoubleType, StringType, StructField, StructType
 
 from nyc_taxi.ml.pretrip_features import FEATURE_COLUMNS, NUMERIC_FEATURE_COLUMNS
 from nyc_taxi.ml.pretrip_training_model import (
-    ENCODED_COLUMNS, GBT_PARAMETERS, LABEL_COLUMN, fit, fitted_unknown_counts,
+    ENCODED_COLUMNS, GBT_PARAMETERS, LABEL_COLUMN, fit, fitted_unknown_counts, gbt_parameters,
     load_pipeline, make_pipeline, project_model_inputs, save_pipeline, validate_vector_metadata,
 )
 
@@ -140,3 +141,59 @@ def test_pipeline_save_reload_preserves_same_input_predictions_without_refit(spa
     assert model.stages[0].labels == reloaded.stages[0].labels
     with pytest.raises(ValueError, match="already exists"):
         save_pipeline(model, target)
+
+
+def _regressor_metadata(target):
+    files = list(target.glob("stages/4_*/metadata/part-*"))
+    assert len(files) == 1
+    return json.loads(files[0].read_text(encoding="utf-8"))
+
+
+def test_loss_profile_absolute_estimators_change_only_approved_parameter(spark):
+    squared = make_pipeline().getStages()
+    absolute = make_pipeline(loss_profile="absolute").getStages()
+    assert len(squared) == len(absolute) == 5
+    for name, expected in gbt_parameters("absolute").items():
+        assert absolute[-1].getOrDefault(name) == expected
+    assert squared[-1].getLossType() == "squared"
+    contracts = [("inputCol", "outputCol", "handleInvalid", "stringOrderType")] * 2
+    contracts += [("inputCols", "outputCols", "handleInvalid", "dropLast"),
+                  ("inputCols", "outputCol", "handleInvalid")]
+    for left, right, parameters in zip(squared[:-1], absolute[:-1], contracts, strict=True):
+        assert {name: left.getOrDefault(name) for name in parameters} == {
+            name: right.getOrDefault(name) for name in parameters
+        }
+
+
+def test_loss_profile_absolute_metadata_and_reload_keep_fitted_loss(spark, tmp_path):
+    train = spark.createDataFrame([values(index) for index in range(24)], SCHEMA)
+    model = fit(train, tinyfixture=True, loss_profile="absolute")
+    target = tmp_path / "synthetic-v21-absolute-pipeline"
+    save_pipeline(model, target)
+    metadata = _regressor_metadata(target)
+    assert metadata["paramMap"]["lossType"] == "absolute"
+    assert metadata["defaultParamMap"]["lossType"] == "squared"
+    reloaded = load_pipeline(target)
+    assert model.stages[-1].getLossType() == reloaded.stages[-1].getLossType() == "absolute"
+    batch = spark.createDataFrame([values(1), values(2, "263", "262"), values(3)], SCHEMA)
+    order = list(FEATURE_COLUMNS)
+    before = model.transform(batch).select(*order, "prediction").orderBy(*order).collect()
+    after = reloaded.transform(batch).select(*order, "prediction").orderBy(*order).collect()
+    assert len(before) == len(after) == 3
+    assert max(abs(left["prediction"] - right["prediction"])
+               for left, right in zip(before, after, strict=True)) <= 1e-9
+    assert model.stages[0].labels == reloaded.stages[0].labels == ["1", "2", "3"]
+
+
+def test_loss_profile_original_squared_save_reload_remains_compatible(spark, fitted, tmp_path):
+    train, model = fitted
+    target = tmp_path / "synthetic-original-v2-squared-pipeline"
+    save_pipeline(model, target)
+    metadata = _regressor_metadata(target)
+    assert metadata["paramMap"]["lossType"] == "squared"
+    assert metadata["defaultParamMap"]["lossType"] == "squared"
+    reloaded = load_pipeline(target)
+    assert reloaded.stages[-1].getLossType() == "squared"
+    before = model.transform(train).select(*FEATURE_COLUMNS, "prediction").orderBy(*FEATURE_COLUMNS).collect()
+    after = reloaded.transform(train).select(*FEATURE_COLUMNS, "prediction").orderBy(*FEATURE_COLUMNS).collect()
+    assert [row["prediction"] for row in before] == [row["prediction"] for row in after]
