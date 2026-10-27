@@ -2582,3 +2582,30 @@ nguyên. Ứng viên/artifact identities và baselines đã khóa; August phải
 baseline tốt nhất trên cùng rows, giữ đủ rows/predictions hữu hạn, không clip/drop
 hoặc sửa gate sau kết quả. Metrics đầy đủ, identities và giới hạn:
 [PRETRIP V2.2 native report](plans/PRETRIP_V22_NATIVE_REPORT.md).
+
+#### PRETRIP V2.2 — August holdout đã đánh giá, chưa phục vụ
+
+Phần candidate phía trên là checkpoint **trước mở holdout**. Sau khi khóa toàn
+bộ identities/config/gate, evaluator riêng đã đánh giá sample August2026 đúng
+một lần: **21.833 rows**, fit_calls0, một transform/collect, giữ đủ rows và
+unknown categories, không clip/drop. Không đọc raw/June/July hoặc model OHE;
+không fit lại preprocessing/baselines. Overlap dùng lại bằng chứng preparation
+retained sample đã pin, không tuyên bố audit toàn raw/cohort.
+
+Native MAE **$4,519596**, RMSE **$6,789118**, R² **0,705599**; baseline phân nhóm
+MAE **$5,283902** → **holdout gate PASS**, cải thiện **14,46%** trên cùng August
+rows. Không áp ngưỡng July sang August. Unseen PU22/DO43/either64: native MAE
+**$42,58689**, kém baseline; fare≤10 cũng kém baseline. Fare>100 chỉ23 rows,
+chưa đại diện tốt. Đây là zone/time-only sample lịch sử, không cam kết sai số
+cho yêu cầu hiện tại hoặc routing → giá và không tạo khoảng ±MAE.
+
+122 tests evaluator/inventory chọn lọc +2 regression cases PASS; một startup
+lỗi guard `numTrees` đã sửa thành API `getNumTrees` **trước mở August/predict**,
+checkpoint lỗi vẫn giữ. PLAN mặc định: `python scripts/evaluate_pretrip_holdout.py`
+không mở holdout hoặc ghi file. Không tự chạy lại Execute: dùng predictions
+đã giữ ở `.sandbox/pretrip-v2/holdout-20261027-native-02/results/` để kiểm metrics
+offline; independent verification sai lệch≤4,45e-14, không load/predict model.
+Evaluation37,503giây, peak930,63MiB, runtime V2 tổng187,548MiB trong cùng2048MiB.
+**August đã mở một lần, không dùng để tuning tiếp; chưa promote/deploy/nối app.**
+v1/services/P3/PBIX và candidate artifacts giữ nguyên. Full identities, metrics,
+slices, lỗi và giới hạn: [V2.2 holdout report](plans/PRETRIP_V22_HOLDOUT_REPORT.md).
