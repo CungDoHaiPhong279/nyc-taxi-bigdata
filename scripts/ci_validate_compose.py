@@ -26,6 +26,7 @@ COMPOSE_FILES = (
     "docker-compose.inference.yml",
     "docker-compose.package.yml",
     "docker-compose.package-test.yml",
+    "docker-compose.pretrip-v22.yml",
 )
 COMPOSE_VARIANTS = (
     ("base", COMPOSE_FILES[:1]),
@@ -38,6 +39,7 @@ COMPOSE_VARIANTS = (
     ("inference", (COMPOSE_FILES[0], COMPOSE_FILES[6])),
     ("package", (COMPOSE_FILES[0], COMPOSE_FILES[6], COMPOSE_FILES[7])),
     ("package-test", (COMPOSE_FILES[0], COMPOSE_FILES[6], COMPOSE_FILES[7], COMPOSE_FILES[8])),
+    ("pretrip-v22", (COMPOSE_FILES[0], COMPOSE_FILES[6], COMPOSE_FILES[9])),
 )
 MIN_COMPOSE_VERSION = (2, 24, 4)
 COMMAND_TIMEOUT_SECONDS = 60
@@ -107,7 +109,7 @@ def _run(
 
 
 def validate_compose(project_root: Path, compose_command: list[str]) -> int:
-    """Check nine override combinations with default and all profiles (18 checks)."""
+    """Check ten override combinations with default and all profiles (20 checks)."""
     with tempfile.TemporaryDirectory(prefix="nyc-taxi-ci-compose-") as temporary:
         project_directory = Path(temporary)
         for filename in COMPOSE_FILES:

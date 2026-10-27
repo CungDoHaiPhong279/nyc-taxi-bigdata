@@ -3,10 +3,11 @@
    The reviewed fixed model bundle is supplied with the repository. #>
 [CmdletBinding()]
 param([switch]$Execute,[switch]$PrepareTest,
+    [ValidateSet('v1','v2.2')][string]$ModelVersion='v1',
     [ValidateSet('current','package-test')][string]$Environment='current',
     [string]$BundleDirectory,[ValidateRange(1,300)][int]$CommandTimeoutSeconds=30,
     [ValidateRange(60,86400)][int]$StepTimeoutSeconds=21600)
-$script:SetupInvocation=@{Execute=[bool]$Execute;PrepareTest=[bool]$PrepareTest;Environment=$Environment;BundleDirectory=$BundleDirectory;CommandTimeoutSeconds=$CommandTimeoutSeconds;StepTimeoutSeconds=$StepTimeoutSeconds}
+$script:SetupInvocation=@{Execute=[bool]$Execute;PrepareTest=[bool]$PrepareTest;ModelVersion=$ModelVersion;Environment=$Environment;BundleDirectory=$BundleDirectory;CommandTimeoutSeconds=$CommandTimeoutSeconds;StepTimeoutSeconds=$StepTimeoutSeconds}
 . (Join-Path $PSScriptRoot 'bootstrap.ps1')
 . (Join-Path $PSScriptRoot 'model_bundle.ps1')
 . (Join-Path $PSScriptRoot 'package_operations.ps1')
@@ -14,9 +15,11 @@ $script:SetupRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 
 function Invoke-SystemSetup {
     param([string]$ProjectRoot=$script:SetupRoot,[ValidateSet('current','package-test')][string]$Environment='current',
+        [ValidateSet('v1','v2.2')][string]$ModelVersion='v1',
         [switch]$Execute,[switch]$PrepareTest,[string]$BundleDirectory,[int]$CommandTimeoutSeconds=30,[int]$StepTimeoutSeconds=21600)
     $ctx=$null; $state=$null; $canCheckpoint=$false; $executionLock=$null
     try {
+        if($ModelVersion -ne 'v1') { Stop-Startup 'Full package bootstrap remains v1 and will not silently switch models. For V2.2: prepare_pretrip_serving_bundle.py --execute, verify model selection, then start.ps1 -WithInference -ModelVersion v2.2. No bootstrap or lifecycle action attempted.' }
         if ($PrepareTest -and ($Environment -ne 'package-test' -or $Execute)) { Stop-Startup '-PrepareTest is configuration-only, requires package-test and cannot be combined with Execute.' }
         $ctx=New-PackageEnvironmentContext -ProjectRoot $ProjectRoot -Environment $Environment -CommandTimeoutSeconds $CommandTimeoutSeconds -StepTimeoutSeconds $StepTimeoutSeconds
         Write-Host ('PACKAGE P2 '+$(if($Execute){'EXECUTE requested'}else{'PLAN only'})+'; '+$Environment+'; real data Jan-Jun/2025, not fixtures.')

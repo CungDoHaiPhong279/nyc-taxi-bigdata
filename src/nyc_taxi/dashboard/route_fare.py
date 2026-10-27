@@ -66,10 +66,12 @@ class RouteFareEstimate:
     route_geometry: Mapping[str, Any]
     warnings: tuple[str, ...]
     submission_id: str | None = None
+    model_version: str = "v1"
+    time_selection: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """A fresh display copy; mutations cannot change the saved submission."""
-        return {
+        result = {
             "pickup": _thaw(self.pickup), "dropoff": _thaw(self.dropoff),
             "pickup_datetime": self.pickup_datetime,
             "distance_meters": self.distance_meters, "distance_km": self.distance_km,
@@ -78,6 +80,9 @@ class RouteFareEstimate:
             "warnings": list(self.warnings),
             "submission_id": self.submission_id,
         }
+        if self.model_version != "v1":
+            result.update(model_version=self.model_version, time_selection=_thaw(self.time_selection))
+        return result
 
 
 @dataclass(frozen=True)
@@ -251,6 +256,72 @@ class RouteFareCoordinator:
             distance_km=distance / 1000, request=_freeze(request),
             prediction=_freeze(prediction), route_geometry=route_geometry,
             warnings=tuple(warnings),
+        )
+
+
+class PretripRouteFareCoordinator(RouteFareCoordinator):
+    """Route is display-only; the exact V2 request has no distance predictor."""
+
+    def __init__(self, *, router: Any, geometry: Any, predictor: Any, metadata: Mapping[str, Any] | None = None) -> None:
+        super().__init__(router=router, geometry=geometry, predictor=predictor)
+        self.metadata = metadata
+
+    def estimate(self, payload: Mapping[str, Any]) -> RouteFareEstimate:
+        from nyc_taxi.ml.pretrip_features import build_serving_features
+        from .pretrip_prediction import UnsupportedEstimate
+
+        if not isinstance(payload, Mapping):
+            raise RouteFareError("Yêu cầu ước tính không hợp lệ.")
+        pickup, dropoff = _selection(payload.get("pickup")), _selection(payload.get("dropoff"))
+        pickup_zone, dropoff_zone = validate_address_support(pickup, self.geometry), validate_address_support(dropoff, self.geometry)
+        validate_standard_route(pickup_zone, dropoff_zone)
+        if payload.get("standard_rate") is not True:
+            raise RouteFareError("Hãy xác nhận chuyến taxi vàng dùng cước đồng hồ tiêu chuẩn, không phải cước đặc biệt.")
+        request = payload.get("pretrip_request")
+        try:
+            if (not isinstance(request, dict) or request.get("pickup_location_id") != pickup_zone["location_id"]
+                    or request.get("dropoff_location_id") != dropoff_zone["location_id"]):
+                raise ValueError
+            build_serving_features(request)
+        except (ValueError, TypeError, KeyError):
+            raise RouteFareError("Thời gian, vùng hoặc hợp đồng V2.2 không khớp yêu cầu đã gửi.") from None
+        try:
+            # Metadata is public and bounded, not a price cache. This final
+            # role-specific check precedes both Directions and prediction.
+            metadata = self.metadata if self.metadata is not None else self.predictor.zones()
+            unseen = {role: zone["location_id"] not in metadata[role + "_location_ids"]
+                      for role, zone in (("pickup", pickup_zone), ("dropoff", dropoff_zone))}
+            if any(unseen.values()):
+                raise UnsupportedEstimate(unseen)
+        except UnsupportedEstimate as error:
+            raise RouteFareError(str(error), code="unsupported_categories") from None
+        except (PredictionError, KeyError, TypeError):
+            raise RouteFareError("Chưa xác minh được phạm vi phục vụ V2.2. Không có giá thay thế.") from None
+        try:
+            route = self.router.directions((pickup["longitude"], pickup["latitude"]), (dropoff["longitude"], dropoff["latitude"]))
+        except MapboxError:
+            raise RouteFareError("Không lấy được tuyến ô tô từ Mapbox. Không tự gọi lại hoặc tạo giá thay thế.") from None
+        distance = route.get("distance_meters") if isinstance(route, dict) else None
+        if (type(distance) not in (int, float) or not math.isfinite(distance)
+                or not 0 <= distance <= 200 * METERS_PER_MILE):
+            raise RouteFareError("Quãng đường tham khảo phải hữu hạn và trong vùng hỗ trợ 0–200 mile.")
+        route_geometry = _route_geometry(route.get("geometry"))
+        try:
+            prediction = self.predictor.predict(**request)
+        except UnsupportedEstimate as error:
+            raise RouteFareError(str(error), code="unsupported_categories") from None
+        except PredictionError:
+            raise RouteFareError("Dịch vụ V2.2 chưa trả được kết quả hợp lệ. Không có giá thay thế.") from None
+        if not isinstance(prediction, dict):
+            raise RouteFareError("Phản hồi V2.2 không hợp lệ. Không hiển thị giá.")
+        warnings = []
+        if {132, 138} & {pickup_zone["location_id"], dropoff_zone["location_id"]}:
+            warnings.append("Chuyến sân bay có thể có phí sân bay và phụ phí chưa nằm trong cước cơ bản ước tính.")
+        return RouteFareEstimate(
+            pickup=_freeze({**pickup, **pickup_zone}), dropoff=_freeze({**dropoff, **dropoff_zone}),
+            pickup_datetime=request["pickup_datetime"], distance_meters=float(distance), distance_km=distance / 1000,
+            request=_freeze(request), prediction=_freeze(prediction), route_geometry=route_geometry,
+            warnings=tuple(warnings), model_version="v2.2", time_selection=_freeze(payload.get("time_selection")),
         )
 
 

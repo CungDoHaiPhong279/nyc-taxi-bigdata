@@ -1,11 +1,17 @@
 # Optional inference startup helpers; dot-sourcing performs no checks or actions.
 
 function Enable-InferenceStartupContext {
-    param($Context)
+    param($Context, [ValidateSet('v1', 'v2.2')][string]$ModelVersion = 'v1')
     if ($Context.Environment -ne 'current') { Stop-Startup '-WithInference is available only for the current environment, never bootstrap-test.' }
     $override = Join-Path $Context.Root 'docker-compose.inference.yml'
     if (-not (Test-Path -LiteralPath $override -PathType Leaf)) { Stop-Startup 'docker-compose.inference.yml is missing; inference startup is unavailable.' }
     $Context.ComposeArguments += @('--file', $override, '--project-name', 'nyc-taxi-bigdata')
+    if ($ModelVersion -eq 'v2.2') {
+        $v22Override = Join-Path $Context.Root 'docker-compose.pretrip-v22.yml'
+        if (-not (Test-Path -LiteralPath $v22Override -PathType Leaf)) { Stop-Startup 'The explicit V2.2 Compose override is missing.' }
+        $Context.ComposeArguments += @('--file', $v22Override)
+    }
+    $Context | Add-Member -MemberType NoteProperty -Name ModelVersion -Value $ModelVersion -Force
     $Context.ExpectedProject = 'nyc-taxi-bigdata'
     $Context.Services = @('postgres', 'mlflow', 'fare-inference', 'dashboard')
     $Context.BuildServices = @('worker', 'dashboard', 'fare-inference')
@@ -29,8 +35,12 @@ function Get-InferenceUpdateCommand {
     $project = "'" + $Context.Root.Replace("'", "''") + "'"
     $base = "'" + (Join-Path $Context.Root 'docker-compose.yml').Replace("'", "''") + "'"
     $override = "'" + (Join-Path $Context.Root 'docker-compose.inference.yml').Replace("'", "''") + "'"
+    $v22 = ''
+    if ((Get-OptionalProperty $Context 'ModelVersion' 'v1') -eq 'v2.2') {
+        $v22 = ' -f ' + "'" + (Join-Path $Context.Root 'docker-compose.pretrip-v22.yml').Replace("'", "''") + "'"
+    }
     return ('docker compose --project-directory ' + $project + ' -f ' + $base + ' -f ' + $override +
-        ' --project-name nyc-taxi-bigdata up -d --no-deps --no-build --pull never ' + $Service)
+        $v22 + ' --project-name nyc-taxi-bigdata up -d --no-deps --no-build --pull never ' + $Service)
 }
 
 function Test-InferenceReadiness {
@@ -43,9 +53,13 @@ function Test-InferenceReadiness {
     if ($null -eq $expected -or (Get-OptionalProperty $expected 'Verified' $false) -ne $true) {
         Stop-Startup 'Frozen artifacts were not verified before the inference readiness check.'
     }
-    foreach ($pin in @(@{Name='ModelSHA256';Pattern='^[0-9a-f]{64}$'},
+    $v22 = (Get-OptionalProperty $Context 'ModelVersion' 'v1') -eq 'v2.2'
+    $identityPins = @(@{Name='ModelSHA256';Pattern='^[0-9a-f]{64}$'},
                        @{Name='TrainingRunId';Pattern='^[0-9a-f]{32}$'},
-                       @{Name='EvaluationRunId';Pattern='^[0-9a-f]{32}$'})) {
+                       @{Name='EvaluationRunId';Pattern='^[0-9a-f]{32}$'})
+    if ($v22) { $identityPins = @(@{Name='ModelSHA256';Pattern='^[0-9a-f]{64}$'},
+        @{Name='ArtifactManifestSHA256';Pattern='^[0-9a-f]{64}$'}, @{Name='DictionarySHA256';Pattern='^[0-9a-f]{64}$'}) }
+    foreach ($pin in $identityPins) {
         $value = Get-OptionalProperty $expected $pin.Name
         if ($value -isnot [string] -or $value -cnotmatch $pin.Pattern) {
             Stop-Startup 'Verified artifact identity is incomplete; inference readiness cannot be accepted.'
@@ -63,6 +77,11 @@ print(json.dumps(value, allow_nan=False))
     $timeout = [Math]::Min(10, $Context.CommandTimeoutSeconds)
     $json = Invoke-StartupDocker -Context $Context -Arguments @('exec', $Container.ID, 'python', '-I', '-B', '-c', $probe) -TimeoutSeconds $timeout -FailureMessage 'Inference readiness request failed; no prediction or fallback was requested. Inspect the service separately'
     $ready = ConvertFrom-StartupJson $json 'inference readiness response'
+    if ($v22) {
+        $verified = Assert-PretripV22Readiness -Expected $expected -Ready $ready
+        Write-Host ('Inference readiness: explicit V2.2 frozen model loaded once; model SHA256=' + $verified.model_sha256 + '.')
+        return $verified
+    }
     $readyFlag = Get-OptionalProperty $ready 'ready'
     $loadCount = Get-OptionalProperty $ready 'model_load_count'
     if ($readyFlag -isnot [bool] -or $readyFlag -ne $true -or

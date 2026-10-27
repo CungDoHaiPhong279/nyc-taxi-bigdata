@@ -51,6 +51,10 @@ TEST_FILES = (
     "tests/test_pretrip_holdout.py",
     "tests/test_pretrip_holdout_data.py",
     "tests/test_pretrip_holdout_model.py",
+    "tests/test_pretrip_inference.py",
+    "tests/test_pretrip_bundle.py",
+    "tests/test_route_pretrip.py",
+    "tests/test_dashboard_pretrip.py",
 )
 EXCLUDED_TEST_FILES = {
     "tests/test_bronze.py": "Spark/JVM tests remain outside the lightweight CI profile",
@@ -63,6 +67,7 @@ EXCLUDED_TEST_FILES = {
     "tests/test_pretrip_v2_training_spark.py": "tiny Spark/JVM v2 trainer fixture tests run separately in the worker; not ETL or real training",
     "tests/test_pretrip_v22_spark.py": "tiny Spark/JVM native-categorical fixture tests run separately in the worker; not ETL or real training",
     "tests/test_pretrip_holdout_spark.py": "synthetic Spark/JVM frozen-holdout metadata and no-fit tests run separately in the worker; no real training or holdout",
+    "tests/test_pretrip_serving_parity.py": "explicit frozen V2.2 synthetic serving parity requires the local read-only candidate; no artifact download in default CI",
 }
 DESELECTED_TEST = (
     "tests/test_dashboard_queries.py::"

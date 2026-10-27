@@ -1,0 +1,44 @@
+# Explicit opt-in layer AFTER docker-compose.yml + docker-compose.inference.yml.
+# Replace the SAME inference/dashboard services; never load v1 and v2 together.
+# This file does not deploy itself. Default production and v1 rollback unchanged.
+services:
+  fare-inference:
+    image: nyc-taxi-inference:pretrip-v22-candidate
+    command:
+      - python
+      - -m
+      - nyc_taxi.ml.inference_server
+      - --model-version
+      - v2.2
+      - --model-dir
+      - /model-v22/artifacts
+      - --contract-dir
+      - /model-v22/artifacts
+      - --zones
+      - /model-v22/zones.csv
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    memswap_limit: 3g
+    pids_limit: 512
+    tmpfs: !override
+      - /tmp:rw,exec,nosuid,nodev,size=536870912,mode=1777
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:ActiveProcessorCount=2 -XX:ParallelGCThreads=2 -XX:ConcGCThreads=1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+    volumes: !override
+      - type: bind
+        source: ./.sandbox/pretrip-v2/serving-bundle-v22-01
+        target: /model-v22
+        read_only: true
+        bind:
+          create_host_path: false
+  dashboard:
+    image: nyc-taxi-dashboard:pretrip-v22-candidate
+    environment:
+      FARE_MODEL_VERSION: v2.2
+      FARE_ADDRESS_ENABLED: "1"
+      # Network is still explicitly controlled at runtime; no token is baked.
+      FARE_ADDRESS_ALLOW_NETWORK: ${FARE_ADDRESS_ALLOW_NETWORK:-0}

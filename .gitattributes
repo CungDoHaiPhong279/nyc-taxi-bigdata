@@ -9,6 +9,7 @@
 /src/nyc_taxi/ml/pilot_data.py text eol=lf
 /src/nyc_taxi/ml/pilot_model.py text eol=lf
 /src/nyc_taxi/ml/pilot_tracking.py text eol=lf
+/src/nyc_taxi/ml/pretrip_features.py text eol=lf
 /reports/ml_p1_profile.json text eol=lf
 /distribution/models/ml-p4-v1/*.zip binary
 /distribution/models/ml-p4-v1/*.json text eol=lf

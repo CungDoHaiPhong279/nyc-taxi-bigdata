@@ -7,7 +7,7 @@ import os
 
 import streamlit as st
 
-from nyc_taxi.dashboard.prediction import DEFAULT_INFERENCE_URL, InferenceClient, PredictionError
+from nyc_taxi.dashboard.prediction import DEFAULT_INFERENCE_URL, InferenceClient, PredictionError, selected_model_version
 
 
 UNSEEN_WARNING = "Vùng này chưa có trong dữ liệu huấn luyện; kết quả có thể kém chính xác hơn."
@@ -35,7 +35,12 @@ def load_model_metadata(base_url: str) -> dict:
 def render_page() -> None:
     # The existing manual flow remains the default until address routing is
     # explicitly enabled. Importing this branch never starts Spark or HTTP.
-    if os.environ.get("FARE_ADDRESS_ENABLED", "0") == "1":
+    try:
+        version = selected_model_version()
+    except PredictionError as error:
+        st.error(str(error))
+        return
+    if version == "v2.2" or os.environ.get("FARE_ADDRESS_ENABLED", "0") == "1":
         from nyc_taxi.dashboard.address_page import render_page as render_address_page
         render_address_page()
         return

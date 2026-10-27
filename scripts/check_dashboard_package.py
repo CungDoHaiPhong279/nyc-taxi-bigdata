@@ -13,10 +13,31 @@ from nyc_taxi.dashboard.geometry_assets import load_geometry_bundle
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GEOMETRY_SHA256 = "6513c39044b8dee18c00af0dd6f97919d681b1e85efbd2d6980786c4cfbb8c9c"
 MAPBOX_GL_VERSION = "3.15.0"
+PRETRIP_PINS = {
+    "config/pretrip_v2_contract.json": "a1ddbe55f0128c20d8189d9f37b3b6172e90f20be71ae7a99300e21fb306add5",
+    "config/pretrip_v2_calendar.json": "00dd5c8f442955879ade701c726106f12ef0e03669f818c5c06c6a5b067decac",
+    "src/nyc_taxi/ml/pretrip_features.py": "0f2cd9b8b3d84ddbd7f9b0aa49cbcc3acdd8d7ed75432281d6f62501f9fa091a",
+}
 
 
 class PackagingError(RuntimeError):
     """A public asset was omitted or does not match the reviewed package."""
+
+
+def check_pretrip_package(project_root: Path) -> None:
+    """Verify only public stdlib contract assets, never load a model or Spark."""
+    for relative, expected in PRETRIP_PINS.items():
+        try:
+            actual = sha256((project_root / relative).read_bytes()).hexdigest()
+        except OSError:
+            raise PackagingError("A pinned V2 public contract asset is missing.") from None
+        if actual != expected:
+            raise PackagingError("V2 public contract/helper SHA256 mismatch.")
+    for relative in ("src/nyc_taxi/ml/__init__.py", "src/nyc_taxi/ml/pretrip_serving_contract.py",
+                     "src/nyc_taxi/dashboard/pretrip_prediction.py"):
+        path = project_root / relative
+        if not path.is_file() or not path.stat().st_size:
+            raise PackagingError("A V2 web contract/client module is missing.")
 
 
 def check_package(project_root: Path = PROJECT_ROOT) -> None:
@@ -52,6 +73,7 @@ def check_package(project_root: Path = PROJECT_ROOT) -> None:
     )
     if not re.search(version_pattern, frontend) or any(marker not in frontend for marker in required_markers):
         raise PackagingError("Route-map frontend is missing its reviewed Mapbox GL asset pin.")
+    check_pretrip_package(project_root)
 
 
 def main() -> int:
@@ -61,7 +83,7 @@ def main() -> int:
         # Never expose paths/configuration supplied by the deployment or raw data.
         print("FAIL: dashboard geometry/frontend package smoke.", file=sys.stderr)
         return 1
-    print("PASS: pinned geometry (263 IDs) and address/route-map frontend assets packaged; no network/render check.")
+    print("PASS: geometry (263 IDs), frontend and pinned V2 web contracts packaged; no network/model/render check.")
     return 0
 
 

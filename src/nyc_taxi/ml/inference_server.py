@@ -14,6 +14,10 @@ MAX_BODY_BYTES = 4096
 
 
 def handler_for(predictor):
+    def selected_identity():
+        method = getattr(predictor, "identity", None)
+        return method() if callable(method) else identity()
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "FareDemo/1"
 
@@ -42,9 +46,10 @@ def handler_for(predictor):
                 self.reply(200 if self.path == "/health" or predictor.ready else 503, predictor.readiness())
             elif self.path == "/zones":
                 if not predictor.ready:
-                    self.reply(503, {"error": "model_not_ready", **identity()})
+                    self.reply(503, {"error": "model_not_ready", **selected_identity()})
                 else:
-                    self.reply(200, {"zones": predictor.zones, **identity()})
+                    method = getattr(predictor, "zone_response", None)
+                    self.reply(200, method() if callable(method) else {"zones": predictor.zones, **selected_identity()})
             else:
                 self.reply(404, {"error": "not_found"})
 
@@ -67,13 +72,26 @@ def handler_for(predictor):
                 result = predictor.predict(payload)
                 self.reply(200, result)
             except (InputError, ValueError, UnicodeError):
-                self.reply(400, {"error": "invalid_inputs", "message": "Inputs không hợp lệ; dùng distance hữu hạn [0,200], local datetime năm 2025 và zone IDs 1–263.", **identity()})
+                message = ("Inputs không hợp lệ theo contract V2 và thời gian America/New_York."
+                           if selected_identity().get("model_version") == "v2.2" else
+                           "Inputs không hợp lệ; dùng distance hữu hạn [0,200], local datetime năm 2025 và zone IDs 1–263.")
+                self.reply(400, {"error": "invalid_inputs", "message": message, **selected_identity()})
             except InferenceError as error:
-                self.reply(error.status, {"error": error.code, **identity()})
+                self.reply(error.status, {"error": error.code, **getattr(error, "public_payload", {}), **selected_identity()})
             except Exception:
-                self.reply(503, {"error": "service_unavailable", **identity()})
+                self.reply(503, {"error": "service_unavailable", **selected_identity()})
 
     return Handler
+
+
+def make_predictor(model_version, model_dir, contract_dir, zones):
+    """Explicit one-model factory. Failure never falls back to another version."""
+    if model_version == "v1":
+        return FrozenPredictor(model_dir, contract_dir, zones)
+    if model_version == "v2.2":
+        from nyc_taxi.ml.pretrip_inference import FrozenPretripPredictor
+        return FrozenPretripPredictor(model_dir, contract_dir, zones)
+    raise ValueError("Unsupported explicitly selected model version")
 
 
 def main(argv=None):
@@ -81,10 +99,11 @@ def main(argv=None):
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--contract-dir", type=Path, required=True)
     parser.add_argument("--zones", type=Path, required=True)
+    parser.add_argument("--model-version", choices=("v1", "v2.2"), default="v1")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
-    predictor = FrozenPredictor(args.model_dir, args.contract_dir, args.zones)
+    predictor = make_predictor(args.model_version, args.model_dir, args.contract_dir, args.zones)
     server = ThreadingHTTPServer((args.host, args.port), handler_for(predictor))
     server.daemon_threads = True
     loader = threading.Thread(target=predictor.load, name="frozen-model-loader", daemon=True)

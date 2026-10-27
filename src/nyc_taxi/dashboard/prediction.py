@@ -25,6 +25,14 @@ class PredictionError(RuntimeError):
     """Only safe, user-facing messages are exposed to the dashboard."""
 
 
+def selected_model_version() -> str:
+    """Explicit opt-in only; an invalid setting must never fall back to V1."""
+    value = os.environ.get("FARE_MODEL_VERSION", "v1")
+    if value not in {"v1", "v2.2"}:
+        raise PredictionError("FARE_MODEL_VERSION phải là v1 hoặc v2.2; không tự chọn mô hình thay thế.")
+    return value
+
+
 def _text(value: Any, *, maximum: int = 200) -> str:
     if (
         not isinstance(value, str) or not value.strip() or len(value) > maximum

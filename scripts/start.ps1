@@ -7,6 +7,7 @@ and explicit image/config updates are separate operations. No host Python needed
 param(
     [switch]$Build,
     [switch]$WithInference,
+    [ValidateSet('v1', 'v2.2')][string]$ModelVersion = 'v1',
     [ValidateSet('current', 'bootstrap-test', 'package-test')][string]$Environment = 'current',
     [ValidateRange(1, 1800)][int]$HealthTimeoutSeconds = 120,
     [ValidateRange(1, 300)][int]$CommandTimeoutSeconds = 30,
@@ -215,6 +216,7 @@ function Invoke-ProjectStart {
         [string]$ProjectRoot = $script:StartupProjectRoot,
         [switch]$Build,
         [switch]$WithInference,
+        [ValidateSet('v1', 'v2.2')][string]$ModelVersion = 'v1',
         [ValidateSet('current', 'bootstrap-test', 'package-test')][string]$Environment = 'current',
         [int]$HealthTimeoutSeconds = 120,
         [int]$CommandTimeoutSeconds = 30,
@@ -224,6 +226,7 @@ function Invoke-ProjectStart {
     )
     try {
         $package = $null -ne $Context -and (Get-OptionalProperty $Context 'IsPackage' $false)
+        if ($ModelVersion -ne 'v1' -and (-not $WithInference -or $package)) { Stop-Startup 'V2.2 requires explicit -WithInference in the current environment. Package bootstrap stays v1; prepare V2.2 separately.' }
         if ($WithInference -and $Environment -ne 'current' -and -not $package) { Stop-Startup '-WithInference cannot be combined with bootstrap-test; use the current frozen-model environment explicitly.' }
         $script:DockerCliPath = Resolve-DockerCli
         if (-not $script:DockerCliPath) { Stop-Startup 'Docker CLI is missing. Install Docker Desktop, open it, wait for the engine, then run this script again.' }
@@ -237,11 +240,12 @@ function Invoke-ProjectStart {
         if ($WithInference) {
             if ($package) {
                 $context | Add-Member WithInference $true -Force
-            } else { Enable-InferenceStartupContext -Context $context }
+            } else { Enable-InferenceStartupContext -Context $context -ModelVersion $ModelVersion }
             # Host-only hashes; fail before builds, container lifecycle work, or
             # even creating a missing .env. Never train/bootstrap/fetch a model.
             try {
-                if ($package) { $artifacts = Assert-FareArtifacts -ProjectRoot $context.Root -RuntimeRoot $context.ModelRuntimeRoot }
+                if ($ModelVersion -eq 'v2.2') { $artifacts = Assert-PretripV22Artifacts -ProjectRoot $context.Root }
+                elseif ($package) { $artifacts = Assert-FareArtifacts -ProjectRoot $context.Root -RuntimeRoot $context.ModelRuntimeRoot }
                 else { $artifacts = Assert-FareArtifacts -ProjectRoot $context.Root }
             }
             catch {
@@ -309,7 +313,11 @@ function Invoke-ProjectStart {
             $imageId = ''
             if ($image.ExitCode -eq 0) { $imageId = $image.StdOut.Trim() }
             if ($null -eq $container -and -not $imageId) {
-                if ($WithInference -and $service -in @('fare-inference', 'dashboard')) { Stop-Startup ($service + ' image is missing. Run scripts/start.ps1 -WithInference -Build explicitly; no automatic build, pull, or model training was attempted.') }
+                if ($WithInference -and $service -in @('fare-inference', 'dashboard')) {
+                    $selectionHint = ''
+                    if ($ModelVersion -eq 'v2.2') { $selectionHint = ' -ModelVersion v2.2' }
+                    Stop-Startup ($service + ' image is missing. Run scripts/start.ps1 -WithInference' + $selectionHint + ' -Build explicitly; no automatic build, pull, or model training was attempted.')
+                }
                 if ($service -eq 'dashboard') { Stop-Startup 'Dashboard image is missing. Run scripts/start.ps1 -Build first; no automatic build or pull was attempted.' }
                 Stop-Startup ($service + ' image is missing. Obtain the exact configured image explicitly, then retry. -Build never builds/pulls postgres or mlflow.')
             }
@@ -379,8 +387,9 @@ function Invoke-ProjectStart {
 . (Join-Path $PSScriptRoot 'docker_environment.ps1')
 . (Join-Path $PSScriptRoot 'start_inference.ps1')
 . (Join-Path $PSScriptRoot 'model_artifacts.ps1')
+. (Join-Path $PSScriptRoot 'pretrip_model_selection.ps1')
 . (Join-Path $PSScriptRoot 'package_environment.ps1')
 
 if ($MyInvocation.InvocationName -ne '.') {
-    exit (Invoke-ProjectStart -Build:$Build -WithInference:$WithInference -Environment $Environment -HealthTimeoutSeconds $HealthTimeoutSeconds -CommandTimeoutSeconds $CommandTimeoutSeconds -BuildTimeoutSeconds $BuildTimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds)
+    exit (Invoke-ProjectStart -Build:$Build -WithInference:$WithInference -ModelVersion $ModelVersion -Environment $Environment -HealthTimeoutSeconds $HealthTimeoutSeconds -CommandTimeoutSeconds $CommandTimeoutSeconds -BuildTimeoutSeconds $BuildTimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds)
 }

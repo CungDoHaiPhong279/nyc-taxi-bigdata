@@ -2609,3 +2609,43 @@ Evaluation37,503giây, peak930,63MiB, runtime V2 tổng187,548MiB trong cùng204
 **August đã mở một lần, không dùng để tuning tiếp; chưa promote/deploy/nối app.**
 v1/services/P3/PBIX và candidate artifacts giữ nguyên. Full identities, metrics,
 slices, lỗi và giới hạn: [V2.2 holdout report](plans/PRETRIP_V22_HOLDOUT_REPORT.md).
+
+#### PRETRIP V2.2 — đường serving/pretrip opt-in, chưa deploy
+
+Đã thêm mode `v2.2` tường minh, giữ mặc định và rollback **v1**. Frozen native
+candidate/model/preprocessing/contract/calendar không đổi: vector8D, hai zone
+nominal; model load một lần, không fit hay tự fallback. **Chính sách phục vụ mới
+sau kiểm định** chỉ nhận PU trong dictionary PU và DO trong dictionary DO train;
+unseen trả “chưa hỗ trợ ước tính”, không có giá/baseline thay thế. Chính sách này
+không loại 64 unseen rows khỏi 21.833 August rows, không tính lại/đẹp hóa metrics.
+Giữ geometry, standard-rate và guard các tuyến cước đặc biệt đã biết.
+
+UI V2 mặc định **Đi ngay** lấy America/New_York lúc submit; hẹn giờ tối đa bảy
+ngày theo calendar/DST đã pin, không đổi ngày hiện tại thành 2025. Kết quả giữ
+đúng inputs/UUID cũ qua rerun. Cước cơ bản USD chưa gồm phụ phí; model chỉ dùng
+zone/thời gian, khoảng cách route trên map **chỉ tham khảo, không là predictor**.
+Không dùng MAE August làm cam kết sai số chuyến hiện tại.
+
+Bundle V2 riêng tại `.sandbox/pretrip-v2/serving-bundle-v22-01/`, từ candidate
+local đã khóa; manifest/hash/role policy được kiểm trước load. CLI
+`python scripts/prepare_pretrip_serving_bundle.py` mặc định PLAN. Execute phải
+chạy trong worker read-only/source với `--prior-task-bytes` đo đủ runtime cũ
+trên host, envelope2048MiB và reserve scratch512MiB; không tự tính ngân sách từ
+partial mounts hoặc ghi đè model gốc. **Bundle chưa được phân phối qua Git/URL**;
+clone mới chưa tự có V2.2 và package bootstrap vẫn v1. `setup_system.ps1
+-ModelVersion v2.2` chặn trước ETL, không âm thầm dùng model khác.
+
+131 worker unit tests, 67 UI/AppTest và 76 Pester mock tests chọn lọc PASS;
+Compose ba layers quiet/CLI PLAN, bundle prepare/reuse và host artifact guard
+PASS. Parity trên 8 direct +1 HTTP/client fixtures tổng hợp: sai lệch0 ≤1e-9,
+fit_calls0/model_load_count1, nominal8D giữ nguyên. Đây không phải đo accuracy
+mới. Bundle thêm0,446MiB; runtime V2 sau bundle187,994MiB trong cùng2048MiB,
+reserve scratch512MiB. Chi tiết thời gian/peak RAM và giới hạn xem
+[V2.2 serving report](plans/PRETRIP_V22_SERVING_REPORT.md); không coi mock/AppTest
+là browser live. **Chưa build/deploy UI/inference mới**. Khi có bước deploy riêng
+được duyệt, dùng tags V2 riêng và override `docker-compose.pretrip-v22.yml` sau
+base + inference, chỉ cập nhật hai services bằng `--no-deps --no-build --pull
+never`; giữ images/config cũ để rollback. Sau deploy, startup chọn rõ:
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
+-WithInference -ModelVersion v2.2`. Lệnh này không tự recreate containers drift,
+không chuẩn bị model hoặc train. Không chạy lại training/holdout hoặc CI cũ.
