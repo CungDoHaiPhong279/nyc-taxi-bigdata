@@ -2423,7 +2423,8 @@ inference v2 cùng artifact/features/calendar có phiên bản. **Đi ngay** l�
 `America/New_York` lúc submit, hẹn giờ là tùy chọn. Các guard/holiday v1 vẫn giữ
 để tái hiện 2025; không ánh xạ ngày hiện tại về 2025 hoặc lấy MAE June làm cam kết.
 Trước khi phục vụ hiện tại phải đánh giá model mới và xử lý train-serving distance
-gap; chỉ chỉnh UI/nới lịch không đủ điều kiện. Chưa tải dữ liệu hoặc train v2.
+gap; chỉ chỉnh UI/nới lịch không đủ điều kiện. Tiến độ offline/preparation/training
+V2 được ghi theo các checkpoint bên dưới; V2 chưa được phục vụ trên ứng dụng.
 
 #### PRETRIP V2 — contract và preparation offline
 
@@ -2481,3 +2482,47 @@ quota physical C/VHDX hoặc model mới đã có metrics. Checkpoint acquisitio
 chỉ gồm code/tests/metadata/tài liệu; chưa training/build/deploy, v1/services giữ nguyên.
 Chi tiết nguồn, checksum tự tính, counters, giới hạn raw-reference và tài nguyên:
 [PRETRIP V2 preparation report](plans/PRETRIP_V2_PREPARATION_REPORT.md).
+
+#### PRETRIP V2 — trainer và pilot June/July 2026
+
+Trainer riêng `scripts/train_pretrip_pilot.py` mặc định **PLAN**, không đọc sample,
+không mở Spark hoặc ghi output. `--execute` yêu cầu `--prior-task-bytes` đo từ
+runtime V2 hiện hữu; không cấp lại envelope **2048 MiB**. Chỉ bốn file features/
+labels June/July và hai metadata preparation được mount read-only; không mount
+raw hoặc August. Loader kiểm SHA256/schema/contract/calendar/TZif, ghép từng hàng
+Arrow trước khi tạo một Spark DataFrame và chỉ cho tám features v2 vào pipeline.
+
+Lượt `training-20261027-pilot-01` đã fit đúng một GBT seed 42, 20 trees, depth 4,
+step 0.1 trên **26.573 train**, đánh giá **23.526 validation**; không clip/bỏ dòng.
+Baselines train-only: median toàn cục và median PU/DO × khung 6 giờ, nhóm ít hơn
+5 fallback PU/DO đủ 5 rồi toàn cục. PU/DO được StringIndexer + one-hot, dictionary
+chỉ fit train, có unknown bucket. Validation MAE: global **$7,7380**, phân nhóm
+**$5,1312**, GBT **$6,3217**. **Gate FAIL**: GBT kém baseline tốt nhất **23,20%**,
+không đạt cải thiện tối thiểu 10%; không tuning/promote/deploy sau khi xem metrics.
+
+**149 tests liên quan PASS** (gồm fixture Spark và inventory, không chạy toàn CI).
+Fresh-worker reload cùng image Spark sẵn có, không mount sample/không fit, khớp
+16 inputs train/validation đã cố định với sai lệch **0 ≤ 1e-9**; baselines khớp.
+Artifact/checkpoint giữ tại `.sandbox/pretrip-v2/training-20261027-pilot-01/`,
+không đưa model binaries/sample vào Git. Train **55,679 s**, peak cgroup RAM
+**1518,32 MiB** trong limit 3 GiB/2 CPU/heap 1536 MiB; runtime V2 sau reload
+**183,35 MiB logical bytes**. Scratch riêng tmpfs trần 512 MiB, không phải số đo
+peak thực tế hoặc giới hạn vật lý toàn ổ C/VHDX/pagefile.
+
+Các lệnh sau là **bên trong worker**, với source/config read-only, đúng sáu file
+đầu vào nêu trên và output mới riêng; không chạy trực tiếp host để thay runtime:
+
+```text
+python /app/scripts/train_pretrip_pilot.py
+python /app/scripts/train_pretrip_pilot.py --execute --output-dir .sandbox/pretrip-v2/<new-attempt>/artifacts --prior-task-bytes <measured-existing-V2-bytes> --code-commit <base-SHA> --runtime-image-id <full-existing-image-ID>
+python /app/scripts/train_pretrip_pilot.py --execute --reload-artifacts .sandbox/pretrip-v2/<attempt>/artifacts --output-dir .sandbox/pretrip-v2/<new-attempt>/fresh-reload --prior-task-bytes <remeasured-existing-V2-bytes>
+```
+
+Giữ `--network none --read-only --cpus 2 --memory 3g --memory-swap 3g`, tmpfs
+`/tmp:rw,exec,nosuid,nodev,size=512m`, `SPARK_LOCAL_IP=127.0.0.1`,
+`PYSPARK_SUBMIT_ARGS="--driver-memory 1536m pyspark-shell"`; giới hạn thread native
+theo 2 CPU, không hạ PID limit về 256. Không dùng `--overwrite`/latest hoặc chạy
+lại training để đổi kết quả. CLI trả 2 nếu model không qua gate (khác lỗi thực thi).
+**August 21.833 rows chưa mở/predict/evaluate; v1/dashboard/services không đổi.**
+Metrics đầy đủ, hashes, lỗi harness đã xử lý và giới hạn:
+[PRETRIP V2 training report](plans/PRETRIP_V2_TRAINING_REPORT.md).

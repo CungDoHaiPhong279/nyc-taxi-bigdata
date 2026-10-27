@@ -63,12 +63,17 @@ def test_arguments_select_exact_profile_without_spark_or_database_tests(project,
         "tests/test_postgres_integration.py",
         "tests/test_ml_pilot_data.py", "tests/test_ml_pilot_model.py",
         "tests/test_ml_holdout_metrics.py",
+        "tests/test_pretrip_v2_training_spark.py",
     }
     assert "tests/test_ml_pilot_tracking.py" in ci.TEST_FILES
     assert str(project / "tests/test_ml_pilot_tracking.py") in arguments
     assert "tests/test_ml_holdout_contract.py" in ci.TEST_FILES
     assert "tests/test_ml_inference.py" in ci.TEST_FILES
     assert "tests/test_dashboard_prediction.py" in ci.TEST_FILES
+    for filename in ("tests/test_pretrip_v2_training_data.py", "tests/test_pretrip_v2_training_model.py",
+                     "tests/test_pretrip_v2_training.py"):
+        assert filename in ci.TEST_FILES
+    assert "Spark/JVM v2 trainer fixture" in ci.EXCLUDED_TEST_FILES["tests/test_pretrip_v2_training_spark.py"]
     assert str(project / "tests/test_ml_holdout_contract.py") in arguments
     for filename in ("tests/test_ml_pilot_data.py", "tests/test_ml_pilot_model.py"):
         assert "Spark/JVM ML fixture" in ci.EXCLUDED_TEST_FILES[filename]
