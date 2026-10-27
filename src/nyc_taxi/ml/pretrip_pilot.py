@@ -35,6 +35,7 @@ _PLAN_STOP_CODES = frozenset({
     "output_already_exists_no_overwrite", "head_and_execute_are_separate_steps",
     "explicit_preparation_disk_budget_required", "local_sources_missing_no_automatic_download",
     "source_size_unmeasured_review_required", "local_source_size_differs_from_head_snapshot",
+    "invalid_extra_budget_input",
 })
 
 
@@ -153,6 +154,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--output-dir", type=Path, default=Path(".sandbox/pretrip-v2/pilot-2026-06-08"))
     result.add_argument("--execute", action="store_true", help="Prepare a bounded sample only, never train")
     result.add_argument(
+        "--budget-input", type=Path, action="append", default=[],
+        help="Read-only runtime metadata from acquisition counted within the SAME task budget; repeatable",
+    )
+    result.add_argument(
         "--disk-budget-mib", type=int,
         help="Explicit managed-file logical-byte budget including local sources and outputs; not whole-drive physical growth",
     )
@@ -171,6 +176,13 @@ def run(arguments: argparse.Namespace, *, project_root: Path = PROJECT_ROOT,
     output = guarded_output(arguments.output_dir, root)
     source_dir = _absolute(arguments.source_dir, root).resolve()
     paths = {row["month"]: source_dir / Path(urlsplit(row["url"]).path).name for row in sources["files"]}
+    budget_inputs = []
+    for value in arguments.budget_input:
+        candidate = _absolute(value, root)
+        if (candidate.is_symlink() or not candidate.is_file()
+                or not candidate.resolve().is_relative_to(root / ".sandbox/pretrip-v2")):
+            raise PilotPlanError("invalid_extra_budget_input")
+        budget_inputs.append(candidate.resolve())
     report = {
         "status": "PLAN_NOT_EXECUTED", "model_status": "not_trained_or_deployed",
         "scope": "zone/time-only preparation; no acquisition, ETL, DB, model or metrics",
@@ -197,6 +209,7 @@ def run(arguments: argparse.Namespace, *, project_root: Path = PROJECT_ROOT,
             "estimate_is_enforced_usage": False,
         },
         "holdout": "prepared only; no fit/prediction/evaluation",
+        "extra_budget_input_count": len(set(budget_inputs)),
     }
     if arguments.head:
         if arguments.execute:
@@ -220,7 +233,8 @@ def run(arguments: argparse.Namespace, *, project_root: Path = PROJECT_ROOT,
         preparer = prepare_samples
     return preparer(paths, output, seed=42, sample_modulus=1000000,
                     sample_buckets=10000, caps=report["caps"], batch_size=8192,
-                    calendar=calendar, disk_budget_bytes=arguments.disk_budget_mib * MIB)
+                    calendar=calendar, disk_budget_bytes=arguments.disk_budget_mib * MIB,
+                    budget_inputs=tuple(budget_inputs))
 
 
 def _failure_report(error: Exception) -> dict[str, Any]:

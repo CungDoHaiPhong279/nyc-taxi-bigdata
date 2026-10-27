@@ -2469,3 +2469,15 @@ biến động toàn ổ C/VHDX/pagefile. PLAN vẫn không ghi. Bổ sung đã 
 **37 tests preparation/CLI + 20 quota/inventory**, dữ liệu tổng hợp nhỏ; không
 chạy lại toàn bộ 112 tests. Peak 313,569 MiB vẫn là dự trù, 512 MiB chưa được
 duyệt và RAM chưa đo thực; chưa acquisition/training/metrics/deploy.
+
+Checkpoint thực thi tiếp theo (27/10/2026): đã được duyệt **2048 MiB cho cùng
+lượt acquisition + preparation**. Ba nguồn TLC June–August 2026 tải streaming
+và kiểm TLS/headers/bytes/SHA256 local/footer, không qua ETL/DB. Preparation
+sample 1% seed 42 hoàn tất: **26.573 train / 23.526 validation / 21.833 holdout**,
+dedup/conflict/overlap trên sample bằng 0. Hashes/schema/alignment đã kiểm;
+August chưa predict/evaluate. Runtime riêng dùng **182,91 MiB logical bytes**,
+preparation 12 phút 01 giây, process peak RSS **251,69 MiB**. Đây không phải
+quota physical C/VHDX hoặc model mới đã có metrics. Checkpoint acquisition/hỗ trợ
+chỉ gồm code/tests/metadata/tài liệu; chưa training/build/deploy, v1/services giữ nguyên.
+Chi tiết nguồn, checksum tự tính, counters, giới hạn raw-reference và tài nguyên:
+[PRETRIP V2 preparation report](plans/PRETRIP_V2_PREPARATION_REPORT.md).

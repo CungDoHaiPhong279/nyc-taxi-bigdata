@@ -149,6 +149,7 @@ def _write_json(path: Path, value: dict[str, Any], budget: ManagedFileBudget, *,
 def prepare_samples(
     source_paths: Mapping[str, Path | str], output_dir: Path | str, *,
     disk_budget_bytes: int,
+    budget_inputs: tuple[Path | str, ...] = (),
     seed: int = 42, sample_modulus: int = 1_000_000,
     sample_buckets: int = 10_000, caps: Mapping[str, int] | None = None,
     batch_size: int = 8192, calendar: Any = None,
@@ -193,6 +194,10 @@ def prepare_samples(
     if len({path.resolve() for path in inputs.values()}) != len(SOURCE_MONTHS):
         raise PreparationError("source files must be distinct")
     source_snapshots = {month: _source_snapshot(path) for month, path in inputs.items()}
+    extra_inputs = tuple(Path(path) for path in budget_inputs)
+    if any(path.is_symlink() or not path.is_file() for path in extra_inputs):
+        raise PreparationError("extra budget inputs must be existing regular read-only files")
+    extra_snapshots = {path: _source_snapshot(path) for path in extra_inputs}
     builder_path = Path(pretrip_features.__file__).resolve()
     contract_path = builder_path.parents[3] / "config" / "pretrip_v2_contract.json"
     destination = Path(output_dir).absolute()
@@ -202,7 +207,7 @@ def prepare_samples(
         raise PreparationError("output directory must not traverse a symlink")
     # Refuse before mkdir if sources already consume the limit or the dedicated
     # metadata/FAILED-checkpoint pool cannot be reserved. No implicit budget.
-    budget = ManagedFileBudget(inputs.values(), destination, disk_budget_bytes)
+    budget = ManagedFileBudget((*inputs.values(), *extra_inputs), destination, disk_budget_bytes)
     destination.mkdir(parents=True, exist_ok=False)
     counts: dict[str, Any] = {
         "input_rows": 0, "waterfall_kept": dict.fromkeys(COHORT_STAGES, 0),
@@ -222,6 +227,10 @@ def prepare_samples(
         "feature_builder_sha256": _file_sha256(builder_path),
         "timezone_identity": timezone_identity(),
         "inputs": {}, "source_snapshot_verified": False,
+        "extra_budget_inputs": [
+            {"name": path.name, "bytes": extra_snapshots[path][0], "sha256": _file_sha256(path)}
+            for path in dict.fromkeys(extra_inputs)
+        ],
         "input_checksum_method": "separate full local-file streaming SHA256 pass; no download",
         "read_columns": list(READ_COLUMNS), "predictor_scope": "zone-time-only",
         "sampling": {
@@ -251,6 +260,8 @@ def prepare_samples(
     feature_keys: tuple[str, ...] | None = None
     try:
         _write_json(checkpoint, report, budget, exclusive=True)
+        for extra_path, snapshot in extra_snapshots.items():
+            _assert_source_snapshot(extra_path, snapshot)
         for month, path in inputs.items():
             _assert_source_snapshot(path, source_snapshots[month])
             source_digest = _file_sha256(path)
@@ -327,6 +338,8 @@ def prepare_samples(
             _assert_source_snapshot(path, source_snapshots[month])
         for month, path in inputs.items():
             _assert_source_snapshot(path, source_snapshots[month])
+        for extra_path, snapshot in extra_snapshots.items():
+            _assert_source_snapshot(extra_path, snapshot)
         if any(counts["selected_rows"][split] == 0 for split in SPLITS):
             raise PreparationError("every temporal split must retain at least one sampled journey")
         # Feature data and labels/identity metadata are physically separate.
@@ -388,6 +401,8 @@ def prepare_samples(
         }
         for month, path in inputs.items():
             _assert_source_snapshot(path, source_snapshots[month])
+        for extra_path, snapshot in extra_snapshots.items():
+            _assert_source_snapshot(extra_path, snapshot)
         report["source_snapshot_verified"] = True
         report["status"] = "PREPARED_NOT_TRAINED"
         _write_json(destination / "preparation_report.json", report, budget, exclusive=True)

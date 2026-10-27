@@ -211,6 +211,39 @@ def test_main_only_emits_allowlisted_plan_error_codes(monkeypatch, capsys):
     assert report["code"] == "invalid_source_length"
 
 
+def test_execute_passes_readonly_acquisition_metadata_to_shared_task_budget(project):
+    local_sources(project)
+    metadata = project / ".sandbox/pretrip-v2/acquisition.json"
+    metadata.write_text('{"status":"COMPLETE"}', encoding="utf-8")
+    prepare = Mock(return_value={"status": "PREPARED_NOT_TRAINED"})
+    arguments = pilot.parser().parse_args([
+        "--execute", "--disk-budget-mib", "2048", "--budget-input", str(metadata),
+    ])
+    pilot.run(arguments, project_root=project, preparer=prepare)
+    assert prepare.call_args.kwargs["disk_budget_bytes"] == 2048 * 1024 * 1024
+    assert prepare.call_args.kwargs["budget_inputs"] == (metadata.resolve(),)
+
+
+def test_plan_with_acquisition_metadata_stays_readonly(project):
+    metadata = project / ".sandbox/pretrip-v2/acquisition.json"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text('{"status":"COMPLETE"}', encoding="utf-8")
+    before = metadata.read_bytes()
+    arguments = pilot.parser().parse_args(["--budget-input", str(metadata), "--disk-budget-mib", "2048"])
+    report = pilot.run(arguments, project_root=project, preparer=Mock(side_effect=AssertionError))
+    assert report["status"] == "PLAN_NOT_EXECUTED"
+    assert report["extra_budget_input_count"] == 1
+    assert metadata.read_bytes() == before
+    assert not (project / ".sandbox/pretrip-v2/pilot-2026-06-08").exists()
+
+
+def test_budget_metadata_outside_runtime_is_rejected(project):
+    metadata = project / "outside.json"
+    metadata.write_text("{}", encoding="utf-8")
+    with pytest.raises(pilot.PilotPlanError, match="invalid_extra_budget_input"):
+        pilot.run(pilot.parser().parse_args(["--budget-input", str(metadata)]), project_root=project)
+
+
 def test_preparation_failure_propagates_without_retry_or_deleting_checkpoint(project):
     local_sources(project)
     calls = []

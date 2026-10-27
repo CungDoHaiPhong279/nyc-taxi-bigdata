@@ -435,3 +435,24 @@ def test_parquet_exact_data_ceiling_passes_and_one_byte_less_fails_on_footer(tmp
     assert checkpoint["counts"]["selected_rows"] == dict(train=1, validation=1, test=1)
     assert checkpoint["disk_budget"]["peak_used_bytes"] <= limit - 1
     assert checkpoint["disk_budget"]["used_bytes"] == _task_used_bytes(paths, tmp_path / "one-byte-short")
+
+
+def test_acquisition_metadata_counts_in_same_budget_and_reused_sources_are_not_counted_twice(tmp_path):
+    paths = sources(tmp_path)
+    metadata = tmp_path / "acquisition.json"
+    metadata.write_bytes(b'{"status":"COMPLETE"}')
+    report = prepare(tmp_path, paths, budget_inputs=(metadata, metadata, paths["2026-06"]))
+    expected_source_bytes = sum(path.stat().st_size for path in paths.values()) + metadata.stat().st_size
+    assert report["disk_budget"]["sources_bytes"] == expected_source_bytes
+    assert {row["name"] for row in report["extra_budget_inputs"]} == {metadata.name, paths["2026-06"].name}
+    assert report["disk_budget"]["used_bytes"] == _task_used_bytes(paths, tmp_path / "attempt") + metadata.stat().st_size
+
+
+def test_acquisition_metadata_can_exhaust_preparation_budget_before_output_creation(tmp_path):
+    paths = sources(tmp_path)
+    metadata = tmp_path / "acquisition.json"
+    metadata.write_bytes(b'{"status":"COMPLETE"}')
+    limit = sum(path.stat().st_size for path in paths.values()) + METADATA_RESERVE_BYTES + metadata.stat().st_size - 1
+    with pytest.raises(ManagedBudgetExceeded, match="metadata_reserve_unavailable"):
+        prepare(tmp_path, paths, budget_inputs=(metadata,), disk_budget_bytes=limit)
+    assert not (tmp_path / "attempt").exists()
