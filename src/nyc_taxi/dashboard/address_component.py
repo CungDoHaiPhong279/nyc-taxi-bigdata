@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
+from threading import Event, RLock
 from time import monotonic
 from uuid import UUID, uuid4
 
-from nyc_taxi.dashboard.mapbox_client import MapboxError, validate_coordinates
+from nyc_taxi.dashboard.mapbox_client import MapboxError, SEARCH_TIMEOUT_SECONDS, validate_coordinates
 
 
 MAX_EVENT_IDS = 128
@@ -70,6 +71,70 @@ def _failure(state: dict) -> None:
     state.update(error=_PUBLIC_ERROR, status="error")
 
 
+def _state_lock(state: dict):
+    lock = state.get("_request_lock")
+    return lock if lock is not None else state.setdefault("_request_lock", RLock())
+
+
+def _client_call(state: dict, method, *args):
+    # The public consumer holds this field's lock. Never hold it over I/O:
+    # edits can supersede an old response, and the other field is independent.
+    lock = _state_lock(state)
+    lock.release()
+    try:
+        return method(*args)
+    finally:
+        lock.acquire()
+
+
+def _begin_request(state: dict) -> dict:
+    pending = {"snapshot": _snapshot(state), "done": Event(),
+               "deadline": monotonic() + SEARCH_TIMEOUT_SECONDS + 2}
+    state["_pending_request"] = pending
+    return pending
+
+
+def _finish_request(state: dict, pending: dict) -> None:
+    if state.get("_pending_request") is pending:
+        # A cancelled ScriptRunner must not leave a current operation busy.
+        if (_snapshot(state)[:2] == pending["snapshot"][:2]
+                and state["status"] in {"searching", "retrieving"}):
+            _failure(state)
+        state.pop("_pending_request", None)
+    pending["done"].set()
+
+
+def _request_is_current(state: dict, pending: dict) -> bool:
+    snapshot = _snapshot(state)
+    return snapshot == pending["snapshot"] or (
+        pending.get("finishing_retrieve") is True and state["status"] == "retrieving"
+        and snapshot[:2] == pending["snapshot"][:2]
+    )
+
+
+def wait_for_address_request(state: dict) -> None:
+    """A replacement ScriptRunner renders the original request's final state.
+
+    Streamlit fast reruns can stop the request owner's later st.rerun(). Wait
+    only on this field's existing bounded I/O; never call a client or replay an
+    event. Newer query/session snapshots are independent of the old response.
+    The private Event stays in session RAM and is never sent to the frontend.
+    """
+    with _state_lock(state):
+        pending = state.get("_pending_request")
+        if pending is None or not _request_is_current(state, pending):
+            return
+    if pending["done"].wait(max(0, pending["deadline"] - monotonic())):
+        return
+    with _state_lock(state):
+        if state.get("_pending_request") is pending and _request_is_current(state, pending):
+            # Invalidate a late result as well as ending the visible busy state.
+            _rotate(state)
+            _failure(state)
+            state.pop("_pending_request", None)
+            pending["done"].set()
+
+
 def _retrieve(state: dict, event: dict, client: object) -> None:
     if state["suggest_count"] >= MAX_SUGGESTS or monotonic() - state["started_at"] >= SESSION_SECONDS:
         _rotate(state)
@@ -86,35 +151,46 @@ def _retrieve(state: dict, event: dict, client: object) -> None:
         # A stale/forged candidate never causes a retrieve or changes a selection.
         return
     snapshot = _snapshot(state)
+    pending = _begin_request(state)
     state.update(suggestions=[], status="retrieving", selected=None, retrieved=None, error=None)
     candidate = None
     current = False
     try:
-        state["request_counts"]["retrieve"] += 1
-        candidate = client.retrieve(event["mapbox_id"], snapshot[2])
-        if not isinstance(candidate, dict) or not isinstance(candidate.get("label"), str) or not candidate["label"].strip():
-            raise AddressSelectionError("Địa chỉ trả về không hợp lệ.")
-        longitude, latitude = validate_coordinates(candidate.get("longitude"), candidate.get("latitude"))
-        # Coordinates are exclusively the server-side retrieve result, never a
-        # browser selection payload. Whitelist fields before saving them.
-        candidate = {"label": candidate["label"], "longitude": longitude, "latitude": latitude}
-        current = _current(state, snapshot)
-    except Exception:
-        current = _current(state, snapshot)
-        if current:
-            _failure(state)
-        candidate = None
+        try:
+            state["request_counts"]["retrieve"] += 1
+            candidate = _client_call(state, client.retrieve, event["mapbox_id"], snapshot[2])
+            if not isinstance(candidate, dict) or not isinstance(candidate.get("label"), str) or not candidate["label"].strip():
+                raise AddressSelectionError("Địa chỉ trả về không hợp lệ.")
+            longitude, latitude = validate_coordinates(candidate.get("longitude"), candidate.get("latitude"))
+            # Coordinates come exclusively from the server-side retrieve.
+            candidate = {"label": candidate["label"], "longitude": longitude, "latitude": latitude}
+            current = _current(state, snapshot)
+        except Exception:
+            current = _current(state, snapshot)
+            if current:
+                _failure(state)
+            candidate = None
+        finally:
+            if state["session_token"] == snapshot[2]:
+                # Session rotation is part of this same retrieve completion,
+                # not a newer query: replacement runners must still wait.
+                pending["finishing_retrieve"] = True
+                _rotate(state)
+        if (current and candidate is not None and state.get("_pending_request") is pending
+                and _request_is_current(state, pending)):
+            state.update(selected=deepcopy(candidate), status="selected", error=None,
+                         suggestions_query="", suggestions_version=0)
     finally:
-        # Retrieve ends a billing session even if the request fails. A newer
-        # edit may already have moved an interrupted retrieve to a new session.
-        if state["session_token"] == snapshot[2]:
-            _rotate(state)
-    if current and candidate is not None:
-        state.update(selected=deepcopy(candidate), status="selected", error=None,
-                     suggestions_query="", suggestions_version=0)
+        _finish_request(state, pending)
 
 
 def process_address_event(state: dict, event: object, client: object) -> None:
+    """Consume once; serialize state commits, never a field's client I/O."""
+    with _state_lock(state):
+        _process_address_event(state, event, client)
+
+
+def _process_address_event(state: dict, event: object, client: object) -> None:
     """Consume edit/suggest/retrieve once; reject stale versions and responses.
 
     A query version is monotonic for the component lifetime. The bounded event
@@ -168,11 +244,12 @@ def process_address_event(state: dict, event: object, client: object) -> None:
     if state["suggest_count"] >= MAX_SUGGESTS or monotonic() - state["started_at"] >= SESSION_SECONDS:
         _rotate(state)
     _clear_choice(state)
+    pending = _begin_request(state)
     state.update(status="searching", suggest_count=state["suggest_count"] + 1)
     snapshot = _snapshot(state)
     try:
         state["request_counts"]["suggest"] += 1
-        suggestions = client.suggest(event["query"], snapshot[2])
+        suggestions = _client_call(state, client.suggest, event["query"], snapshot[2])
         if (
             not isinstance(suggestions, list) or len(suggestions) > 5
             or any(not isinstance(row, dict) or not isinstance(row.get("mapbox_id"), str)
@@ -187,6 +264,8 @@ def process_address_event(state: dict, event: object, client: object) -> None:
         # Do not expose an upstream exception or poison a newer query's state.
         if _current(state, snapshot):
             _failure(state)
+    finally:
+        _finish_request(state, pending)
 
 
 def address_picker(state: dict, *, label: str, key: str, online: bool = False):

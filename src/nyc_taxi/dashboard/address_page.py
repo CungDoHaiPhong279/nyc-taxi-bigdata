@@ -10,6 +10,7 @@ import streamlit as st
 
 from nyc_taxi.dashboard.address_component import (
     AddressSelectionError, address_picker, new_address_state, process_address_event,
+    wait_for_address_request,
 )
 from nyc_taxi.dashboard.mapbox_client import MapboxClient, MapboxError
 from nyc_taxi.dashboard.geometry_assets import load_geometry_bundle
@@ -201,6 +202,7 @@ def render_page() -> None:
     st.subheader("1. Chọn điểm đón và điểm đến")
     st.write("Gõ địa chỉ hoặc tên địa điểm, rồi chọn một gợi ý.")
     support_by_slot = {}
+    pending_events = []
     pretrip_metadata = None
     if pretrip:
         try:
@@ -209,52 +211,44 @@ def render_page() -> None:
             st.error(str(error))
         except Exception:
             st.error("Chưa kiểm tra được candidate V2.2. Không có giá hoặc mô hình thay thế.")
+    # Reserve both stable parents before handling either role. Conditional
+    # feedback must not move/remount the other field's iframe and debounce.
+    picker_slots = {slot: st.container(key="address_" + slot + "_slot")
+                    for slot in ("pickup", "dropoff")}
     for slot, label in (("pickup", "Địa chỉ đón"), ("dropoff", "Địa chỉ đến")):
-        key = "address_" + slot
-        if key not in st.session_state:
-            st.session_state[key] = new_address_state()
-        state = st.session_state[key]
-        event = address_picker(
-            state, label=label, key=key + "_picker",
-            online=address_flow_enabled() and os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") == "1",
-        )
-        if isinstance(event, dict) and event.get("event_id") not in state["events"]:
-            st.session_state.pop("address_fare_error", None)
-            try:
-                # Typing/clearing invalidates the draft without constructing an
-                # HTTP client. Only explicit debounced events may use Search.
-                client = _DeferredSearchClient() if event.get("kind") in {"suggest", "retrieve"} else None
-                process_address_event(state, event, client)
-            except (AddressSelectionError, MapboxError):
-                # Remember rejected events too, so a rerun cannot retry HTTP.
-                if event.get("event_id") not in state["events"]:
-                    state["events"] = (state["events"] + [event.get("event_id")])[-128:]
-                state["selected"] = None
-                state["suggestions"] = []
-                state["status"] = "error"
-                state["error"] = "Chưa thể tìm địa chỉ. Kiểm tra kết nối/cấu hình; không tự gọi lại."
-            st.rerun()
-        if state["error"]:
-            st.error(state["error"])
+        with picker_slots[slot]:
+            key = "address_" + slot
+            if key not in st.session_state:
+                st.session_state[key] = new_address_state()
+            state = st.session_state[key]
+            wait_for_address_request(state)
+            event = address_picker(
+                state, label=label, key=key + "_picker",
+                online=address_flow_enabled() and os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") == "1",
+            )
+            if isinstance(event, dict) and event.get("event_id") not in state["events"]:
+                pending_events.append((state, event))
+            if state["error"]:
+                st.error(state["error"])
 
-        support = selection_support(state)
-        if pretrip and support is not None and support["zone"] is not None:
-            if pretrip_metadata is None:
-                support = {"zone": None, "error": "Chưa xác minh được mô hình V2.2.", "code": "model_unavailable"}
-            elif support["zone"]["location_id"] not in pretrip_metadata[slot + "_location_ids"]:
-                support = {"zone": None, "error": "Chưa hỗ trợ ước tính: vùng này chưa có trong dictionary huấn luyện cho vai trò "
-                           + ("đón." if slot == "pickup" else "đến."), "code": "unsupported_categories"}
-        support_by_slot[slot] = support
-        if support is not None:
-            if support["zone"] is not None:
-                zone = support["zone"]
-                st.success(f"{label}: hợp lệ trong Taxi Zones · {zone['borough']} · {zone['zone']}")
-            else:
-                st.warning(f"{label}: {support['error']}")
+            support = selection_support(state)
+            if pretrip and support is not None and support["zone"] is not None:
+                if pretrip_metadata is None:
+                    support = {"zone": None, "error": "Chưa xác minh được mô hình V2.2.", "code": "model_unavailable"}
+                elif support["zone"]["location_id"] not in pretrip_metadata[slot + "_location_ids"]:
+                    support = {"zone": None, "error": "Chưa hỗ trợ ước tính: vùng này chưa có trong dictionary huấn luyện cho vai trò "
+                               + ("đón." if slot == "pickup" else "đến."), "code": "unsupported_categories"}
+            support_by_slot[slot] = support
+            if support is not None:
+                if support["zone"] is not None:
+                    zone = support["zone"]
+                    st.success(f"{label}: hợp lệ trong Taxi Zones · {zone['borough']} · {zone['zone']}")
+                else:
+                    st.warning(f"{label}: {support['error']}")
 
     route_error = None
-    can_submit = all(result is not None and result["zone"] is not None
-                     for result in support_by_slot.values())
+    can_submit = not pending_events and all(result is not None and result["zone"] is not None
+                                            for result in support_by_slot.values())
     if can_submit:
         try:
             validate_standard_route(support_by_slot["pickup"]["zone"], support_by_slot["dropoff"]["zone"])
@@ -309,7 +303,7 @@ def render_page() -> None:
                                      "fold": fold}
     else:
         payload["pickup_datetime"] = datetime.combine(pickup_date, time(hour, minute)).isoformat()
-    if submitted:
+    if submitted and not pending_events:
         st.session_state.pop("address_fare_result", None)
         st.session_state.pop("address_fare_error", None)
         if payload["pickup"] is None or payload["dropoff"] is None:
@@ -386,3 +380,18 @@ def render_page() -> None:
                       "model_version": stored.get("model_version", "v1"),
                       **({"distance_miles": stored["request"]["distance_miles"]} if "distance_miles" in stored["request"] else {}),
                       "model_sha256": stored["prediction"]["model_sha256"]})
+
+    # Register ALL keyed widgets before consuming events and requesting one
+    # rerun; an early pickup rerun would otherwise clean up the dropoff widget.
+    if pending_events:
+        st.session_state.pop("address_fare_error", None)
+        for state, event in pending_events:
+            try:
+                client = _DeferredSearchClient() if event.get("kind") in {"suggest", "retrieve"} else None
+                process_address_event(state, event, client)
+            except (AddressSelectionError, MapboxError):
+                if event.get("event_id") not in state["events"]:
+                    state["events"] = (state["events"] + [event.get("event_id")])[-128:]
+                state.update(selected=None, suggestions=[], status="error",
+                             error="Chưa thể tìm địa chỉ. Kiểm tra kết nối/cấu hình; không tự gọi lại.")
+        st.rerun()

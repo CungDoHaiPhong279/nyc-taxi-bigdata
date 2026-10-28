@@ -573,3 +573,103 @@ def test_relevant_case_warnings_remain_visible_without_clipping(ui, case):
     assert app.session_state["address_fare_result"]["prediction"]["fare_amount_usd"] == predictor.predict.return_value["fare_amount_usd"]
     router.directions.assert_called_once()
     predictor.predict.assert_called_once()
+
+
+def _address_component_tree_positions(app):
+    """Record real component IDs and public tree positions, not private _path."""
+    import json
+    from collections.abc import Mapping
+
+    labels = {"Địa chỉ đón": "pickup", "Địa chỉ đến": "dropoff"}
+    found = {}
+
+    def visit(node, position):
+        if getattr(node, "type", None) == "component_instance":
+            proto = node.proto
+            role = labels.get(json.loads(proto.json_args).get("label"))
+            if role is not None:
+                assert role not in found
+                found[role] = {"id": proto.id, "position": position}
+        children = getattr(node, "children", None)
+        if isinstance(children, Mapping):
+            for index, child in children.items():
+                visit(child, position + (index,))
+
+    visit(app.main, ("main",))
+    assert set(found) == {"pickup", "dropoff"}
+    return found
+
+
+@pytest.mark.parametrize("role", ["pickup", "dropoff"])
+def test_real_address_picker_paths_and_ids_stay_stable_when_support_appears(ui, monkeypatch, role):
+    from nyc_taxi.dashboard import address_page
+    from nyc_taxi.dashboard.address_component import address_picker
+
+    app, router, predictor = ui
+    monkeypatch.setattr(address_page, "address_picker", address_picker)
+    state = app.session_state["address_" + role]
+    selected = deepcopy(state["selected"])
+    opposite = "dropoff" if role == "pickup" else "pickup"
+    opposite_selected = deepcopy(app.session_state["address_" + opposite]["selected"])
+    state.update(selected=None, status="idle", error=None)
+    app.run(timeout=10)
+    assert not app.exception
+    before = _address_component_tree_positions(app)
+    assert len(app.success) == 1
+    app.session_state["address_" + role].update(selected=selected, status="selected")
+    app.run(timeout=10)
+    assert not app.exception and len(app.success) == 2
+    assert _address_component_tree_positions(app) == before
+    assert app.session_state["address_" + opposite]["selected"] == opposite_selected
+    router.directions.assert_not_called()
+    predictor.predict.assert_not_called()
+
+
+@pytest.mark.parametrize("role", ["pickup", "dropoff"])
+def test_real_address_picker_paths_and_ids_stay_stable_when_error_appears(ui, monkeypatch, role):
+    from nyc_taxi.dashboard import address_page
+    from nyc_taxi.dashboard.address_component import address_picker
+
+    app, router, predictor = ui
+    monkeypatch.setattr(address_page, "address_picker", address_picker)
+    state = app.session_state["address_" + role]
+    opposite = "dropoff" if role == "pickup" else "pickup"
+    opposite_selected = deepcopy(app.session_state["address_" + opposite]["selected"])
+    state.update(selected=None, status="idle", error=None)
+    app.run(timeout=10)
+    assert not app.exception and not app.error
+    before = _address_component_tree_positions(app)
+    app.session_state["address_" + role].update(selected=None, status="error", error="Synthetic search failed safely")
+    app.run(timeout=10)
+    assert not app.exception and len(app.error) == 1
+    assert _address_component_tree_positions(app) == before
+    assert app.session_state["address_" + opposite]["selected"] == opposite_selected
+    router.directions.assert_not_called()
+    predictor.predict.assert_not_called()
+
+
+def test_pending_address_edit_supersedes_estimate_click_from_previous_valid_form(ui, monkeypatch):
+    from uuid import uuid4
+    from nyc_taxi.dashboard import address_page
+
+    app, router, predictor = ui
+    app.run(timeout=10)
+    assert not app.exception and not app.button[0].disabled
+    state = app.session_state["address_pickup"]
+    opposite_selected = deepcopy(app.session_state["address_dropoff"]["selected"])
+    action = {"event_id": str(uuid4()), "session_token": state["session_token"],
+              "kind": "edit", "query": "Synthetic new draft", "version": state["version"] + 1}
+    monkeypatch.setattr(address_page, "address_picker",
+                        lambda _state, *, label, key, online: action if key == "address_pickup_picker" else None)
+    client_factory = Mock(side_effect=AssertionError("An edit cannot create a transport"))
+    monkeypatch.setattr(address_page, "make_search_client", client_factory)
+    app.checkbox[0].set_value(True)
+    app.button[0].click().run(timeout=10)
+    assert not app.exception
+    assert app.session_state["address_pickup"]["selected"] is None
+    assert action["event_id"] in app.session_state["address_pickup"]["events"]
+    assert app.session_state["address_dropoff"]["selected"] == opposite_selected
+    assert not app.metric and "address_fare_result" not in app.session_state
+    client_factory.assert_not_called()
+    router.directions.assert_not_called()
+    predictor.predict.assert_not_called()

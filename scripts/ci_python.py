@@ -35,6 +35,7 @@ TEST_FILES = (
     "tests/test_route_map.py",
     "tests/test_route_fare.py",
     "tests/test_address_component.py",
+    "tests/test_address_request_completion.py",
     "tests/test_dashboard_address_ui.py",
     "tests/test_pretrip_v2_features.py",
     "tests/test_pretrip_v2_data.py",

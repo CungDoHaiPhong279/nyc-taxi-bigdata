@@ -2649,3 +2649,18 @@ never`; giữ images/config cũ để rollback. Sau deploy, startup chọn rõ:
 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
 -WithInference -ModelVersion v2.2`. Lệnh này không tự recreate containers drift,
 không chuẩn bị model hoặc train. Không chạy lại training/holdout hoặc CI cũ.
+
+#### Autocomplete V2.2 — sửa completion/render, kiểm chứng offline
+
+Đã tái hiện hai lỗi độc lập bằng dữ liệu tổng hợp: request cũ hoàn tất ở backend
+nhưng runner mới bỏ lỡ trạng thái cuối; và rerun/feedback làm iframe ô kia
+remount về version 0. Bản sửa chờ completion hiện hành mà không phát lại HTTP,
+không giữ khóa lúc I/O; khai báo ổn định cả hai widgets trước khi xử lý event
+và rerun. Version/session/replay guards được giữ nguyên.
+
+**66 tests PASS sau sửa cuối.** Chrome + Streamlit thật với Search/inference
+mock đã kiểm hai thứ tự chọn, retrieve chồng typing, gõ nhanh, rerun trong
+debounce và empty/error; frontend khớp version/status backend. Rerun không tăng
+transport mock; API/model thật **0**. Production vẫn **v1 sau rollback**; bản sửa
+**chưa build/deploy hoặc live PASS**. Xem
+[completion report](plans/AUTOCOMPLETE_V22_COMPLETION_REPORT.md).
