@@ -3,7 +3,7 @@
 # This file does not deploy itself. Default production and v1 rollback unchanged.
 services:
   fare-inference:
-    image: nyc-taxi-inference:pretrip-v22-candidate
+    image: nyc-taxi-inference:pretrip-v22-bc808337
     command:
       - python
       - -m
@@ -36,7 +36,7 @@ services:
         bind:
           create_host_path: false
   dashboard:
-    image: nyc-taxi-dashboard:pretrip-v22-candidate
+    image: nyc-taxi-dashboard:pretrip-v22-24fab1e
     environment:
       FARE_MODEL_VERSION: v2.2
       FARE_ADDRESS_ENABLED: "1"

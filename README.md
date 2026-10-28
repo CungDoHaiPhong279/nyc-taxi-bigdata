@@ -2664,3 +2664,57 @@ debounce và empty/error; frontend khớp version/status backend. Rerun không t
 transport mock; API/model thật **0**. Production vẫn **v1 sau rollback**; bản sửa
 **chưa build/deploy hoặc live PASS**. Xem
 [completion report](plans/AUTOCOMPLETE_V22_COMPLETION_REPORT.md).
+
+#### PRETRIP V2.2 — attempt 1 ngày 28/10/2026: lịch sử rollback về v1
+
+Đã build hai tags `pretrip-v22-bc808337` từ đúng commit và runtime production/
+worker local đã pin, không pull/install. Pip/imports/runtime hashes/assets đạt;
+V2 readiness full identity, fit_calls0/load_count1 và startup exit0 đạt, startup
+không recreate thêm containers. Không mount source vào dashboard đã triển khai.
+
+**Browser live chưa hoàn tất:** pickup qua Search/retrieve/geometry PU164;
+dropoff bị kẹt ở trạng thái tìm kiếm. Chưa submit, chưa Directions/map/predict,
+chưa kiểm payload Đi ngay, marker/attribution hoặc result-rerun live. Browser
+ghi3 suggest events/1 retrieve event; chỉ1 suggest+1 retrieve được xác nhận có
+kết quả, không coi events là outbound HTTP count tuyệt đối. Không tự retry API.
+
+Đã rollback riêng inference/dashboard về đúng image/config v1, cả hai healthy;
+PostgreSQL/MLflow và dữ liệu/model/.env/PBIX/PACKAGE P3 giữ nguyên. Images V2,
+rollback và bundle local-only được giữ; profile/contexts thử đã dọn. Hai pins V2
+trong override là bản đã chuẩn bị, **tại checkpoint attempt1 production chạy hai layers v1**.
+Không coi kiểm chứng vận hành là chứng nhận accuracy hiện tại hoặc thay đổi
+metrics August. Xem [deployment report](plans/PRETRIP_V22_DEPLOYMENT_REPORT.md)
+để có identities, giới hạn đo requests, tài nguyên và bằng chứng rollback.
+
+#### PRETRIP V2.2 — attempt 2 tại 24fab1e: đang chạy local
+
+Attempt mới 28/10/2026 đã triển khai bản sửa autocomplete lên dashboard image
+`nyc-taxi-dashboard:pretrip-v22-24fab1e`, tái sử dụng inference V2 đã pin từ
+`bc808337`. Không pull/install, không mount source thay image. **Chrome thật
+và startup PASS về vận hành**: hai ô chọn được PU164/DO43, Đi ngay gửi thời gian
+New York thực28/10/2026, tuyến6,075 km, metric$15.95, map/marker A-B và logo/
+attribution rõ. Rerun giữ inputs/UUID/giá/map, backend Search counters không tăng.
+
+Lượt live có2 suggest/2 retrieve thành công theo counters backend+terminal
+states; một outcome thành công dùng1 Directions/1 UI predict/1 map instance.
+Không coi browser events là HTTP telemetry độc lập. Frozen model và identity
+không đổi, fit_calls0/load_count1. Khoảng cách tuyến chỉ tham khảo; model dùng
+zone/thời gian, không có bảo đảm sai số cho từng chuyến hiện tại.
+
+Production local **hiện V2.2**; đoạn rollback ở trên là lịch sử attempt1.
+Mở lại máy đã có bundle/dữ liệu bằng cùng flags runtime (không sửa `.env`):
+
+```powershell
+$env:FARE_ADDRESS_ENABLED = '1'
+$env:FARE_ADDRESS_ALLOW_NETWORK = '1'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\nyc-taxi-bigdata\scripts\start.ps1 -WithInference -ModelVersion v2.2
+```
+
+Lệnh startup tương đương đã exit0 từ project root, reuse4 containers, không
+recreate thêm. Cả images V2 và bundle vẫn **local-only**, chưa publish; Git clone
+không tự mang chúng. **Chưa kiểm clone sạch trên máy khác.** Default code/package vẫn giữ
+v1 và đường rollback hai layers V1; không tự fallback. PostgreSQL/MLflow và
+dữ liệu/.env/model/PBIX/PACKAGE P3 được bảo toàn; Chrome/profile/context thử đã
+dọn. Xem [deployment report](plans/PRETRIP_V22_DEPLOYMENT_REPORT.md) cho full
+image IDs, bằng chứng/cách đếm, tài nguyên, giới hạn và rollback; không chạy
+lại training, holdout hoặc full SQL validation trong lần triển khai này.
