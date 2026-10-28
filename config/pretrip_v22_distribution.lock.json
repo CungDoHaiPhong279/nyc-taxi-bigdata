@@ -1,0 +1,35 @@
+{
+    "schema_version":  1,
+    "version":  "pretrip-v2.2-native",
+    "manifest_sha256":  "0c243ff50a8a2eec0c3876128d68b9f38198b6bef8e1a1ddb5334c6e04cfeef0",
+    "manifest_bytes":  11844,
+    "archive_sha256":  "ae809b654b931a717b5f4f9646257e6163ce4913b87be7e9d275e1612a3ce80b",
+    "archive_bytes":  92059,
+    "expanded_bytes":  465289,
+    "file_count":  47,
+    "identities":  {
+                       "model_tree_sha256":  "27de872754f96193f204eb3b7c5d18849ea5116ed8d36ad54a1780e1d6261db3",
+                       "artifact_manifest_sha256":  "8acbec5b1182372905a16556c75656b2c1b76c40a7f38e0a89267b3ba4be0a75",
+                       "dictionary_sha256":  "aad357b1b2b730b1bd6d296accfa0783a5c93420c30064dc39b80c7433263c2c",
+                       "sample_identity_sha256":  "7f9a0ad2ecf55b61acc91f087cdeb1827cbc420b829b1ce58073c28b17a68e86",
+                       "contract_version":  "pretrip-v2-zone-time-1",
+                       "contract_sha256":  "a1ddbe55f0128c20d8189d9f37b3b6172e90f20be71ae7a99300e21fb306add5",
+                       "calendar_version":  "us-opm-nationwide-observed-2025-2027-v1",
+                       "calendar_sha256":  "00dd5c8f442955879ade701c726106f12ef0e03669f818c5c06c6a5b067decac",
+                       "tzif_sha256":  "e9ed07d7bee0c76a9d442d091ef1f01668fee7c4f26014c0a868b19fe6c18a95",
+                       "zone_lookup_sha256":  "1a99e105092230f8620f301edcca7f80d3080642ff404d28ed957d3fa222c8ed"
+                   },
+    "optional_existing_files":  [
+                                    {
+                                        "path":  "serving_manifest.json",
+                                        "bytes":  2773,
+                                        "sha256":  "8295883616e479ec2f890bca3318ec222726f95d0696f0aa587042256638fd96"
+                                    }
+                                ],
+    "distribution":  {
+                         "location":  "distribution/models/pretrip-v2.2-native",
+                         "status":  "repository-distribution-prepared-not-published",
+                         "candidate_required":  false,
+                         "runtime_source_required":  false
+                     }
+}

@@ -20,3 +20,8 @@
 /config/pretrip_v2_calendar.json text eol=lf
 /config/pretrip_v2_contract.json text eol=lf
 /config/pretrip_v2_sources.json text eol=lf
+/distribution/models/pretrip-v2.2-native/*.zip binary
+/distribution/models/pretrip-v2.2-native/*.json text eol=lf
+/distribution/models/pretrip-v2.2-native/*.sha256 text eol=lf
+/distribution/models/pretrip-v2.2-native/*.md text eol=lf
+/config/pretrip_v22_distribution.lock.json text eol=lf

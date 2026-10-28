@@ -2718,3 +2718,40 @@ dữ liệu/.env/model/PBIX/PACKAGE P3 được bảo toàn; Chrome/profile/cont
 dọn. Xem [deployment report](plans/PRETRIP_V22_DEPLOYMENT_REPORT.md) cho full
 image IDs, bằng chứng/cách đếm, tài nguyên, giới hạn và rollback; không chạy
 lại training, holdout hoặc full SQL validation trong lần triển khai này.
+
+#### PACKAGE V2.2 — cài bundle model portable bằng PowerShell 5.1
+
+Bundle cố định nằm tại `distribution/models/pretrip-v2.2-native/`; ZIP92.059
+bytes chứa đúng47 files/465.289 bytes giải nén, pin bằng manifest và
+`config/pretrip_v22_distribution.lock.json`. Model tree vẫn
+`27de872754f96193f204eb3b7c5d18849ea5116ed8d36ad54a1780e1d6261db3`.
+Không cần candidate/runtime của tác giả, Python/Java trên host hoặc download.
+
+**Ngoại lệ đã chốt:** giữ nguyên16 parity fixtures feature-only từ8 train +8
+validation và `parity_id`; đây là fixtures lấy từ dữ liệu, **không synthetic**.
+Không kèm fare labels từng chuyến, journey keys, địa chỉ/tọa độ, raw/sample
+datasets hoặc August rows. Frozen manifest/dictionaries/calendar và các cờ
+lịch sử được giữ nguyên; xem provenance/content audit trong thư mục bundle.
+
+Chạy được từ ngoài project root; script tự tìm repo theo vị trí của nó:
+
+```powershell
+# PLAN: xác minh ZIP, manifest, identities và output; không ghi file.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\nyc-taxi-bigdata\scripts\install_pretrip_v22_bundle.ps1
+# Chỉ -Execute mới cài vào runtime V2 cố định trong repo này.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\nyc-taxi-bigdata\scripts\install_pretrip_v22_bundle.ps1 -Execute
+```
+
+Output đúng được reuse, không đổi hashes/mtime; output thiếu/khác hoặc có file
+không thuộc inventory thì dừng, không overwrite/xóa. Installer chặn traversal,
+links/reparse, case collisions và giới hạn archive/giải nén; xác minh full V2
+artifact guard trước khi publish stage. `serving_manifest.json` bookkeeping
+ngoài cùng không cần cho bản cài mới47 files; bản legacy chỉ được giữ nếu đúng
+hash đã pin, không được viết lại.
+
+**Đã kiểm bundle portable:** sáu ca lỗi cũ rồi31/31 tests mới PASS; bản sao
+Git base+PACKAGE V2 không có `.env`, data/models hoặc candidate đã PLAN/cài
+thật/full guard/rerun từ ngoài cwd, giữ nguyên toàn bộ hashes/mtime khi reuse.
+Đây chưa phải fresh-machine E2E: không build image hoặc full bootstrap, không
+load model hay gọi API, không thay production hoặc mở khóa full setup V2.
+Bundle phân phối được đưa vào checkpoint PACKAGE V2.2; clone có checkpoint này mang theo ZIP và manifest. Images và full bootstrap vẫn cần kiểm chứng riêng. Xem [PACKAGE V2.2 report](plans/PACKAGE_V22_BUNDLE_REPORT.md).

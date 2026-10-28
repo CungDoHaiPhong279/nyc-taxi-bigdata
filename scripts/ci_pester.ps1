@@ -22,6 +22,7 @@ try {
         'package_validation.Tests.ps1'
         'p62.Tests.ps1'
         'pretrip_model_selection.Tests.ps1'
+        'pretrip_v22_distribution.Tests.ps1'
         'start.Tests.ps1'
         'start_inference.Tests.ps1'
     )

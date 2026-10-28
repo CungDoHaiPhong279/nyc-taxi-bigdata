@@ -1,0 +1,353 @@
+{
+  "schema": "nyc-taxi-pretrip-v22-content-audit-v1",
+  "base_commit": "886de447462cc923fcf8d453ce0e6591c78dd817",
+  "archive": {
+    "file": "nyc-taxi-model-pretrip-v2.2-native.zip",
+    "bytes": 92059,
+    "sha256": "ae809b654b931a717b5f4f9646257e6163ce4913b87be7e9d275e1612a3ce80b"
+  },
+  "files": [
+    {
+      "path": "artifacts/artifact_manifest.json",
+      "bytes": 9575,
+      "sha256": "8acbec5b1182372905a16556c75656b2c1b76c40a7f38e0a89267b3ba4be0a75",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/baselines.json",
+      "bytes": 363299,
+      "sha256": "bc03cc2e418955b8236322fd6987cf2da39ea1a52c38afe06af386d71d095d8e",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/metrics.json",
+      "bytes": 2757,
+      "sha256": "61b1bf2b4c8abbf858a7b7c88dce8bc2f74ab45550cb83ed70483f4b45c3f4f1",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/parity_baseline_reference.json",
+      "bytes": 379,
+      "sha256": "a821d422f5f6818538b1b6d199440b470827e277f656663ad9021b00def84e07",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/parity_inputs.json",
+      "bytes": 4935,
+      "sha256": "0c33848a48ad320000cddce98d3bcd3c15393bf2a2dd0a48692025de28010b15",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/parity_reference.json",
+      "bytes": 1272,
+      "sha256": "2b45f29bbf9d77013e5eb1fecc192399010df252f7e4cee4aa18896efc7f78d0",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/pipeline/metadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/metadata/.part-00000-53b9bd8b-1623-40b3-ab64-61b89538e990-c000.txt.crc",
+      "bytes": 12,
+      "sha256": "2c991bc4f7f4fbfd6ff0067db268f07c9290fb9bc09f695e7662198267d93144",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/metadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/metadata/part-00000-53b9bd8b-1623-40b3-ab64-61b89538e990-c000.txt",
+      "bytes": 295,
+      "sha256": "e58f787ef8592528667e19e5e58f7368854573ac22c36d23056007d25007a901",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/pipeline/stages/0_StringIndexer_292d2192e75a/data/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/0_StringIndexer_292d2192e75a/data/.part-00000-48c5b456-2484-4d10-baed-0d3209bfbbe5-c000.snappy.parquet.crc",
+      "bytes": 20,
+      "sha256": "984b077ea098428e453dbda36edb9427478596b6e42642c45ed51b156314bec9",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/0_StringIndexer_292d2192e75a/data/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/0_StringIndexer_292d2192e75a/data/part-00000-48c5b456-2484-4d10-baed-0d3209bfbbe5-c000.snappy.parquet",
+      "bytes": 1184,
+      "sha256": "39788eefb08fb2be672d93c305accb8607f2b1cb8f5f31fcf98fbaea2a48cda8",
+      "kind": "fitted-model-serialization"
+    },
+    {
+      "path": "artifacts/pipeline/stages/0_StringIndexer_292d2192e75a/metadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/0_StringIndexer_292d2192e75a/metadata/.part-00000-24f582b1-898f-48f5-bee0-9e395a3531b3-c000.txt.crc",
+      "bytes": 12,
+      "sha256": "bb98e32f7dcc63ea18507dd8b044af9fe9e12c3fe1ab6d34134020067ff7ef1c",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/0_StringIndexer_292d2192e75a/metadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/0_StringIndexer_292d2192e75a/metadata/part-00000-24f582b1-898f-48f5-bee0-9e395a3531b3-c000.txt",
+      "bytes": 395,
+      "sha256": "0b60a893686f9b294b716a68a5a626bd5d898ffde4a6b3da9eac2999465462d7",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/pipeline/stages/1_StringIndexer_179e4859c835/data/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/1_StringIndexer_179e4859c835/data/.part-00000-c90e129c-5590-4c2c-b469-df3f17013455-c000.snappy.parquet.crc",
+      "bytes": 24,
+      "sha256": "3ce4e13fcace398e466e1c6c07ba48c99bbf5dd4438bfce810098d2a4d38d687",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/1_StringIndexer_179e4859c835/data/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/1_StringIndexer_179e4859c835/data/part-00000-c90e129c-5590-4c2c-b469-df3f17013455-c000.snappy.parquet",
+      "bytes": 1556,
+      "sha256": "95b12e4d8acec02b0b633f1013fea15046ac03aea56f444f421daef11e9a1ff9",
+      "kind": "fitted-model-serialization"
+    },
+    {
+      "path": "artifacts/pipeline/stages/1_StringIndexer_179e4859c835/metadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/1_StringIndexer_179e4859c835/metadata/.part-00000-c2a6bb44-b99b-4f7a-a26f-95f4dcbf50ee-c000.txt.crc",
+      "bytes": 12,
+      "sha256": "ce031cdc2e9028d71eebd3635c94d4de3c93cde4f63e294b0a98738e70989f7d",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/1_StringIndexer_179e4859c835/metadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/1_StringIndexer_179e4859c835/metadata/part-00000-c2a6bb44-b99b-4f7a-a26f-95f4dcbf50ee-c000.txt",
+      "bytes": 397,
+      "sha256": "c36e8d9e1ac1d4c7ded258bf7d7dd65b74f541930a5cbf334a11d115ff0c440c",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/pipeline/stages/2_VectorAssembler_b59e71856b76/metadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/2_VectorAssembler_b59e71856b76/metadata/.part-00000-06ab9e0e-82f2-48c8-b167-e6324244c174-c000.txt.crc",
+      "bytes": 12,
+      "sha256": "65f3a5cc4edc067a7aceec0878e15030c45e3c0367b02a8db8a12bcb75d01696",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/2_VectorAssembler_b59e71856b76/metadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/2_VectorAssembler_b59e71856b76/metadata/part-00000-06ab9e0e-82f2-48c8-b167-e6324244c174-c000.txt",
+      "bytes": 448,
+      "sha256": "a39931ed189cda15f8809f758f9e663547bc3e6ee49755b279aa3d734907aa98",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/data/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/data/.part-00000-091eae18-915e-4fa8-97c2-b4fe8d377f8f-c000.snappy.parquet.crc",
+      "bytes": 372,
+      "sha256": "45d6fe2abc4f65fd67e979c365c2878facb98919bfff11c0a83c3ab2c3fe47c1",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/data/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/data/part-00000-091eae18-915e-4fa8-97c2-b4fe8d377f8f-c000.snappy.parquet",
+      "bytes": 46292,
+      "sha256": "5010f0d7850fc5dbe666e1a863df9eee82a8628a7ec19d02619262e4fd8df43e",
+      "kind": "fitted-model-serialization"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/metadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/metadata/.part-00000-7b855363-39cf-4758-807d-a55c03cccaf3-c000.txt.crc",
+      "bytes": 16,
+      "sha256": "8a2f027e6e59bc3393819c7c9042642cc0e29887c0d7247745315b29031a58d7",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/metadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/metadata/part-00000-7b855363-39cf-4758-807d-a55c03cccaf3-c000.txt",
+      "bytes": 861,
+      "sha256": "bef445ce21bc2468d9e4530f0afcce42bb77c682e91fadca5049935456a48120",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/treesMetadata/._SUCCESS.crc",
+      "bytes": 8,
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/treesMetadata/.part-00000-55c01217-83b5-46fc-92af-2a3b86bc7c65-c000.snappy.parquet.crc",
+      "bytes": 40,
+      "sha256": "fe50084ed1b07aa2984127f5b3751f80dd94fd655f62ac1b87a7b4f1f38793ce",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/treesMetadata/_SUCCESS",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "spark-serialization-marker"
+    },
+    {
+      "path": "artifacts/pipeline/stages/3_GBTRegressor_15019e64b1cb/treesMetadata/part-00000-55c01217-83b5-46fc-92af-2a3b86bc7c65-c000.snappy.parquet",
+      "bytes": 3802,
+      "sha256": "876a40b527451debeb607fa35cb1f97a85000430539e900799177f6f4f9ec8f7",
+      "kind": "fitted-model-serialization"
+    },
+    {
+      "path": "artifacts/pretrip_v2_calendar.json",
+      "bytes": 3415,
+      "sha256": "00dd5c8f442955879ade701c726106f12ef0e03669f818c5c06c6a5b067decac",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/pretrip_v2_contract.json",
+      "bytes": 3888,
+      "sha256": "a1ddbe55f0128c20d8189d9f37b3b6172e90f20be71ae7a99300e21fb306add5",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/sample_lineage.json",
+      "bytes": 2777,
+      "sha256": "3ab1c24996401b4333c7b2942769bd6c1a239e2705e3997efc8da892507edccf",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "artifacts/training_config.json",
+      "bytes": 4839,
+      "sha256": "b8ed00ab0a6e19d92fd986c86b14f97f1651cbe2a87ceabaf02bee3499e63e90",
+      "kind": "frozen-model-identity-or-reference-metadata"
+    },
+    {
+      "path": "zones.csv",
+      "bytes": 12331,
+      "sha256": "1a99e105092230f8620f301edcca7f80d3080642ff404d28ed957d3fa222c8ed",
+      "kind": "public-zone-lookup"
+    }
+  ],
+  "model_loaded": false,
+  "raw_or_sample_datasets_included": false,
+  "august_rows_included": false,
+  "per_trip_fare_labels_included": false,
+  "journey_keys_included": false,
+  "addresses_included": false,
+  "coordinates_included": false,
+  "credential_pattern_matches": 0,
+  "absolute_author_profile_path_matches": 0,
+  "parity_fixture_exception": {
+    "explicitly_authorized_on_resume": true,
+    "synthetic": false,
+    "records": 16,
+    "train": 8,
+    "validation": 8,
+    "columns": [
+      "pickup_hour_sin",
+      "pickup_hour_cos",
+      "pickup_dow_sin",
+      "pickup_dow_cos",
+      "is_weekend",
+      "is_holiday",
+      "pickup_zone",
+      "dropoff_zone",
+      "parity_id"
+    ],
+    "sha256": "0c33848a48ad320000cddce98d3bcd3c15393bf2a2dd0a48692025de28010b15",
+    "unchanged_source_bytes": true
+  },
+  "parquet_footer_metadata": [
+    {
+      "type": "pickup_dictionary",
+      "rows": 1
+    },
+    {
+      "type": "dropoff_dictionary",
+      "rows": 1
+    },
+    {
+      "type": "gbt_nodes",
+      "rows": 616
+    },
+    {
+      "type": "gbt_trees_metadata",
+      "rows": 20
+    }
+  ],
+  "baseline_metadata": {
+    "type": "fitted aggregate medians",
+    "pair_groups": 1402,
+    "time_groups": 1601,
+    "minimum_group_count": 5
+  },
+  "omitted_outer_serving_manifest": {
+    "bytes": 2773,
+    "required_by_installer_startup_inference_guards": false,
+    "historical_source_unchanged": true
+  },
+  "historical_frozen_flags_unchanged": true,
+  "licenses": "Existing project/v1 lookup notices retained; no new project/model license invented; no external pretrained weights or runtime software bundled."
+}
