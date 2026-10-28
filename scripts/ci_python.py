@@ -56,6 +56,9 @@ TEST_FILES = (
     "tests/test_pretrip_bundle.py",
     "tests/test_route_pretrip.py",
     "tests/test_dashboard_pretrip.py",
+    "tests/test_dashboard_pretrip_mode.py",
+    "tests/test_dashboard_pretrip_mode_static.py",
+    "tests/test_pretrip_app_compose.py",
 )
 EXCLUDED_TEST_FILES = {
     "tests/test_bronze.py": "Spark/JVM tests remain outside the lightweight CI profile",

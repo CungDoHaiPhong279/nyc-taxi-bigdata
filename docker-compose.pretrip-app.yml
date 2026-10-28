@@ -1,0 +1,85 @@
+# Standalone pretrip app only. Never layer over the production Compose files.
+name: ${PRETRIP_APP_PROJECT:-nyc-taxi-pretrip-v22}
+x-ownership: &ownership
+  com.nyc-taxi.pretrip-app.owner: ${PRETRIP_APP_OWNER:?Use scripts/setup_pretrip_v22.ps1}
+  com.nyc-taxi.pretrip-app.schema: standalone-v1
+services:
+  fare-inference:
+    image: ${PRETRIP_APP_INFERENCE_IMAGE:?Entrypoint selects verified versioned image}
+    pull_policy: never
+    labels: *ownership
+    restart: "no"
+    init: true
+    cpus: 2.0
+    mem_limit: 3g
+    memswap_limit: 3g
+    pids_limit: 512
+    read_only: true
+    tmpfs:
+      - /tmp:rw,exec,nosuid,nodev,size=536870912,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:ActiveProcessorCount=2 -XX:ParallelGCThreads=2 -XX:ConcGCThreads=1"
+      PYSPARK_SUBMIT_ARGS: "--driver-memory 1536m --conf spark.ui.enabled=false pyspark-shell"
+      SPARK_LOCAL_IP: "127.0.0.1"
+      SPARK_LOCAL_DIRS: /tmp/pretrip-app-spark
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+    command: [python, -m, nyc_taxi.ml.inference_server, --model-version, v2.2, --model-dir, /model-v22/artifacts, --contract-dir, /model-v22/artifacts, --zones, /model-v22/zones.csv, --host, 0.0.0.0, --port, "8000"]
+    volumes:
+      - type: bind
+        source: ${PRETRIP_APP_MODEL_ROOT:?Entrypoint verifies repository bundle}
+        target: /model-v22
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 90s
+      retries: 3
+    stop_grace_period: 30s
+    networks: [app]
+  dashboard:
+    image: ${PRETRIP_APP_DASHBOARD_IMAGE:?Entrypoint selects verified versioned image}
+    pull_policy: never
+    labels: *ownership
+    restart: "no"
+    init: true
+    cpus: 1.0
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=67108864,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "127.0.0.1:${PRETRIP_APP_PORT:-18522}:8501"
+    environment:
+      NYC_TAXI_DASHBOARD_MODE: pretrip
+      FARE_MODEL_VERSION: v2.2
+      FARE_INFERENCE_URL: http://fare-inference:8000
+      FARE_ADDRESS_ENABLED: "1"
+      FARE_ADDRESS_ALLOW_NETWORK: ${FARE_ADDRESS_ALLOW_NETWORK:-0}
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+      FARE_ADDRESS_GEOMETRY_PATH: /app/assets/taxi_zones/taxi_zones.geojson
+      FARE_ADDRESS_GEOMETRY_MANIFEST: /app/assets/taxi_zones/manifest.json
+    depends_on:
+      fare-inference:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 3
+    networks: [app]
+networks:
+  app:
+    labels: *ownership

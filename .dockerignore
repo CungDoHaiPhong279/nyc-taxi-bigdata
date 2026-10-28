@@ -14,3 +14,6 @@ models/
 mlruns/
 reports/
 *.pbix
+
+# Host editable-install metadata is regenerated inside the worker image.
+**/*.egg-info/

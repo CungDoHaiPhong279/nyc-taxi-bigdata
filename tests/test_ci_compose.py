@@ -31,7 +31,7 @@ def success(command, **kwargs):
     return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
 
 
-def test_validates_twenty_combinations_without_reading_secrets(project, monkeypatch, capsys):
+def test_validates_twenty_four_combinations_without_reading_secrets(project, monkeypatch, capsys):
     calls = []
     real_read_text = Path.read_text
 
@@ -59,6 +59,10 @@ def test_validates_twenty_combinations_without_reading_secrets(project, monkeypa
         assert "DOCKER_HOST" not in kwargs["env"]
         assert "COMPOSE_FILE" not in kwargs["env"]
         assert "UNRELATED_PERSONAL_TOKEN" not in kwargs["env"]
+        if "docker-compose.pretrip-app.yml" in " ".join(command):
+            assert kwargs["env"]["PRETRIP_APP_PORT"] in {"18522", "28522"}
+            assert kwargs["env"]["PRETRIP_APP_PROJECT"] in {"nyc-taxi-pretrip-v22", "nyc-taxi-pretrip-v22-test"}
+            assert "MAPBOX_ACCESS_TOKEN" not in kwargs["env"]
         calls.append((command, directory))
         return success(command, **kwargs)
 
@@ -75,7 +79,7 @@ def test_validates_twenty_combinations_without_reading_secrets(project, monkeypa
     monkeypatch.setattr(ci.subprocess, "run", run)
 
     assert ci.main(["--project-root", str(project)]) == 0
-    assert len(calls) == 21  # version + twenty quiet validations
+    assert len(calls) == 25  # version + twenty-four quiet validations
     expected_variants = (
         ("docker-compose.yml",),
         ("docker-compose.yml", "docker-compose.bootstrap-test.yml"),
@@ -87,6 +91,8 @@ def test_validates_twenty_combinations_without_reading_secrets(project, monkeypa
         ("docker-compose.yml", "docker-compose.inference.yml", "docker-compose.package.yml"),
         ("docker-compose.yml", "docker-compose.inference.yml", "docker-compose.package.yml", "docker-compose.package-test.yml"),
         ("docker-compose.yml", "docker-compose.inference.yml", "docker-compose.pretrip-v22.yml"),
+        ("docker-compose.pretrip-app.yml",),
+        ("docker-compose.pretrip-app.yml",),
     )
     for index, (command, directory) in enumerate(calls[1:]):
         assert command[:2] == ["docker", "compose"]
@@ -107,7 +113,7 @@ def test_validates_twenty_combinations_without_reading_secrets(project, monkeypa
             assert command[command.index("--profile") + 1] == "*"
     assert all(not directory.exists() for _, directory in calls)
     output = capsys.readouterr()
-    assert "20 checks" in output.out
+    assert "24 checks" in output.out
     assert "sentinel" not in output.out + output.err
 
 

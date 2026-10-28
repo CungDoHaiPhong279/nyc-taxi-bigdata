@@ -2755,3 +2755,53 @@ thật/full guard/rerun từ ngoài cwd, giữ nguyên toàn bộ hashes/mtime k
 Đây chưa phải fresh-machine E2E: không build image hoặc full bootstrap, không
 load model hay gọi API, không thay production hoặc mở khóa full setup V2.
 Bundle phân phối được đưa vào checkpoint PACKAGE V2.2; clone có checkpoint này mang theo ZIP và manifest. Images và full bootstrap vẫn cần kiểm chứng riêng. Xem [PACKAGE V2.2 report](plans/PACKAGE_V22_BUNDLE_REPORT.md).
+
+#### Ứng dụng pretrip V2.2 độc lập — entrypoint một lệnh
+
+PowerShell 5.1 + Docker Desktop/Compose đang sẵn sàng là điều kiện host;
+không cần Python/Java trên host, dữ liệu lịch sử hoặc candidate của tác giả.
+
+```powershell
+# PLAN mặc định: chỉ kiểm tra và trình bày việc còn phải làm.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_pretrip_v22.ps1
+# Giao diện thực thi đã có; CHƯA chạy Execute thật trong checkpoint này.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_pretrip_v22.ps1 -Execute
+# PLAN môi trường test độc lập.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_pretrip_v22.ps1 -Environment test
+```
+
+Script tự tìm root từ vị trí của nó, dùng riêng
+`docker-compose.pretrip-app.yml`: app project `nyc-taxi-pretrip-v22`, dashboard
+`http://127.0.0.1:18522`; test project `nyc-taxi-pretrip-v22-test`, port28522.
+Chỉ hai services `fare-inference` và `dashboard`, network thuộc project và
+checkout đã pin ownership, không có volume bền vững/DB credentials/inference
+host port. Bundle repository được installer hiện có kiểm/cài vào runtime cố
+định rồi mount chỉ đọc; scratch là tmpfs riêng. Không adopt production.
+
+Execute dự kiến: preflight/collision → installer bundle → kiểm/reuse hoặc
+build images thiếu → inference healthy + full frozen identity, `fit_calls=0`,
+`model_load_count=1` → dashboard pretrip. Model native V2.2 không đổi. Tag ảnh
+được tính từ runtime/dependency/Dockerfile identities; reuse còn phải kiểm
+bytes/hash, pip check/imports/assets offline. Worker chỉ làm nền build,
+không chạy worker job. Container đúng đang healthy được reuse; container
+đúng đã stopped thì start; chỉ tạo service thiếu bằng `--no-deps
+--no-recreate --no-build --pull never`. Drift/foreign resource thì dừng để
+người dùng cập nhật riêng, không tự ghi đè/recreate/xóa.
+
+Dashboard pretrip mở thẳng ước tính cước V2.2, không analytics SQL. Chế độ full
+cũ vẫn là mặc định ngoài Compose này. Người chạy cung cấp
+`MAPBOX_ACCESS_TOKEN` của mình qua environment tiến trình và opt-in
+`FARE_ADDRESS_ALLOW_NETWORK=1`; script không tự đọc/sửa `.env` của project.
+Chưa có network/token thì hiển thị hướng dẫn, không gọi API hoặc fallback v1.
+Giữ nguyên Đi ngay/Hẹn giờ, calendar/DST và các guards vùng/category hiện có.
+
+ZIP92KB chỉ là **model payload**, không phải toàn bộ Docker. Máy mới vẫn cần
+mạng để Dockerfiles chuẩn lấy base Python/Java và dependencies; không cần tag
+P6/image tác giả. Cold-build disk/peak RAM/thời gian **chưa đo**; requirements
+hiện có chỉ pin một phần dependency, chưa phải lock toàn bộ resolution.
+Không suy ra mức dùng image từ kích thước ZIP. Checkpoint này chưa build/pull
+images hoặc chạy Execute/startup ứng dụng thật; chỉ chạy container AppTest
+cô lập bằng image sẵn có. Full bootstrap/`setup_system.ps1` V2 không được mở
+khóa. Xem [entrypoint report](plans/PACKAGE_V22_ENTRYPOINT_REPORT.md) cho
+9/9 AppTest offline PASS, tests mock/static và clean-copy PLAN; chưa phải
+browser live, image build mới hoặc full fresh-machine E2E.

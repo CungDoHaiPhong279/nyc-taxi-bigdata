@@ -27,6 +27,7 @@ COMPOSE_FILES = (
     "docker-compose.package.yml",
     "docker-compose.package-test.yml",
     "docker-compose.pretrip-v22.yml",
+    "docker-compose.pretrip-app.yml",
 )
 COMPOSE_VARIANTS = (
     ("base", COMPOSE_FILES[:1]),
@@ -40,6 +41,8 @@ COMPOSE_VARIANTS = (
     ("package", (COMPOSE_FILES[0], COMPOSE_FILES[6], COMPOSE_FILES[7])),
     ("package-test", (COMPOSE_FILES[0], COMPOSE_FILES[6], COMPOSE_FILES[7], COMPOSE_FILES[8])),
     ("pretrip-v22", (COMPOSE_FILES[0], COMPOSE_FILES[6], COMPOSE_FILES[9])),
+    ("pretrip-app", (COMPOSE_FILES[10],)),
+    ("pretrip-app-test", (COMPOSE_FILES[10],)),
 )
 MIN_COMPOSE_VERSION = (2, 24, 4)
 COMMAND_TIMEOUT_SECONDS = 60
@@ -53,6 +56,10 @@ CI_VALUES = {
     "MLFLOW_TRACKING_URI": "http://mlflow:5000",
     "MLP2_TRACKING_URI": "http://172.18.0.99:5000",
     "PACKAGE_POSTGRES_PASSWORD": "ci_package_dummy_only",
+    "PRETRIP_APP_OWNER": "ci-owner-placeholder",
+    "PRETRIP_APP_MODEL_ROOT": "/ci/pretrip-model-readonly",
+    "PRETRIP_APP_INFERENCE_IMAGE": "nyc-taxi-inference:ci-pretrip-only",
+    "PRETRIP_APP_DASHBOARD_IMAGE": "nyc-taxi-dashboard:ci-pretrip-only",
 }
 
 # Keep only process/CLI-discovery essentials, not arbitrary host credentials,
@@ -109,7 +116,7 @@ def _run(
 
 
 def validate_compose(project_root: Path, compose_command: list[str]) -> int:
-    """Check ten override combinations with default and all profiles (20 checks)."""
+    """Check twelve combinations with default and all profiles (24 checks)."""
     with tempfile.TemporaryDirectory(prefix="nyc-taxi-ci-compose-") as temporary:
         project_directory = Path(temporary)
         for filename in COMPOSE_FILES:
@@ -140,6 +147,11 @@ def validate_compose(project_root: Path, compose_command: list[str]) -> int:
 
         completed = 0
         for label, filenames in COMPOSE_VARIANTS:
+            variant_environment = environment.copy()
+            if label in {"pretrip-app", "pretrip-app-test"}:
+                test_mode = label.endswith("-test")
+                variant_environment["PRETRIP_APP_PROJECT"] = "nyc-taxi-pretrip-v22-test" if test_mode else "nyc-taxi-pretrip-v22"
+                variant_environment["PRETRIP_APP_PORT"] = "28522" if test_mode else "18522"
             command = [
                 *compose_command,
                 "--env-file", str(dummy_env),
@@ -153,7 +165,7 @@ def validate_compose(project_root: Path, compose_command: list[str]) -> int:
                 _run(
                     [*command, *profile_arguments, "config", "--quiet"],
                     project_directory,
-                    environment,
+                    variant_environment,
                 )
                 completed += 1
                 profile_label = "all profiles" if all_profiles else "default profiles"

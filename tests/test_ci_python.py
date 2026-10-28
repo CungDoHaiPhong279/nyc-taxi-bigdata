@@ -89,6 +89,9 @@ def test_arguments_select_exact_profile_without_spark_or_database_tests(project,
     for filename in ("tests/test_pretrip_inference.py", "tests/test_pretrip_bundle.py",
                      "tests/test_route_pretrip.py", "tests/test_dashboard_pretrip.py"):
         assert filename in ci.TEST_FILES
+    assert "tests/test_dashboard_pretrip_mode.py" in ci.TEST_FILES
+    assert "tests/test_dashboard_pretrip_mode_static.py" in ci.TEST_FILES
+    assert "tests/test_pretrip_app_compose.py" in ci.TEST_FILES
     assert str(project / "tests/test_ml_holdout_contract.py") in arguments
     for filename in ("tests/test_ml_pilot_data.py", "tests/test_ml_pilot_model.py"):
         assert "Spark/JVM ML fixture" in ci.EXCLUDED_TEST_FILES[filename]

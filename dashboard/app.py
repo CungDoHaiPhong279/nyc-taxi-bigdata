@@ -1,11 +1,11 @@
-"""Historical PostgreSQL analytics and an explicit, separate fare-estimate page."""
+"""Historical analytics or an explicitly selected database-free pretrip app."""
 
 from __future__ import annotations
 
+import os
+
 import pandas as pd
 import streamlit as st
-
-from nyc_taxi.dashboard import queries
 
 CACHE_TTL_SECONDS = 300
 
@@ -13,10 +13,44 @@ CACHE_TTL_SECONDS = 300
 @st.cache_data(ttl=CACHE_TTL_SECONDS, max_entries=32, show_spinner=False)
 def load_dashboard(months: tuple[str, ...], boroughs: tuple[str, ...]) -> dict:
     """Both filters are hashed; failures are not cached and credentials are not returned."""
+    from nyc_taxi.dashboard import queries
+
     return queries.fetch_dashboard(queries.DashboardFilters.from_selection(months, boroughs))
 
 
 def main() -> None:
+    mode = os.environ.get("NYC_TAXI_DASHBOARD_MODE", "full")
+    if mode == "pretrip":
+        st.set_page_config(page_title="NYC Taxi Pretrip", page_icon="🚕", layout="wide")
+        from nyc_taxi.dashboard.prediction import PredictionError, selected_model_version
+
+        try:
+            if selected_model_version() != "v2.2":
+                raise PredictionError("Chế độ pretrip yêu cầu FARE_MODEL_VERSION=v2.2; không tự chuyển sang v1.")
+        except PredictionError as error:
+            st.error(str(error))
+            return
+        if (os.environ.get("FARE_ADDRESS_ENABLED", "0") != "1"
+                or os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") != "1"
+                or not os.environ.get("MAPBOX_ACCESS_TOKEN", "").strip()):
+            st.title("Ước tính cước trước chuyến đi")
+            st.info(
+                "Để tìm địa chỉ, đặt MAPBOX_ACCESS_TOKEN của bạn trong môi trường runtime và bật "
+                "FARE_ADDRESS_ENABLED=1, FARE_ADDRESS_ALLOW_NETWORK=1. "
+                "Chưa có cấu hình này thì ứng dụng không gọi API hoặc dùng mô hình thay thế."
+            )
+            return
+        from nyc_taxi.dashboard.fare_page import render_page
+
+        render_page()
+        return
+    if mode != "full":
+        st.set_page_config(page_title="NYC Taxi", page_icon="🚕", layout="wide")
+        st.error("NYC_TAXI_DASHBOARD_MODE chỉ chấp nhận full hoặc pretrip; chưa mở kết nối dữ liệu.")
+        return
+
+    from nyc_taxi.dashboard import queries
+
     st.set_page_config(page_title="NYC Taxi Analytics", page_icon="🚕", layout="wide")
     page = st.sidebar.radio("Trang", ("Phân tích lịch sử", "Ước tính cước"), key="dashboard_page")
     if page == "Ước tính cước":
