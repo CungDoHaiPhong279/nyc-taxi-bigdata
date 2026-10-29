@@ -19,23 +19,32 @@ Chủ dự án đã quyết định **tự làm sau** 2 hạng mục dưới đ�
 
 ## Phần 4 — Model Pre-trip V2.3 (huấn luyện trên dữ liệu lớn, phủ khoảng 260 zone)
 
-**Vấn đề gốc:** V2.2 chỉ huấn luyện trên mẫu khoảng 1% cohort, nên chỉ phục vụ 117 zone pickup (khoảng 44,5%).
-Các zone khác bị từ chối (HTTP 422), hoặc phải đi qua bucket `__unknown` nếu bật cờ tạm.
+### ✅ Bước 4.1 — Thiết kế Contract & Feature V2.3 (ĐÃ HOÀN TẤT — 2026-10-29)
+- **Contract V2.3 (`config/pretrip_v23_contract.json`)**:
+  - `contract_version`: `"pretrip-v23-zone-centroid-time-1"`
+  - `max_bins`: `264` (đủ cho toàn bộ 263 zone TLC `1..263` cộng thêm 1 bucket `__unknown` của `StringIndexer(handleInvalid="keep")`).
+  - `cohort_policy`: `sampling_fraction = 0.25` (lấy mẫu 25% dữ liệu lớn, gấp 25 lần V2.2 để bao phủ ~99% zone có chuyến xe).
+  - `model_status`: hỗ trợ tiến hóa qua các trạng thái `("not_trained_or_deployed", "trained_candidate", "evaluated_holdout", "deployed_frozen")`.
+  - Ghim SHA256 của cả `config/pretrip_v2_calendar.json` và `assets/taxi_zones/taxi_zones.geojson` (`6513c39044b8dee18c00af0dd6f97919d681b1e85efbd2d6980786c4cfbb8c9c`).
+- **Module Feature V2.3 (`src/nyc_taxi/ml/pretrip_v23_features.py`)**:
+  - 10 features (8 numeric + 2 categorical):
+    - `pickup_hour_sin`, `pickup_hour_cos`: tính theo giờ liên tục độ phân giải phút `(hour + minute / 60.0) / 24.0`.
+    - `pickup_dow_sin`, `pickup_dow_cos`, `is_weekend`, `is_holiday`.
+    - `zone_centroid_distance_km`: khoảng cách Haversine (`R = 6371.0088 km`) giữa trọng tâm diện tích (area-weighted planar polygon centroid) của `pickup_location_id` và `dropoff_location_id` trích xuất trực tiếp từ `taxi_zones.geojson` (có `@lru_cache`).
+    - `is_same_zone`: `1.0` nếu đón và trả trong cùng 1 zone (`zone_centroid_distance_km == 0.0`), ngược lại `0.0`.
+    - `pickup_zone`, `dropoff_zone`: chuỗi `"1".."263"`.
+- **Kiểm thử (`tests/test_pretrip_v23_features.py`)**:
+  - Đã thêm 19 bài test kiểm chứng tính bất biến của V2.2, độ phủ 263 tâm vùng, tính đối xứng Haversine, độ phân giải theo phút, và parity tuyệt đối giữa `build_training_features` và `build_serving_features`.
 
-### Phạm vi đề xuất
-- Native categorical GBT (`maxBins` ≥ số category), huấn luyện trên **20%–100% cohort** thay vì 1%.
-- Feature mới (cần **contract V2.3 mới**; **không** sửa các file V2.2 đã ghim SHA256):
-  - `zone_centroid_distance_km`, tính từ `assets/taxi_zones/taxi_zones.geojson`.
-  - Giờ liên tục `hour + minute/60`.
-- So sánh `lossType="absolute"` với `squared` trên validation. Holdout chỉ chạy **một lần** sau khi đã chốt model.
+### ⏳ Các bước tiếp theo của Phần 4 (Bước 4.2 – 4.4)
+- **Bước 4.2 — Chuẩn bị & Lấy mẫu Dữ liệu lớn (Data Prep)**: Quét Parquet theo `cohort_policy` (25% sampling) và materialize vào `.sandbox/pretrip-v2/data-v23-01/`.
+- **Bước 4.3 — Huấn luyện Native GBT (`maxBins=264`, `squared` vs `absolute`) & Đánh giá Holdout**: Lưu tại `.sandbox/pretrip-v2/training-YYYYMMDD-v23-01/`.
+- **Bước 4.4 — Đóng gói Serving Bundle V2.3 & Tích hợp UI (`FARE_MODEL_VERSION=v2.3`)**.
 
 ### Ràng buộc bắt buộc
 - Không sửa: `src/nyc_taxi/ml/pretrip_features.py`, `config/pretrip_v2_contract.json`,
   `config/pretrip_v2_calendar.json`, `assets/taxi_zones/taxi_zones.geojson`, `requirements.txt`,
   `.sandbox/pretrip-v2/training-20261027-native-01/`, `.sandbox/pretrip-v2/serving-bundle-v22-01/`.
-- Output mới đặt ở thư mục attempt mới trong `.sandbox/pretrip-v2/` (ví dụ `training-YYYYMMDD-v23-01/`).
-- Cần ước lượng RAM/disk/thời gian trước khi chạy (máy local: Spark `local[2]`, container 3 GiB).
-- Nên lập kế hoạch chi tiết riêng trước khi thực thi.
 
 ---
 

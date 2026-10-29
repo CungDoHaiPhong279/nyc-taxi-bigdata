@@ -1,0 +1,102 @@
+{
+  "contract_version": "pretrip-v23-zone-centroid-time-1",
+  "model_status": "not_trained_or_deployed",
+  "purpose": "Big-data pretrip standard-metered NYC yellow-taxi base fare_amount USD with pinned Taxi Zone centroid Haversine distance and minute-resolution cyclic local time; not a final bill or quote guarantee.",
+  "timezone": "America/New_York",
+  "numeric_features": [
+    "pickup_hour_sin",
+    "pickup_hour_cos",
+    "pickup_dow_sin",
+    "pickup_dow_cos",
+    "is_weekend",
+    "is_holiday",
+    "zone_centroid_distance_km",
+    "is_same_zone"
+  ],
+  "categorical_features": [
+    "pickup_zone",
+    "dropoff_zone"
+  ],
+  "max_bins": 264,
+  "feature_derivation": {
+    "hour": "Minute-resolution NYC local time (hour + minute / 60.0) in [0, 24); sin/cos with period 24.",
+    "day_of_week": "Monday=0..Sunday=6 in NYC local time; sin/cos with period 7.",
+    "weekend": "Saturday or Sunday in NYC local time (1.0 or 0.0).",
+    "holiday": "Membership in the checksum-pinned nationwide observed OPM calendar (1.0 or 0.0).",
+    "zone_centroid_distance_km": "Great-circle Haversine distance in kilometers (R=6371.0088 km) between area-weighted planar polygon centroids of pickup_location_id and dropoff_location_id from checksum-pinned assets/taxi_zones/taxi_zones.geojson (0.0 when pickup_location_id == dropoff_location_id).",
+    "is_same_zone": "1.0 when pickup_location_id == dropoff_location_id, else 0.0.",
+    "zones": "String categories from integer named TLC LocationID domain 1..263, indexed via train-only StringIndexer(handleInvalid='keep') with maxBins=264 to accommodate up to 263 seen zones plus 1 unknown bucket.",
+    "unknown_category": "A valid zone unseen during train remains its string value for the fitted __unknown bucket. Invalid/unknown TLC IDs 264/265 are rejected."
+  },
+  "calendar": {
+    "file": "config/pretrip_v2_calendar.json",
+    "version": "us-opm-nationwide-observed-2025-2027-v1",
+    "sha256": "00dd5c8f442955879ade701c726106f12ef0e03669f818c5c06c6a5b067decac",
+    "coverage_start": "2025-01-01",
+    "coverage_end": "2027-12-31",
+    "missing_coverage": "reject; never implicitly set future unknown dates to non-holiday"
+  },
+  "geometry": {
+    "file": "assets/taxi_zones/taxi_zones.geojson",
+    "manifest_file": "assets/taxi_zones/manifest.json",
+    "sha256": "6513c39044b8dee18c00af0dd6f97919d681b1e85efbd2d6980786c4cfbb8c9c",
+    "feature_count": 263,
+    "crs": "OGC:CRS84",
+    "earth_radius_km": 6371.0088
+  },
+  "time_policy": {
+    "now": "Freeze an aware UTC submit instant, convert to America/New_York once at submit, store UUID/offset/fold/calendar/geometry/tzdb identity; rerun reuses the snapshot.",
+    "scheduled_max_horizon_seconds": 604800,
+    "past_clock_tolerance_seconds": 60,
+    "serving": "Offset-aware local ISO timestamp plus America/New_York; offset must agree with the zone, ambiguous local time requires fold 0/1, nonexistent local time is rejected.",
+    "historical": "TLC NTZ stays NYC local wall time without inventing an instant or DST fold; repeated fall hour preserves wall features; nonexistent spring hour is rejected.",
+    "tzdb_artifact_requirement": "A fitted artifact must pin the actual America/New_York TZif SHA256 reported by timezone_identity(), plus provider/package version where available."
+  },
+  "prohibited_predictors": [
+    "recorded_trip_distance",
+    "trip_distance",
+    "actual_duration",
+    "dropoff_datetime",
+    "fare_amount",
+    "total_amount",
+    "tip_amount",
+    "tolls_amount",
+    "fees",
+    "payment_type",
+    "final_ratecode",
+    "source_month",
+    "lineage",
+    "load_id"
+  ],
+  "request_policy": "Exact required snapshot fields; missing fields and unknown extras fail, including recorded trip_distance. Callers must provide pinned contract, calendar, geometry and tzdb identities.",
+  "required_request_fields": [
+    "pickup_location_id",
+    "dropoff_location_id",
+    "pickup_datetime",
+    "timezone",
+    "submission_id",
+    "contract_version",
+    "calendar_version",
+    "calendar_sha256",
+    "geometry_sha256",
+    "tzdb_sha256",
+    "submitted_at",
+    "mode",
+    "fold"
+  ],
+  "v22_policy": "No change to frozen V1 or V2.2 helpers, contracts, bundles or serving endpoints. V2.3 lives in separate modules and contract files.",
+  "cohort_policy": {
+    "train": ["2026-06-01", "2026-07-01"],
+    "validation": ["2026-07-01", "2026-08-01"],
+    "holdout": ["2026-08-01", "2026-09-01"],
+    "boundaries": "Half-open by actual pickup NYC local datetime, not source month.",
+    "sampling_fraction": 0.25,
+    "seed": 42,
+    "caps": {
+      "train": 750000,
+      "validation": 250000,
+      "holdout": 250000
+    },
+    "holdout_policy": "Preparation/counts/overlap only; do not fit preprocessing or tune on holdout, and do not evaluate until the candidate/cohort/features/gates are locked."
+  }
+}
