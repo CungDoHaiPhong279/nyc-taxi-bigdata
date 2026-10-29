@@ -6,14 +6,14 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 import csv
-from datetime import date, datetime
+from datetime import datetime
 import json
 import math
 from pathlib import Path
 import threading
 import time
 from typing import Any
-from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from nyc_taxi.ml.gold_v3_data import (
     BASE_NUMERIC_FEATURES,
@@ -32,6 +32,24 @@ from nyc_taxi.ml.pretrip_v23_features import load_calendar, load_zone_centroids
 JFK_LOCATION_ID = 132
 EWR_LOCATION_ID = 1
 JFK_MANHATTAN_FLAT_FARE_USD = 70.0
+NYC_TZ = ZoneInfo("America/New_York")
+
+
+def _read_cgroup_memory() -> dict[str, Any]:
+    cur_path = Path("/sys/fs/cgroup/memory.current")
+    max_path = Path("/sys/fs/cgroup/memory.max")
+    try:
+        if cur_path.exists():
+            cur_bytes = int(cur_path.read_text(encoding="utf-8").strip())
+            max_raw = max_path.read_text(encoding="utf-8").strip() if max_path.exists() else "max"
+            max_bytes = int(max_raw) if max_raw.isdigit() else None
+            return {
+                "container_memory_mb": round(cur_bytes / (1024 * 1024), 1),
+                "container_memory_limit_mb": round(max_bytes / (1024 * 1024), 1) if max_bytes else None,
+            }
+    except Exception:
+        pass
+    return {"container_memory_mb": None, "container_memory_limit_mb": None}
 
 
 def gold_v3_identity() -> dict[str, str]:
@@ -111,6 +129,8 @@ class FrozenGoldV3Predictor:
         self.zones_file = zones_file
         self.ready = False
         self.status = "starting"
+        self.fit_calls = 0
+        self.model_load_count = 0
         self.spark = None
         self.model_weather = None
         self.model_no_weather = None
@@ -171,12 +191,15 @@ class FrozenGoldV3Predictor:
                     "location_id": k,
                     "zone": lookup[k]["Zone"],
                     "borough": lookup[k]["Borough"],
-                    "supported_pickup": str(k) in self.known_pickup,
-                    "supported_dropoff": str(k) in self.known_dropoff,
+                    "supported_pickup": True,
+                    "supported_dropoff": True,
+                    "in_train_pickup": str(k) in self.known_pickup,
+                    "in_train_dropoff": str(k) in self.known_dropoff,
                 }
                 for k in range(1, 264)
                 if k in lookup
             ]
+            self.model_load_count = 1
             self.startup_seconds = round(time.perf_counter() - tick, 6)
             if not self._closed:
                 self.ready = True
@@ -195,16 +218,22 @@ class FrozenGoldV3Predictor:
             "ready": self.ready,
             "status": self.status,
             "startup_seconds": self.startup_seconds,
+            "fit_calls": self.fit_calls,
+            "model_load_count": self.model_load_count,
             "supported_pickup_zones": len(self.known_pickup),
             "supported_dropoff_zones": len(self.known_dropoff),
+            **_read_cgroup_memory(),
             **gold_v3_identity(),
         }
 
     def zone_response(self) -> dict[str, Any]:
+        all_ids = [int(z["location_id"]) for z in self.zones]
         return {
             "zones": self.zones,
-            "pickup_location_ids": sorted(map(int, self.known_pickup)),
-            "dropoff_location_ids": sorted(map(int, self.known_dropoff)),
+            "pickup_location_ids": all_ids,
+            "dropoff_location_ids": all_ids,
+            "train_pickup_location_ids": sorted(map(int, self.known_pickup)),
+            "train_dropoff_location_ids": sorted(map(int, self.known_dropoff)),
             **gold_v3_identity(),
         }
 
@@ -253,9 +282,10 @@ class FrozenGoldV3Predictor:
             pu_id = int(payload["pickup_location_id"])
             do_id = int(payload["dropoff_location_id"])
             raw_dt = str(payload["pickup_datetime"])
-            if raw_dt.endswith("Z"):
-                raw_dt = raw_dt[:-1] + "+00:00"
-            pickup_dt = datetime.fromisoformat(raw_dt)
+            norm_dt = raw_dt[:-1] + "+00:00" if raw_dt.endswith(("Z", "z")) else raw_dt
+            pickup_dt = datetime.fromisoformat(norm_dt)
+            if pickup_dt.tzinfo is not None:
+                pickup_dt = pickup_dt.astimezone(NYC_TZ)
         except (KeyError, ValueError, TypeError) as exc:
             raise InputError("Invalid pickup_location_id, dropoff_location_id, or pickup_datetime") from exc
 
@@ -275,7 +305,7 @@ class FrozenGoldV3Predictor:
             weather=weather_dict,
         )
 
-        baseline_h = None
+        baseline_h = 14.2
         if self.baselines:
             _, h_preds = predict_v3_baseline(
                 [derived["pickup_zone"]],
@@ -284,7 +314,7 @@ class FrozenGoldV3Predictor:
                 [derived["pickup_hour_cos"]],
                 self.baselines,
             )
-            baseline_h = round(h_preds[0], 2)
+            baseline_h = round(float(h_preds[0]), 2)
 
         flat_fare = is_jfk_manhattan_flat_fare(pu_id, do_id, self.borough_by_id)
         unseen = {
@@ -310,6 +340,15 @@ class FrozenGoldV3Predictor:
             preds["pred_weather"] if preds["pred_weather"] is not None else preds["pred_no_weather"]
         )
         final_fare = JFK_MANHATTAN_FLAT_FARE_USD if flat_fare else metered_usd
+        variant = (
+            "Rule-JFK-Manhattan-Flat-70"
+            if flat_fare
+            else (
+                "M3-w (GBT Full Weather + Centroid)"
+                if preds["pred_weather"] is not None
+                else "M3-nw (GBT Pre-trip No-Weather + Centroid)"
+            )
+        )
         warnings: list[str] = []
         if flat_fare:
             warnings.append(
@@ -319,6 +358,12 @@ class FrozenGoldV3Predictor:
             warnings.append(
                 "Zone đón/trả thuộc nhóm hiếm chưa xuất hiện trong tập train: sử dụng __unknown bucket."
             )
+
+        echo_fields = {
+            k: payload[k]
+            for k in ("submission_id", "pickup_datetime", "submitted_at", "mode")
+            if k in payload
+        }
 
         return {
             "status": "supported",
@@ -331,13 +376,18 @@ class FrozenGoldV3Predictor:
             ),
             "m3_no_weather_estimate_usd": round(float(preds["pred_no_weather"]), 2),
             "baseline_hierarchical_usd": baseline_h,
+            "baseline_fare_usd": 70.0 if flat_fare else baseline_h,
             "flat_fare_applied": flat_fare,
             "ratecode_id": 2 if flat_fare else 1,
+            "model_variant": variant,
             "zone_centroid_distance_km": round(float(derived["zone_centroid_distance_km"]), 3),
+            "is_same_zone": int(derived["is_same_zone"]),
             "unit": "USD",
             "unseen_categories": unseen,
             "warnings": warnings,
             "request_seconds": round(time.perf_counter() - tick, 6),
+            "submission": payload,
+            **echo_fields,
             **gold_v3_identity(),
         }
 

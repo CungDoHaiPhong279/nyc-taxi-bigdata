@@ -325,6 +325,57 @@ class PretripRouteFareCoordinator(RouteFareCoordinator):
         )
 
 
+class GoldV3RouteFareCoordinator(RouteFareCoordinator):
+    """Address-to-zone-and-route coordinator for Gold V3 (`FARE_MODEL_VERSION=gold-v3`).
+
+    Supports all 262 NYC Taxi Zones in `taxi_zones.geojson` AND JFK (Zone 132) <-> Manhattan
+    flat fare ($70.00 USD, Ratecode 2), while displaying the Mapbox driving route on the map.
+    """
+
+    def __init__(self, *, router: Any, geometry: Any, predictor: Any, metadata: Mapping[str, Any] | None = None) -> None:
+        super().__init__(router=router, geometry=geometry, predictor=predictor)
+        self.metadata = metadata
+
+    def estimate(self, payload: Mapping[str, Any]) -> RouteFareEstimate:
+        if not isinstance(payload, Mapping):
+            raise RouteFareError("Yêu cầu ước tính không hợp lệ.")
+        pickup, dropoff = _selection(payload.get("pickup")), _selection(payload.get("dropoff"))
+        pickup_zone, dropoff_zone = validate_address_support(pickup, self.geometry), validate_address_support(dropoff, self.geometry)
+        if payload.get("standard_rate") is not True:
+            raise RouteFareError("Hãy xác nhận điều kiện tính cước trước khi ước tính.")
+        request = payload.get("pretrip_request")
+        if (not isinstance(request, dict)
+                or request.get("pickup_location_id") != pickup_zone["location_id"]
+                or request.get("dropoff_location_id") != dropoff_zone["location_id"]
+                or not isinstance(request.get("pickup_datetime"), str)):
+            raise RouteFareError("Thời gian, vùng hoặc hợp đồng Gold V3 không khớp yêu cầu đã gửi.")
+        try:
+            route = self.router.directions((pickup["longitude"], pickup["latitude"]), (dropoff["longitude"], dropoff["latitude"]))
+        except MapboxError:
+            raise RouteFareError("Không lấy được tuyến ô tô từ Mapbox. Không tự gọi lại hoặc tạo giá thay thế.") from None
+        distance = route.get("distance_meters") if isinstance(route, dict) else None
+        if (type(distance) not in (int, float) or not math.isfinite(distance)
+                or not 0 <= distance <= 200 * METERS_PER_MILE):
+            raise RouteFareError("Quãng đường tham khảo phải hữu hạn và trong vùng hỗ trợ 0–200 mile.")
+        route_geometry = _route_geometry(route.get("geometry"))
+        try:
+            prediction = self.predictor.predict(**request)
+        except PredictionError:
+            raise RouteFareError("Dịch vụ Gold V3 chưa trả được kết quả hợp lệ. Không có giá thay thế.") from None
+        if not isinstance(prediction, dict):
+            raise RouteFareError("Phản hồi Gold V3 không hợp lệ. Không hiển thị giá.")
+        warnings = list(prediction.get("warnings", []))
+        if ({132, 138} & {pickup_zone["location_id"], dropoff_zone["location_id"]}) and not prediction.get("flat_fare_applied"):
+            warnings.append("Chuyến sân bay có thể có phí sân bay và phụ phí chưa nằm trong cước cơ bản ước tính.")
+        return RouteFareEstimate(
+            pickup=_freeze({**pickup, **pickup_zone}), dropoff=_freeze({**dropoff, **dropoff_zone}),
+            pickup_datetime=request["pickup_datetime"], distance_meters=float(distance), distance_km=distance / 1000,
+            request=_freeze(request), prediction=_freeze(prediction), route_geometry=route_geometry,
+            warnings=tuple(warnings), model_version="gold-v3", time_selection=_freeze(payload.get("time_selection")),
+        )
+
+
+
 def _json_default(value: Any) -> str:
     if isinstance(value, datetime):
         return value.isoformat()

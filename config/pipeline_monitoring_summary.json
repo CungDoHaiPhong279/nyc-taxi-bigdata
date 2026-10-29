@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "silver_cleaning": {
+    "raw_taxi_rows": 24083384,
+    "silver_valid_rows": 23886265,
+    "silver_rejected_rows": 197119,
+    "silver_reject_rate_pct": 0.82,
+    "primary_rejection_reason": "invalid_duration",
+    "silver_elapsed_seconds": 186.71
+  },
+  "gold_enrichment": {
+    "gold_rows": 23886265,
+    "pickup_zone_matched": 23886265,
+    "dropoff_zone_matched": 23886265,
+    "calendar_matched": 23886241,
+    "calendar_unmatched": 24,
+    "weather_matched": 23866019,
+    "weather_unmatched": 20246,
+    "weather_match_rate_pct": 99.92
+  },
+  "ml_gold_v3_cohort": {
+    "input_rows": 23886265,
+    "eligible_by_split": {
+      "train": 11053616,
+      "validation": 2992409,
+      "test": 2678064
+    },
+    "selected_rows": {
+      "train": 336864,
+      "validation": 89625,
+      "test": 80770,
+      "drift_2026": 89625
+    },
+    "rare_zone_stratified_rows_added": 4469,
+    "jfk_manhattan_ratecode2": {
+      "trip_count": 574602,
+      "fare_70_count": 574524,
+      "fare_70_share": 0.999864,
+      "flat_fare_rule_usd": 70.0,
+      "mean_fare_usd": 70.57
+    },
+    "rejected": {
+      "non_standard_ratecode": 6684726,
+      "nonpositive_or_extreme_fare": 362027,
+      "invalid_location_id": 89694,
+      "unmatched_or_nonfinite_weather": 25705,
+      "out_of_study_window_or_nonexistent_local": 24,
+      "missing_or_nonpositive_duration": 0
+    },
+    "preparation_elapsed_seconds": 28.266,
+    "training_elapsed_seconds": 100.2
+  }
+}

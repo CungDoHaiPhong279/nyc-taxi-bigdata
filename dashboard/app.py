@@ -25,8 +25,8 @@ def main() -> None:
         from nyc_taxi.dashboard.prediction import PredictionError, selected_model_version
 
         try:
-            if selected_model_version() != "v2.2":
-                raise PredictionError("Chế độ pretrip yêu cầu FARE_MODEL_VERSION=v2.2; không tự chuyển sang v1.")
+            if selected_model_version() not in ("v2.2", "gold-v3"):
+                raise PredictionError("Chế độ pretrip yêu cầu FARE_MODEL_VERSION=v2.2 hoặc gold-v3; không tự chuyển sang v1.")
         except PredictionError as error:
             st.error(str(error))
             return
