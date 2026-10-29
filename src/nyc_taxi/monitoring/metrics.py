@@ -61,7 +61,11 @@ def fetch_etl_monitoring_metrics(engine: Any = None) -> dict[str, Any]:
         """
     )
     with eng.connect() as conn:
-        rows = conn.execute(sql).mappings().all()
+        exec_res = conn.execute(sql)
+        if hasattr(exec_res, "mappings") and not isinstance(exec_res, list):
+            raw_rows = exec_res.mappings().all()
+        else:
+            raw_rows = [getattr(r, "_mapping", r) for r in exec_res]
 
     jobs: list[dict[str, Any]] = []
     total_source_rows = 0
@@ -69,7 +73,7 @@ def fetch_etl_monitoring_metrics(engine: Any = None) -> dict[str, Any]:
     total_duration_sec = 0.0
     loaded_count = 0
 
-    for r in rows:
+    for r in raw_rows:
         src = int(r["source_row_count"] or 0)
         ld = int(r["loaded_row_count"] or 0)
         dur = float(r["duration_seconds"] or 0.0)
@@ -172,10 +176,13 @@ def fetch_quality_and_reject_metrics(
     if prep_path.exists():
         prep_doc = json.loads(prep_path.read_text(encoding="utf-8"))
         counts = prep_doc.get("counts", {})
+        cov = prep_doc.get("zone_coverage", {})
         ml_quality = {
             "gold_input_rows": counts.get("input_rows", 0),
             "eligible_standard_metered": counts.get("eligible_by_split", {}),
             "selected_sample_rows": counts.get("selected_rows", {}),
+            "train_active_pickup_zones": cov.get("train_active_pickup_zones", 258),
+            "train_active_dropoff_zones": cov.get("train_active_dropoff_zones", 259),
             "jfk_flat_fare_trips": counts.get("jfk_manhattan_ratecode2", {}).get("trip_count", 0),
             "rejected_by_reason": counts.get("rejected", {}),
             "preparation_elapsed_seconds": prep_doc.get("elapsed_seconds", 28.27),
@@ -186,6 +193,8 @@ def fetch_quality_and_reject_metrics(
             "gold_input_rows": mc.get("input_rows", 0),
             "eligible_standard_metered": mc.get("eligible_by_split", {}),
             "selected_sample_rows": mc.get("selected_rows", {}),
+            "train_active_pickup_zones": mc.get("train_active_pickup_zones", 258),
+            "train_active_dropoff_zones": mc.get("train_active_dropoff_zones", 259),
             "jfk_flat_fare_trips": mc.get("jfk_manhattan_ratecode2", {}).get("trip_count", 0),
             "rejected_by_reason": mc.get("rejected", {}),
             "preparation_elapsed_seconds": mc.get("preparation_elapsed_seconds", 28.27),
