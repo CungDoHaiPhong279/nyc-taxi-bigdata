@@ -78,16 +78,21 @@ _COHORT_POLICY = {
     "train": ["2026-06-01", "2026-07-01"],
     "validation": ["2026-07-01", "2026-08-01"],
     "holdout": ["2026-08-01", "2026-09-01"],
-    "sampling_fraction": 0.25,
+    "sampling_fraction": 0.10,
+    "min_train_zone_support": 30,
     "seed": 42,
-    "caps": {"train": 750000, "validation": 250000, "holdout": 250000},
+    "caps": {"train": 350000, "validation": 300000, "holdout": 300000},
 }
 
 
 def _cohort_policy_matches(policy: Any) -> bool:
     if not isinstance(policy, dict) or any(policy.get(name) != value for name, value in _COHORT_POLICY.items()):
         return False
-    return type(policy["seed"]) is int and all(type(value) is int for value in policy["caps"].values())
+    return (
+        type(policy["seed"]) is int
+        and type(policy["min_train_zone_support"]) is int
+        and all(type(value) is int for value in policy["caps"].values())
+    )
 
 
 def load_contract(path: str | Path | None = None) -> dict[str, Any]:

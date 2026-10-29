@@ -36,8 +36,15 @@ Chủ dự án đã quyết định **tự làm sau** 2 hạng mục dưới đ�
 - **Kiểm thử (`tests/test_pretrip_v23_features.py`)**:
   - Đã thêm 19 bài test kiểm chứng tính bất biến của V2.2, độ phủ 263 tâm vùng, tính đối xứng Haversine, độ phân giải theo phút, và parity tuyệt đối giữa `build_training_features` và `build_serving_features`.
 
-### ⏳ Các bước tiếp theo của Phần 4 (Bước 4.2 – 4.4)
-- **Bước 4.2 — Chuẩn bị & Lấy mẫu Dữ liệu lớn (Data Prep)**: Quét Parquet theo `cohort_policy` (25% sampling) và materialize vào `.sandbox/pretrip-v2/data-v23-01/`.
+### ✅ Bước 4.2 — Chuẩn bị & Lấy mẫu Dữ liệu lớn (Data Prep) (ĐÃ HOÀN TẤT — 2026-10-29)
+- **Module & CLI (`src/nyc_taxi/ml/pretrip_v23_data.py`, `scripts/prepare_pretrip_v23.py`, `tests/test_pretrip_v23_data.py`)**:
+  - Quét toàn bộ **10.704.073 dòng** từ 3 file Parquet tháng 06, 07, 08/2026 chỉ trong **18,997 giây** (nhanh gấp ~38 lần so với 721 giây của V2.2).
+  - Lấy mẫu băm 64-bit SplitMix64 tỷ lệ **10%** (`100.000 / 1.000.000`) kết hợp bảo toàn vùng hiếm trên tập Train (`min_train_zone_support = 30`).
+  - Xuất **721.513 dòng** (gấp **10 lần** V2.2: `268.539` train, `235.025` validation, `217.949` holdout) vào `.sandbox/pretrip-v2/pilot-2026-06-08-v23-01/` (~37,75 MiB).
+  - Nâng độ phủ vùng đón trên tập Train từ **117 lên 247 vùng** (+111,1% — đạt 100% toàn bộ các vùng có phát sinh chuyến xe hợp lệ trong tháng 06/2026) và vùng trả từ **224 lên 259 vùng** (99,6% toàn bộ các vùng có đường bộ tại NYC).
+  - Xem báo cáo chi tiết tại [`plans/PRETRIP_V23_PREPARATION_REPORT.md`](PRETRIP_V23_PREPARATION_REPORT.md).
+
+### ⏳ Các bước tiếp theo của Phần 4 (Bước 4.3 – 4.4)
 - **Bước 4.3 — Huấn luyện Native GBT (`maxBins=264`, `squared` vs `absolute`) & Đánh giá Holdout**: Lưu tại `.sandbox/pretrip-v2/training-YYYYMMDD-v23-01/`.
 - **Bước 4.4 — Đóng gói Serving Bundle V2.3 & Tích hợp UI (`FARE_MODEL_VERSION=v2.3`)**.
 

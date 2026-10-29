@@ -62,7 +62,8 @@ def test_v23_contract_schema_max_bins_and_status_evolution(tmp_path):
     assert tuple(contract["categorical_features"]) == CATEGORICAL_FEATURE_COLUMNS
     assert len(FEATURE_COLUMNS) == 10
     assert contract["geometry"]["sha256"] == GEOMETRY_SHA256
-    assert contract["cohort_policy"]["sampling_fraction"] == 0.25
+    assert contract["cohort_policy"]["sampling_fraction"] == 0.10
+    assert contract["cohort_policy"]["min_train_zone_support"] == 30
     assert set(contract["required_request_fields"]) == set(request())
 
     for valid_status in MODEL_STATUS_ALLOWLIST:

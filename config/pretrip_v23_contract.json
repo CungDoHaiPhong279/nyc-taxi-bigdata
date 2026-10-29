@@ -90,12 +90,13 @@
     "validation": ["2026-07-01", "2026-08-01"],
     "holdout": ["2026-08-01", "2026-09-01"],
     "boundaries": "Half-open by actual pickup NYC local datetime, not source month.",
-    "sampling_fraction": 0.25,
+    "sampling_fraction": 0.10,
+    "min_train_zone_support": 30,
     "seed": 42,
     "caps": {
-      "train": 750000,
-      "validation": 250000,
-      "holdout": 250000
+      "train": 350000,
+      "validation": 300000,
+      "holdout": 300000
     },
     "holdout_policy": "Preparation/counts/overlap only; do not fit preprocessing or tune on holdout, and do not evaluate until the candidate/cohort/features/gates are locked."
   }

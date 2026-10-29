@@ -39,6 +39,7 @@ TEST_FILES = (
     "tests/test_dashboard_address_ui.py",
     "tests/test_pretrip_v2_features.py",
     "tests/test_pretrip_v23_features.py",
+    "tests/test_pretrip_v23_data.py",
     "tests/test_pretrip_v2_data.py",
     "tests/test_pretrip_v2_pilot.py",
     "tests/test_pretrip_v2_budget.py",

@@ -21,6 +21,7 @@ MODULES = [
     "nyc_taxi.ml.inference",
     "nyc_taxi.ml.pretrip_features",
     "nyc_taxi.ml.pretrip_v23_features",
+    "nyc_taxi.ml.pretrip_v23_data",
     "nyc_taxi.ml.pretrip_serving_contract",
     "nyc_taxi.ml.pretrip_training_model",
     "nyc_taxi.ml.pretrip_holdout_model",
