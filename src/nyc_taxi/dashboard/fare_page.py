@@ -40,6 +40,10 @@ def render_page() -> None:
     except PredictionError as error:
         st.error(str(error))
         return
+    if version == "gold-v3":
+        from nyc_taxi.dashboard.gold_v3_page import render_gold_v3_page
+        render_gold_v3_page()
+        return
     if version == "v2.2" or os.environ.get("FARE_ADDRESS_ENABLED", "0") == "1":
         from nyc_taxi.dashboard.address_page import render_page as render_address_page
         render_address_page()

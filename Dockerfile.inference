@@ -13,7 +13,8 @@ RUN python -B -c "from pathlib import Path; names=('requirements.txt','requireme
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY config/config.yaml ./config/config.yaml
-COPY config/pretrip_v2_contract.json config/pretrip_v2_calendar.json config/model_bundle_v22.lock.json ./config/
+COPY config/pretrip_v2_contract.json config/pretrip_v2_calendar.json config/pretrip_v23_contract.json config/gold_ml_v3_contract.json config/model_bundle_v22.lock.json ./config/
+COPY assets/taxi_zones/ ./assets/taxi_zones/
 COPY Dockerfile.inference docker-compose.inference.yml docker-compose.pretrip-v22.yml ./
 
 ENV HOME=/tmp \

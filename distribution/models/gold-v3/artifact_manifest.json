@@ -1,0 +1,402 @@
+{
+  "bundle_tree_sha256": "bf00570d18ea2b6c5c9f2246e70c24dafa69adac2bd3aa5e52d4ea2406b80ab5",
+  "file_count": 79,
+  "files": [
+    {
+      "bytes": 1589051,
+      "path": "baselines.json",
+      "sha256": "7b4c2597cf745331d29d1ce3b7429d6dc467b5c8aac32d70a86345a43b6b6262"
+    },
+    {
+      "bytes": 2829,
+      "path": "gold_ml_v3_contract.json",
+      "sha256": "466f0b685a3176bde43c095ccca326aceccb7612c76996998e5830e1675e3f72"
+    },
+    {
+      "bytes": 7706,
+      "path": "parity_inputs.json",
+      "sha256": "8d2f32c6515600d78bce50b361a663fea4dba28ac103db0ee5e3538ddb718ebe"
+    },
+    {
+      "bytes": 2187,
+      "path": "parity_reference.json",
+      "sha256": "8fb5cd3883938dfc52e564d9ad083199ae6eabf4f75eac6869652e1eda5cd54a"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_no_weather/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "pipeline_gbt_no_weather/metadata/.part-00000-7dfa51a6-d952-430b-ae01-9a4bba30bf68-c000.txt.crc",
+      "sha256": "022f9f210c0b072ac79e8cdbabba4b542e3edaf1ef0cfe0376b880ea5aa8b9d5"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_no_weather/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 295,
+      "path": "pipeline_gbt_no_weather/metadata/part-00000-7dfa51a6-d952-430b-ae01-9a4bba30bf68-c000.txt",
+      "sha256": "206fe34cc694d593136b33f679a77b82c03eedeea0b16af8bfc5245b67f1bbdb"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_no_weather/stages/0_StringIndexer_50f6911810cc/data/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 24,
+      "path": "pipeline_gbt_no_weather/stages/0_StringIndexer_50f6911810cc/data/.part-00000-b1a296a5-1d28-4c71-90a6-d2ce219fde9d-c000.snappy.parquet.crc",
+      "sha256": "8cd7428827cee751969320683ecd46d2d300eac5537a1852f914404630f92284"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_no_weather/stages/0_StringIndexer_50f6911810cc/data/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1671,
+      "path": "pipeline_gbt_no_weather/stages/0_StringIndexer_50f6911810cc/data/part-00000-b1a296a5-1d28-4c71-90a6-d2ce219fde9d-c000.snappy.parquet",
+      "sha256": "0f8ef8ded62537c5a42a34e37b7d324ebb01b1cf0d6aa51bbc6ba57723dac19a"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_no_weather/stages/0_StringIndexer_50f6911810cc/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "pipeline_gbt_no_weather/stages/0_StringIndexer_50f6911810cc/metadata/.part-00000-80d1c9f2-933d-4399-bde5-2a5df2a7d08c-c000.txt.crc",
+      "sha256": "cc3837b0320e603ef420d912ccde771175aa01fa91ac4e10083dfd947ccc63b2"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_no_weather/stages/0_StringIndexer_50f6911810cc/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 395,
+      "path": "pipeline_gbt_no_weather/stages/0_StringIndexer_50f6911810cc/metadata/part-00000-80d1c9f2-933d-4399-bde5-2a5df2a7d08c-c000.txt",
+      "sha256": "56965146f4a77625608864f65bb3141b8c65e1ff313b3452a7425d370631e7dd"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_no_weather/stages/1_StringIndexer_fbc512479760/data/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 24,
+      "path": "pipeline_gbt_no_weather/stages/1_StringIndexer_fbc512479760/data/.part-00000-ce69e8ba-a2b8-44db-9b18-205df4f1cea1-c000.snappy.parquet.crc",
+      "sha256": "25fbcec17a80fba99f4ce41f85efc59ed01229ecea233c0ca88e42a13caf880b"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_no_weather/stages/1_StringIndexer_fbc512479760/data/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1675,
+      "path": "pipeline_gbt_no_weather/stages/1_StringIndexer_fbc512479760/data/part-00000-ce69e8ba-a2b8-44db-9b18-205df4f1cea1-c000.snappy.parquet",
+      "sha256": "8026d556cf34b261c85d401c5860db8f3ca99bff70bd8fda3c1bd876461479d5"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_no_weather/stages/1_StringIndexer_fbc512479760/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "pipeline_gbt_no_weather/stages/1_StringIndexer_fbc512479760/metadata/.part-00000-29c42141-8d1e-4ca2-8192-9e272e87c6c3-c000.txt.crc",
+      "sha256": "612d4bfbbbb23abbfc925fd987feeba741c9176812b96fff48d8149bfa6d352f"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_no_weather/stages/1_StringIndexer_fbc512479760/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 397,
+      "path": "pipeline_gbt_no_weather/stages/1_StringIndexer_fbc512479760/metadata/part-00000-29c42141-8d1e-4ca2-8192-9e272e87c6c3-c000.txt",
+      "sha256": "76a19d5734db82cd4fe773b29ad681a32cf1d2e594109639d4d4f4b726089098"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_no_weather/stages/2_VectorAssembler_d9b418453e04/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "pipeline_gbt_no_weather/stages/2_VectorAssembler_d9b418453e04/metadata/.part-00000-94b20726-ae54-483e-a7e4-d160085f29a2-c000.txt.crc",
+      "sha256": "3bee00bc1d30392d893a83f3a5ab54e5814f95988087db8e8e25dc5c0a3245ca"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_no_weather/stages/2_VectorAssembler_d9b418453e04/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 491,
+      "path": "pipeline_gbt_no_weather/stages/2_VectorAssembler_d9b418453e04/metadata/part-00000-94b20726-ae54-483e-a7e4-d160085f29a2-c000.txt",
+      "sha256": "7cae3dd20cf61fb4e8f0b0ffd1ab5e46ca44d3fc1fcf3d50ede443dd98b1a558"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/data/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 1236,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/data/.part-00000-9054f806-e9af-4ffe-98f7-23ff94977b89-c000.snappy.parquet.crc",
+      "sha256": "0e147cee2ac8b6d7671a98320693c892c397897aa5768b367c27e22a10cd31b2"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/data/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 156815,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/data/part-00000-9054f806-e9af-4ffe-98f7-23ff94977b89-c000.snappy.parquet",
+      "sha256": "291eded55427db571c27565dadd141e4d5f9aa82d4892daa0093cd8a6e69ab69"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 16,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/metadata/.part-00000-681eef5f-4fac-461d-bddb-0d99f1c22068-c000.txt.crc",
+      "sha256": "cd729b3d5b765c03512331e3ccd91321f5558a6ce68f257af5db7dd3fbc161c9"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 861,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/metadata/part-00000-681eef5f-4fac-461d-bddb-0d99f1c22068-c000.txt",
+      "sha256": "385dd0679595d059313195a1f6255010719afefd72be1f15e1521bae3399c1f1"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/treesMetadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 44,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/treesMetadata/.part-00000-f79aa743-43b1-470d-9e3b-71fc4dacb0ac-c000.snappy.parquet.crc",
+      "sha256": "4847a13af8450f69d78345659bc0d475f43cb8fcf6b0f0ca7e76cded2d2eed17"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/treesMetadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 4271,
+      "path": "pipeline_gbt_no_weather/stages/3_GBTRegressor_8f3418f8545f/treesMetadata/part-00000-f79aa743-43b1-470d-9e3b-71fc4dacb0ac-c000.snappy.parquet",
+      "sha256": "2fbef39d0f7f155a5e34152e327434de74f0735d5e0c926fc270992049362879"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_weather/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "pipeline_gbt_weather/metadata/.part-00000-8ec1ae29-2b51-4f78-97f9-6425e41a716d-c000.txt.crc",
+      "sha256": "a79ada9722b6e2cfc52f7483915523c6d647c2389fbf8e675b26ef5bec8d74ec"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_weather/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 295,
+      "path": "pipeline_gbt_weather/metadata/part-00000-8ec1ae29-2b51-4f78-97f9-6425e41a716d-c000.txt",
+      "sha256": "188cca6b8f4a3411c3e2e8ea3c113a3046e5164f5586a57bf46db73d825e2c14"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_weather/stages/0_StringIndexer_b31afabf355d/data/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 24,
+      "path": "pipeline_gbt_weather/stages/0_StringIndexer_b31afabf355d/data/.part-00000-a4720513-7177-45e2-b76e-50efda6d25d5-c000.snappy.parquet.crc",
+      "sha256": "8cd7428827cee751969320683ecd46d2d300eac5537a1852f914404630f92284"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_weather/stages/0_StringIndexer_b31afabf355d/data/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1671,
+      "path": "pipeline_gbt_weather/stages/0_StringIndexer_b31afabf355d/data/part-00000-a4720513-7177-45e2-b76e-50efda6d25d5-c000.snappy.parquet",
+      "sha256": "0f8ef8ded62537c5a42a34e37b7d324ebb01b1cf0d6aa51bbc6ba57723dac19a"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_weather/stages/0_StringIndexer_b31afabf355d/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "pipeline_gbt_weather/stages/0_StringIndexer_b31afabf355d/metadata/.part-00000-a13b279e-f0ce-458a-94d6-59954d1c104d-c000.txt.crc",
+      "sha256": "946b85183805efb58c0b6265fd5794b1a4a83c236577fba5f4b165f3d0e48fbf"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_weather/stages/0_StringIndexer_b31afabf355d/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 395,
+      "path": "pipeline_gbt_weather/stages/0_StringIndexer_b31afabf355d/metadata/part-00000-a13b279e-f0ce-458a-94d6-59954d1c104d-c000.txt",
+      "sha256": "b9e1ad9fbf9ad166d645a6c587298721255216ac8de34bb868bd07d98e1f29cf"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_weather/stages/1_StringIndexer_28aeac7787da/data/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 24,
+      "path": "pipeline_gbt_weather/stages/1_StringIndexer_28aeac7787da/data/.part-00000-538f9bb9-b662-4032-8a25-65ac01813c17-c000.snappy.parquet.crc",
+      "sha256": "25fbcec17a80fba99f4ce41f85efc59ed01229ecea233c0ca88e42a13caf880b"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_weather/stages/1_StringIndexer_28aeac7787da/data/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1675,
+      "path": "pipeline_gbt_weather/stages/1_StringIndexer_28aeac7787da/data/part-00000-538f9bb9-b662-4032-8a25-65ac01813c17-c000.snappy.parquet",
+      "sha256": "8026d556cf34b261c85d401c5860db8f3ca99bff70bd8fda3c1bd876461479d5"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_weather/stages/1_StringIndexer_28aeac7787da/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 12,
+      "path": "pipeline_gbt_weather/stages/1_StringIndexer_28aeac7787da/metadata/.part-00000-d5ba8c00-eb38-4013-b9f9-6d86d90b926d-c000.txt.crc",
+      "sha256": "2dd0128f85490de84bc8caa4023902a69f8a4b455216d91348f84dc19ead0c6f"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_weather/stages/1_StringIndexer_28aeac7787da/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 397,
+      "path": "pipeline_gbt_weather/stages/1_StringIndexer_28aeac7787da/metadata/part-00000-d5ba8c00-eb38-4013-b9f9-6d86d90b926d-c000.txt",
+      "sha256": "dc7703134b36f86803cb921ba7650a6fd182704ce0a59f7d71b00f280ea0bc19"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_weather/stages/2_VectorAssembler_9badfe3c0843/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 16,
+      "path": "pipeline_gbt_weather/stages/2_VectorAssembler_9badfe3c0843/metadata/.part-00000-aa47a8b3-0eba-4728-8478-5eb63660f39f-c000.txt.crc",
+      "sha256": "2c4b2e881aaa12aa53f05bceb3330e242a9e67ccdc1b95bcee87fff963dcd766"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_weather/stages/2_VectorAssembler_9badfe3c0843/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 552,
+      "path": "pipeline_gbt_weather/stages/2_VectorAssembler_9badfe3c0843/metadata/part-00000-aa47a8b3-0eba-4728-8478-5eb63660f39f-c000.txt",
+      "sha256": "4721a55964c29795b71f304f2e4fbef7250cec800c0dfb495c1f16b322743d0b"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/data/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 1240,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/data/.part-00000-1dca39e0-98b0-43d0-adfa-6d18fb4907b7-c000.snappy.parquet.crc",
+      "sha256": "a64f1a70801dcba574a1315c59fb41a4fa4b087966523c1653e639de8dd966d8"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/data/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 157581,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/data/part-00000-1dca39e0-98b0-43d0-adfa-6d18fb4907b7-c000.snappy.parquet",
+      "sha256": "4328df6cc46e4b4d6fe64596b7df44a37a1185c5a52e629dbac98846657623ab"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/metadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 16,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/metadata/.part-00000-47eb672a-c730-4ae9-8c65-cc78c6a45e8e-c000.txt.crc",
+      "sha256": "bfa827ef5de4bca67dbd49def2ad7d00649390c11e7b59e429fdfdb2f0fab276"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/metadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 861,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/metadata/part-00000-47eb672a-c730-4ae9-8c65-cc78c6a45e8e-c000.txt",
+      "sha256": "754387dde30ae0f009cce77b4e03a196aaa89145a595b8205e9cec67f33f4174"
+    },
+    {
+      "bytes": 8,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/treesMetadata/._SUCCESS.crc",
+      "sha256": "1d44f510ec2ed7595badbec80583316defc14e8dd89130d719724149adfaa07d"
+    },
+    {
+      "bytes": 44,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/treesMetadata/.part-00000-8978a6d2-67c3-4709-a3cb-4081d92de05c-c000.snappy.parquet.crc",
+      "sha256": "0c4087b656776746c45ea69ac58065f2cd8d5832664bcc7014fd7144c5fafc25"
+    },
+    {
+      "bytes": 0,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/treesMetadata/_SUCCESS",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 4292,
+      "path": "pipeline_gbt_weather/stages/3_GBTRegressor_fb19ed3c60d5/treesMetadata/part-00000-8978a6d2-67c3-4709-a3cb-4081d92de05c-c000.snappy.parquet",
+      "sha256": "7f0307e9fbffb6b8696609be3ef963e177eb5b4757345ef4ea5fc5fc7ff46541"
+    },
+    {
+      "bytes": 3415,
+      "path": "pretrip_v2_calendar.json",
+      "sha256": "00dd5c8f442955879ade701c726106f12ef0e03669f818c5c06c6a5b067decac"
+    },
+    {
+      "bytes": 31463,
+      "path": "training_report.json",
+      "sha256": "00fdd116d47fe3be118ac2f7b2a0c1c84af5b2639cbf2d81da9a22d6e0be880d"
+    },
+    {
+      "bytes": 12331,
+      "path": "zones.csv",
+      "sha256": "1a99e105092230f8620f301edcca7f80d3080642ff404d28ed957d3fa222c8ed"
+    }
+  ],
+  "version": "gold-v3-serving-bundle-1"
+}

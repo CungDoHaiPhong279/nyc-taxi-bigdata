@@ -28,8 +28,8 @@ class PredictionError(RuntimeError):
 def selected_model_version() -> str:
     """Explicit opt-in only; an invalid setting must never fall back to V1."""
     value = os.environ.get("FARE_MODEL_VERSION", "v1")
-    if value not in {"v1", "v2.2"}:
-        raise PredictionError("FARE_MODEL_VERSION phải là v1 hoặc v2.2; không tự chọn mô hình thay thế.")
+    if value not in {"v1", "v2.2", "gold-v3"}:
+        raise PredictionError("FARE_MODEL_VERSION phải là v1, v2.2 hoặc gold-v3; không tự chọn mô hình thay thế.")
     return value
 
 

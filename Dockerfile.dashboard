@@ -14,11 +14,12 @@ COPY src/nyc_taxi/__init__.py ./src/nyc_taxi/__init__.py
 COPY src/nyc_taxi/common/__init__.py src/nyc_taxi/common/config.py ./src/nyc_taxi/common/
 COPY src/nyc_taxi/database/__init__.py src/nyc_taxi/database/postgres.py ./src/nyc_taxi/database/
 COPY src/nyc_taxi/dashboard/ ./src/nyc_taxi/dashboard/
+COPY src/nyc_taxi/monitoring/ ./src/nyc_taxi/monitoring/
 # Shared, stdlib-only V2 feature/calendar contract; no Spark/Java/model in web.
 COPY src/nyc_taxi/ml/__init__.py src/nyc_taxi/ml/pretrip_features.py src/nyc_taxi/ml/pretrip_serving_contract.py ./src/nyc_taxi/ml/
 COPY assets/taxi_zones/ ./assets/taxi_zones/
 COPY config/config.yaml ./config/config.yaml
-COPY config/pretrip_v2_contract.json config/pretrip_v2_calendar.json ./config/
+COPY config/pretrip_v2_contract.json config/pretrip_v2_calendar.json config/gold_ml_v3_contract.json ./config/
 COPY dashboard/app.py ./dashboard/app.py
 COPY scripts/check_dashboard_package.py ./scripts/check_dashboard_package.py
 

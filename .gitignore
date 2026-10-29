@@ -38,6 +38,7 @@ data/ml/**
 !data/ml/**/preparation_report.json
 
 # Runtime output and model artifacts
+backups/
 logs/**
 !logs/.gitkeep
 models/**
