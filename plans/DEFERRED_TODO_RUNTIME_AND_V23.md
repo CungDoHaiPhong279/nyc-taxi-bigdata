@@ -5,28 +5,15 @@ Chủ dự án đã quyết định **tự làm sau** 2 hạng mục dưới đ�
 
 ---
 
-## Phần 2 — Đưa các sửa đổi lên hệ thống đang chạy (Docker + PostgreSQL)
+## Phần 2 — Đưa các sửa đổi lên hệ thống đang chạy (Docker + PostgreSQL) — ✅ ĐÃ HOÀN TẤT (2026-10-29)
 
-**Hiện trạng (2026-10-29):** mã nguồn trên `main` đã có các sửa đổi, nhưng hệ thống đang chạy **vẫn dùng bản cũ**:
+**Kết quả triển khai (2026-10-29):**
 
-| Thành phần | Trạng thái | Ảnh hưởng |
+| Thành phần | Trạng thái sau cập nhật | Kết quả kiểm chứng |
 |---|---|---|
-| `nyc-taxi-bigdata-dashboard-1` (`127.0.0.1:8501`) | Image cũ, chạy liên tục trên 27 giờ | Chưa có: giờ hẹn mặc định +30 phút, thông báo lỗi giờ tiếng Việt, ghi chú khi bật `PRETRIP_ALLOW_UNSEEN_ZONES` |
-| `nyc-taxi-bigdata-fare-inference-1` | Image cũ | Chưa có: làm nóng Spark khi khởi động, fallback zone chưa thấy, baseline reference |
-| `nyc-taxi-postgres` | Chưa có index `fact_trip_dashboard_bucket_idx` | Trang Analytics vẫn chậm khi cache còn lạnh |
-
-### Các bước đề xuất
-1. **Tạo index** (an toàn, có `IF NOT EXISTS`, không đổi dữ liệu):
-   - Định nghĩa: [`sql/postload/create_indexes.sql`](../sql/postload/create_indexes.sql) dòng 15–17.
-   - Chạy file SQL trên vào `nyc-taxi-postgres` bằng `psql` (bảng lớn nên có thể mất vài phút; nên chạy lúc ít người dùng).
-     Có thể thêm `CONCURRENTLY` khi chạy tay để không khóa ghi.
-   - Kiểm tra: `SELECT indexname FROM pg_indexes WHERE indexname='fact_trip_dashboard_bucket_idx';`
-2. **Build lại image và khởi động lại 2 container dashboard + fare-inference**, theo đúng quy trình có sẵn
-   (`scripts/pretrip_app_images.ps1` / `scripts/setup_pretrip_v22.ps1` / compose `docker-compose.pretrip-app.yml`).
-   Image identity được tính từ hash nguồn, nên sẽ có tag mới. **Không** xóa volume `postgres`/`mlflow`.
-3. **Smoke test sau khi triển khai:** `/ready` của inference, mở `:8501`, chạy thử "Hẹn giờ" và một tuyến bình thường.
-   Lần dự đoán đầu tiên phải nhanh hơn trước nhờ làm nóng Spark.
-4. (Tùy chọn) Bật `PRETRIP_ALLOW_UNSEEN_ZONES=1` cho inference + dashboard nếu chấp nhận dự đoán kém chính xác hơn ở zone chưa có trong dữ liệu huấn luyện. Mặc định vẫn là `0`.
+| `nyc-taxi-bigdata-dashboard-1` (`127.0.0.1:8501`) | Đã build lại image `nyc-taxi-dashboard:pretrip-v22-24fab1e` (bản cũ lưu tại `-prev`) và recreate container (`3f646fa7441b`, `healthy`) | Đã có giờ hẹn mặc định +30 phút, thông báo lỗi giờ tiếng Việt chi tiết, ghi chú khi bật `PRETRIP_ALLOW_UNSEEN_ZONES` |
+| `nyc-taxi-bigdata-fare-inference-1` | Đã build lại image `nyc-taxi-inference:pretrip-v22-bc808337` (bản cũ lưu tại `-prev`) và recreate container (`66d15376b1df`, `healthy`) | Đã làm nóng Spark khi khởi động: độ trễ dự đoán đầu tiên giảm từ ~4.300 ms xuống **1.294 ms** (`fare_amount_usd = 11.57 USD`), `scripts/start.ps1 -WithInference -ModelVersion v2.2` đạt `exit 0` (0 drift) |
+| `nyc-taxi-postgres` | Đã tạo index `analytics.fact_trip_dashboard_bucket_idx` (`1131 MB`) và chạy `ANALYZE analytics.fact_trip` | Hỗ trợ Index-Only Scan cho các truy vấn lọc `source_year, source_month, pickup_hour, pickup_location_id` |
 
 ---
 
