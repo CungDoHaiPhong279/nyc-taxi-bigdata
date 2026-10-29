@@ -21,6 +21,17 @@ MODULES = [
     "nyc_taxi.ml.train",
     "nyc_taxi.ml.evaluate",
     "nyc_taxi.ml.predict",
+    "nyc_taxi.ml.pilot_model",
+    "nyc_taxi.ml.inference",
+    "nyc_taxi.ml.pretrip_features",
+    "nyc_taxi.ml.pretrip_serving_contract",
+    "nyc_taxi.ml.pretrip_training_model",
+    "nyc_taxi.ml.pretrip_holdout_model",
+    "nyc_taxi.ml.pretrip_inference",
+    "nyc_taxi.dashboard.queries",
+    "nyc_taxi.dashboard.prediction",
+    "nyc_taxi.dashboard.pretrip_prediction",
+    "nyc_taxi.dashboard.route_fare",
 ]
 
 

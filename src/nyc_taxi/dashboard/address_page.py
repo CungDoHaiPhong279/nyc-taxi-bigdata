@@ -406,8 +406,14 @@ def render_page() -> None:
         with st.expander("Chi tiết mô hình và yêu cầu đã gửi"):
             st.text(f"{stored['pickup']['label']} → {stored['dropoff']['label']}")
             st.caption(f"{stored['pickup_datetime']} NYC")
-            st.write("V2.2 dùng vùng/thời gian; khoảng cách tuyến chỉ tham khảo, không được đưa vào model. Chính sách phục vụ từ chối category chưa thấy theo từng vai trò. "
-                     "MAE August giữ nguyên đủ rows, không phải bảo đảm sai số hiện tại hoặc từng chuyến."
+            pretrip_policy_note = (
+                "Chính sách phục vụ dùng unknown bucket (__unknown) kèm cảnh báo cho vùng chưa thấy trong tập train. "
+                if os.environ.get("PRETRIP_ALLOW_UNSEEN_ZONES", "0") == "1"
+                else "Chính sách phục vụ từ chối category chưa thấy theo từng vai trò. "
+            )
+            st.write("V2.2 dùng vùng/thời gian; khoảng cách tuyến chỉ tham khảo, không được đưa vào model. "
+                     + pretrip_policy_note
+                     + "MAE August giữ nguyên đủ rows, không phải bảo đảm sai số hiện tại hoặc từng chuyến."
                      if stored.get("model_version") == "v2.2" else
                      "Mô hình lịch sử 2025; quãng đường ô tô dự kiến có thể khác quãng đường đồng hồ taxi thực tế. "
                      "MAE lịch sử không bảo đảm sai số hiện tại hoặc sai số của từng chuyến.")

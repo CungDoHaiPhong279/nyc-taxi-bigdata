@@ -14,17 +14,24 @@ FEATURE_COLUMNS = [
     "trip_distance",
     "passenger_count",
     "pickup_hour",
-    "day_of_week",
-    "month",
+    "pickup_day_of_week",
+    "pickup_month",
     "is_weekend",
     "is_holiday",
     "pickup_location_id",
     "dropoff_location_id",
-    "temperature",
+    "temperature_2m",
     "precipitation",
-    "snow",
-    "wind_speed",
+    "snowfall",
+    "wind_speed_10m",
 ]
+LEGACY_COLUMN_ALIASES = {
+    "pickup_day_of_week": "day_of_week",
+    "pickup_month": "month",
+    "temperature_2m": "temperature",
+    "snowfall": "snow",
+    "wind_speed_10m": "wind_speed",
+}
 TARGET_COLUMN = "fare_amount"
 
 # Post-trip fields such as total_amount and tip_amount are deliberately excluded
@@ -33,11 +40,20 @@ TARGET_COLUMN = "fare_amount"
 
 def build_features(dataset: "pd.DataFrame") -> tuple["pd.DataFrame", "pd.Series"]:
     """Select the approved predictors and target from an engineered gold dataset."""
-    required = [*FEATURE_COLUMNS, TARGET_COLUMN]
-    missing = [column for column in required if column not in dataset.columns]
+    selected_columns: list[str] = []
+    missing: list[str] = []
+    for column in FEATURE_COLUMNS:
+        if column in dataset.columns:
+            selected_columns.append(column)
+        elif LEGACY_COLUMN_ALIASES.get(column) in dataset.columns:
+            selected_columns.append(LEGACY_COLUMN_ALIASES[column])
+        else:
+            missing.append(column)
+    if TARGET_COLUMN not in dataset.columns:
+        missing.append(TARGET_COLUMN)
     if missing:
         raise ValueError(f"Dataset is missing required columns: {', '.join(missing)}")
 
-    logger.info("Selected %d features and target %s", len(FEATURE_COLUMNS), TARGET_COLUMN)
-    return dataset[FEATURE_COLUMNS].copy(), dataset[TARGET_COLUMN].copy()
+    logger.info("Selected %d features and target %s", len(selected_columns), TARGET_COLUMN)
+    return dataset[selected_columns].copy(), dataset[TARGET_COLUMN].copy()
 
