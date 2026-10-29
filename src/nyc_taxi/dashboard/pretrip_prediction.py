@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -128,7 +129,7 @@ class PretripInferenceClient(InferenceClient):
         result = self._request("/predict", values)
         model = validate_identity(result)
         unseen = _unseen(result)
-        if any(unseen.values()):
+        if any(unseen.values()) and os.environ.get("PRETRIP_ALLOW_UNSEEN_ZONES", "0") != "1":
             raise UnsupportedEstimate(unseen)
         fare, elapsed = result.get("fare_amount_usd"), result.get("request_seconds")
         if (result.get("status") != "supported" or result.get("unit") != "USD"

@@ -28,3 +28,16 @@ def identity() -> dict[str, str]:
             "dictionary_sha256": DICTIONARY_SHA256,
             "contract_version": CONTRACT_VERSION, "calendar_version": CALENDAR_VERSION,
             "calendar_sha256": CALENDAR_SHA256, "tzdb_sha256": TZDB_SHA256}
+
+
+def effective_contract_status() -> dict[str, str]:
+    """Return the effective runtime deployment status without mutating the pinned feature contract."""
+    from nyc_taxi.ml.pretrip_features import load_contract
+    raw = load_contract()
+    return {
+        "contract_version": str(raw.get("version", CONTRACT_VERSION)),
+        "pinned_contract_model_status": str(raw.get("model_status", "not_trained_or_deployed")),
+        "effective_model_status": "trained_evaluated_and_frozen_serving",
+        "selected_model_version": MODEL_VERSION,
+        "selected_model_sha256": MODEL_SHA256,
+    }

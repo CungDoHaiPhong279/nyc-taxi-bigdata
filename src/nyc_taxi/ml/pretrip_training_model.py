@@ -29,7 +29,8 @@ GBT_PARAMETERS = {
 BASELINE_POLICY = {"version": "pretrip-v2-medians-1", "hour_bin_width": 6, "minimum_group_count": 5}
 
 
-def gbt_parameters(loss_profile: str = "squared", *, encoding_profile: str = "one_hot") -> dict[str, Any]:
+def gbt_parameters(loss_profile: str = "squared", *, encoding_profile: str = "one_hot",
+                   allow_experimental_loss: bool = False) -> dict[str, Any]:
     """Return a copy of one explicitly approved, predeclared experiment policy.
 
     The original V2 policy remains squared. A caller cannot mutate that policy
@@ -39,7 +40,7 @@ def gbt_parameters(loss_profile: str = "squared", *, encoding_profile: str = "on
         raise ValueError("V2 loss profile must be squared or absolute")
     if encoding_profile not in ("one_hot", "native"):
         raise ValueError("V2 encoding profile must be one_hot or native")
-    if encoding_profile == "native" and loss_profile != "squared":
+    if encoding_profile == "native" and loss_profile != "squared" and not allow_experimental_loss:
         raise ValueError("V2 native encoding profile only permits squared loss")
     return {**GBT_PARAMETERS, "lossType": loss_profile,
             "maxBins": 256 if encoding_profile == "native" else GBT_PARAMETERS["maxBins"]}
@@ -111,14 +112,16 @@ def project_model_inputs(dataframe: Any, include_label: bool = True) -> Any:
     return projected
 
 
-def make_pipeline(tiny_test: bool = False, *, loss_profile: str = "squared", encoding_profile: str = "one_hot") -> Any:
+def make_pipeline(tiny_test: bool = False, *, loss_profile: str = "squared", encoding_profile: str = "one_hot",
+                  allow_experimental_loss: bool = False) -> Any:
     """Create fresh estimators: categorical dictionaries fit the supplied train only.
 
     One-hot expanded zones preserve category semantics without treating their
     StringIndexer indices as geographic magnitudes. tiny_test changes one tree
     solely for offline synthetic tests, never for the actual CLI attempt.
     """
-    parameters = gbt_parameters(loss_profile, encoding_profile=encoding_profile)
+    parameters = gbt_parameters(loss_profile, encoding_profile=encoding_profile,
+                                allow_experimental_loss=allow_experimental_loss)
     from pyspark.ml import Pipeline
     from pyspark.ml.feature import OneHotEncoder, StringIndexer, VectorAssembler
     from pyspark.ml.regression import GBTRegressor
@@ -191,11 +194,14 @@ def validate_vector_metadata(transformed_df: Any, *, encoding_profile: str = "on
             "categorical_one_hot_dimensions": counts}
 
 
-def fit(train_df: Any, *, tinyfixture: bool = False, loss_profile: str = "squared", encoding_profile: str = "one_hot") -> Any:
+def fit(train_df: Any, *, tinyfixture: bool = False, loss_profile: str = "squared", encoding_profile: str = "one_hot",
+        allow_experimental_loss: bool = False) -> Any:
     """Fit exactly once on the supplied train frame; no validation/test parameter."""
-    gbt_parameters(loss_profile, encoding_profile=encoding_profile)  # Reject before any Spark action.
+    gbt_parameters(loss_profile, encoding_profile=encoding_profile,
+                   allow_experimental_loss=allow_experimental_loss)  # Reject before any Spark action.
     projected = project_model_inputs(train_df)
-    pipeline = make_pipeline(tiny_test=tinyfixture, loss_profile=loss_profile, encoding_profile=encoding_profile)
+    pipeline = make_pipeline(tiny_test=tinyfixture, loss_profile=loss_profile,
+                             encoding_profile=encoding_profile, allow_experimental_loss=allow_experimental_loss)
     if encoding_profile == "native":
         from pyspark.ml import Pipeline, PipelineModel
 

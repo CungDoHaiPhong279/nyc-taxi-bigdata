@@ -187,6 +187,9 @@ def ui(monkeypatch):
     from nyc_taxi.dashboard import fare_page, queries
 
     st.cache_data.clear()
+    for name in ("NYC_TAXI_DASHBOARD_MODE", "FARE_MODEL_VERSION", "FARE_ADDRESS_ENABLED",
+                 "FARE_ADDRESS_ALLOW_NETWORK", "MAPBOX_ACCESS_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
     ready = Mock(return_value=deepcopy(READY))
     zones = Mock(return_value={**IDENTITY, "zones": sorted(deepcopy(ZONES["zones"]), key=lambda row: row["location_id"])})
     predict = Mock(return_value=deepcopy(RESULT))

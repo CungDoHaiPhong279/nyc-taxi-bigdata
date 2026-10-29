@@ -13,11 +13,18 @@ import pytest
 from nyc_taxi.dashboard.prediction import PredictionError, selected_model_version
 from nyc_taxi.dashboard.pretrip_prediction import PretripInferenceClient, UnsupportedEstimate
 from nyc_taxi.dashboard.route_fare import PretripRouteFareCoordinator, RouteFareError, execute_submission
+from nyc_taxi.ml import pretrip_features, pretrip_serving_contract as contract
 from nyc_taxi.ml.pretrip_features import create_submission
 from nyc_taxi.ml.pretrip_serving_contract import identity
 
 
 NOW = datetime(2026, 10, 27, 14, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def pinned_timezone(monkeypatch):
+    monkeypatch.setattr(pretrip_features, "timezone_identity",
+                        lambda: {"timezone": "America/New_York", "tzif_sha256": contract.TZDB_SHA256})
 
 
 def request():

@@ -85,9 +85,15 @@ def test_output_guard_refuses_existing_attempt_without_changing_it(project):
     assert sentinel.read_text(encoding="utf-8") == "preserve"
 
 
-def test_runtime_symlink_cannot_escape_project(project, tmp_path_factory):
+def test_runtime_symlink_cannot_escape_project(project, tmp_path_factory, monkeypatch):
     outside = tmp_path_factory.mktemp("outside")
-    (project / ".sandbox").symlink_to(outside, target_is_directory=True)
+    link = project / ".sandbox"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        link.mkdir()
+        original_is_symlink = Path.is_symlink
+        monkeypatch.setattr(Path, "is_symlink", lambda self: self == link or original_is_symlink(self))
     with pytest.raises(pilot.PilotPlanError, match="runtime_symlink_or_junction"):
         pilot.guarded_output(Path(".sandbox/pretrip-v2/new"), project)
     assert not (outside / "pretrip-v2").exists()

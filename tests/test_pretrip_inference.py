@@ -302,3 +302,25 @@ def test_factory_keeps_v1_default_compatible_and_selects_one_predictor(monkeypat
         instance.close()
     with pytest.raises(ValueError, match="Unsupported"):
         transport.make_predictor("latest", *args)
+
+
+def test_opt_in_unseen_zones_and_baseline_reference_and_contract_status(predictor, monkeypatch):
+    status = contract.effective_contract_status()
+    assert status["effective_model_status"] == "trained_evaluated_and_frozen_serving"
+    assert status["selected_model_version"] == "v2.2"
+    predictor.zones = [
+        {"location_id": 1, "zone": "Newark Airport", "borough": "EWR", "supported_pickup": False, "supported_dropoff": False},
+        {"location_id": 161, "zone": "Midtown Center", "borough": "Manhattan", "supported_pickup": True, "supported_dropoff": False},
+        {"location_id": 237, "zone": "Upper East Side South", "borough": "Manhattan", "supported_pickup": False, "supported_dropoff": True},
+    ]
+    predictor.baselines = {
+        "version": "pretrip-v2-medians-1", "hour_bin_width": 6, "minimum_group_count": 5,
+        "global_median": 16.5,
+        "pair_groups": [{"pickup_zone": "161", "dropoff_zone": "237", "count": 10, "median": 14.0}],
+        "time_groups": [],
+    }
+    derived = serving.validate_request(payload(), now=NOW)
+    assert predictor.predict_baseline_reference(derived) == {"global_median_usd": 16.5, "hierarchical_median_usd": 14.0}
+    monkeypatch.setenv("PRETRIP_ALLOW_UNSEEN_ZONES", "1")
+    zresp = predictor.zone_response()
+    assert zresp["pickup_location_ids"] == [161, 237] and zresp["dropoff_location_ids"] == [161, 237]

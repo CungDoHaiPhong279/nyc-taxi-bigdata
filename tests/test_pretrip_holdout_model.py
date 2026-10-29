@@ -146,13 +146,22 @@ def test_unlisted_pipeline_file_rejected_before_spark_discovery(candidate):
         holdout.audit_candidate(root)
 
 
-def test_member_symlink_is_not_followed(candidate):
+def test_member_symlink_is_not_followed(candidate, monkeypatch):
     root, _ = candidate
     path = root / "pipeline/symlink.txt"
     try:
         path.symlink_to(root / "training_config.json")
     except OSError:
-        pytest.skip("Synthetic symlink creation unavailable on this host")
+        import stat
+        from types import SimpleNamespace
+        path.write_text("{}")
+        original_lstat = Path.lstat
+        monkeypatch.setattr(
+            Path,
+            "lstat",
+            lambda self: SimpleNamespace(st_mode=stat.S_IFLNK | 0o777, st_size=2, st_file_attributes=0)
+            if self == path else original_lstat(self),
+        )
     with pytest.raises(ValueError, match="link_rejected"):
         holdout.audit_candidate(root)
 

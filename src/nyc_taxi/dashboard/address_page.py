@@ -142,6 +142,35 @@ def build_pretrip_submission(*, pickup_id: int, dropoff_id: int, time_selection:
                              fold=time_selection.get("fold"), now=submit_clock(), submission_id=submission_id)
 
 
+def format_pretrip_time_error(error: ValueError, time_selection: dict | None = None,
+                              *, now: datetime | None = None) -> str:
+    """Return a specific Vietnamese validation message for NYC pickup time errors."""
+    text = str(error)
+    if "does not exist" in text:
+        return ("Thời gian không hợp lệ: giờ đón rơi vào khoảng nhảy giờ DST mùa xuân "
+                "(giờ không tồn tại tại New York); vui lòng chọn giờ khác.")
+    if "Ambiguous" in text or "fold" in text:
+        return ("Thời gian không hợp lệ: giờ DST bị lặp cần chọn Lần thứ nhất/Lần thứ hai "
+                "(hoặc lựa chọn lần lặp không hợp lệ cho giờ thường).")
+    if "outside pinned calendar" in text:
+        return "Thời gian không hợp lệ: ngày đón nằm ngoài phạm vi calendar 2025–2027 đã pin."
+    if "submit tolerance and seven-day horizon" in text and isinstance(time_selection, dict):
+        scheduled_raw = time_selection.get("scheduled_local")
+        if isinstance(scheduled_raw, str):
+            try:
+                from zoneinfo import ZoneInfo
+                reference = now if now is not None else datetime.now(timezone.utc)
+                scheduled_dt = datetime.fromisoformat(scheduled_raw).replace(tzinfo=ZoneInfo("America/New_York"))
+                if (scheduled_dt.astimezone(timezone.utc) - reference).total_seconds() < 0:
+                    return ("Thời gian không hợp lệ: giờ đón đã qua so với hiện tại New York "
+                            "(chỉ cho phép trễ tối đa 60 giây). Hãy chọn giờ trong tương lai hoặc chọn 'Đi ngay'.")
+                return "Thời gian không hợp lệ: chỉ hỗ trợ hẹn trước tối đa 7 ngày tính từ hiện tại New York."
+            except ValueError:
+                pass
+    return ("Thời gian không hợp lệ: hẹn trong 7 ngày và calendar đã pin; "
+            "giờ DST bị lặp cần chọn lần, giờ không tồn tại bị từ chối.")
+
+
 def selection_support(state: dict) -> dict | None:
     """Keep at most one local support result per field in this user's session.
 
@@ -274,19 +303,26 @@ def render_page() -> None:
         if mode != "now":
             day_col, hour_col, minute_col = st.columns([2, 1, 1])
             if pretrip:
+                from datetime import timedelta
                 from zoneinfo import ZoneInfo
                 from nyc_taxi.ml.pretrip_features import load_calendar
                 calendar = load_calendar()
-                today = datetime.now(ZoneInfo("America/New_York")).date()
-                default_day = min(max(today, calendar.coverage_start), calendar.coverage_end)
+                default_schedule = st.session_state.get("_pretrip_default_schedule")
+                if default_schedule is None:
+                    target_nyc = datetime.now(ZoneInfo("America/New_York")) + timedelta(minutes=30)
+                    default_day = min(max(target_nyc.date(), calendar.coverage_start), calendar.coverage_end)
+                    default_schedule = (default_day, target_nyc.hour, target_nyc.minute)
+                    st.session_state["_pretrip_default_schedule"] = default_schedule
+                default_day, default_hour, default_minute = default_schedule
                 minimum, maximum = calendar.coverage_start, calendar.coverage_end
             else:
                 default_day, minimum, maximum = date(2025, 6, 15), date(2025, 1, 1), date(2025, 6, 30)
+                default_hour, default_minute = 12, 0
             pickup_date = day_col.date_input("Ngày đón", value=default_day, min_value=minimum,
                                              max_value=maximum, format="DD/MM/YYYY", key="address_pickup_date")
-            hour = hour_col.selectbox("Giờ (00–23)", range(24), index=12,
+            hour = hour_col.selectbox("Giờ (00–23)", range(24), index=default_hour,
                                       format_func=lambda value: f"{value:02d}", key="address_pickup_hour")
-            minute = minute_col.selectbox("Phút (00–59)", range(60),
+            minute = minute_col.selectbox("Phút (00–59)", range(60), index=default_minute,
                                           format_func=lambda value: f"{value:02d}", key="address_pickup_minute")
             if pretrip:
                 fold_label = st.selectbox("Khi giờ New York bị lặp do DST", ["Tự động nếu không bị lặp", "Lần thứ nhất", "Lần thứ hai"], key="address_pretrip_fold")
@@ -325,8 +361,8 @@ def render_page() -> None:
                     st.session_state.address_fare_error = outcome.error
             except (AddressSelectionError, MapboxError, GeometryError):
                 st.session_state.address_fare_error = "Chưa đủ cấu hình API/geometry đã pin. Chuẩn bị Chặng 2B trước khi dùng live."
-            except ValueError:
-                st.session_state.address_fare_error = "Thời gian không hợp lệ: hẹn trong 7 ngày và calendar đã pin; giờ DST bị lặp cần chọn lần, giờ không tồn tại bị từ chối."
+            except ValueError as error:
+                st.session_state.address_fare_error = format_pretrip_time_error(error, payload.get("time_selection"))
             except Exception:
                 st.session_state.address_fare_error = "Không thể ước tính cước. Không có giá thay thế."
 

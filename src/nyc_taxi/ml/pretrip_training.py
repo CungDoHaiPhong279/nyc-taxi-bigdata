@@ -67,8 +67,13 @@ def artifact_budget(prior_task_bytes: int) -> int:
 
 
 def telemetry() -> dict[str, Any]:
-    import resource
-    result: dict[str, Any] = {"python_peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
+    result: dict[str, Any] = {}
+    try:
+        import resource
+    except ModuleNotFoundError:
+        result["python_peak_rss_kib"] = None
+    else:
+        result["python_peak_rss_kib"] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     for name in ("memory.peak", "memory.current", "memory.events", "memory.max", "memory.swap.max", "cpu.max", "pids.max"):
         path = Path("/sys/fs/cgroup") / name
         if path.is_file():
@@ -100,7 +105,8 @@ def evaluate_gate(evaluation: dict[str, Any]) -> dict[str, Any]:
 def claim_scratch(path: Path) -> Path:
     """Claim one new private child; never clean a pre-existing directory."""
     target = path.absolute()
-    if ".." in target.parts or target == Path("/tmp") or not target.is_relative_to(Path("/tmp")):
+    tmp_root = Path("/tmp").absolute()
+    if ".." in path.parts or ".." in target.parts or target == tmp_root or not target.is_relative_to(tmp_root):
         raise ValueError("training_scratch_must_be_private_tmp_child")
     if any(parent.is_symlink() for parent in (target, *target.parents)):
         raise ValueError("training_scratch_symlink_rejected")

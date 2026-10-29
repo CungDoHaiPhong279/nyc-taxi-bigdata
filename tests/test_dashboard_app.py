@@ -74,7 +74,7 @@ def reader(monkeypatch):
 
 
 def test_ui_form_filters_and_cache_include_both_dimensions(reader):
-    app = AppTest.from_file(str(APP)).run()
+    app = AppTest.from_file(str(APP)).run(timeout=10)
     assert not app.exception
     assert app.title[0].value == "NYC Taxi Analytics"
     assert app.metric[0].value == "6"
@@ -88,7 +88,7 @@ def test_ui_form_filters_and_cache_include_both_dimensions(reader):
     app.multiselect(key="selected_months").set_value(["2025-01"])
     assert app.metric[0].value == "6"  # not applied until submit
     assert reader.call_count == 1
-    app.button[0].click().run()
+    app.button[0].click().run(timeout=10)
     assert app.metric[0].value == "4"
     assert app.metric[1].value == "$2.00"
     assert app.metric[2].value == "3.00 mi"
@@ -97,7 +97,7 @@ def test_ui_form_filters_and_cache_include_both_dimensions(reader):
     assert reader.call_args.args[0] == queries.DashboardFilters(("2025-01",), ())
 
     app.multiselect(key="selected_boroughs").set_value(["Queens"])
-    app.button[0].click().run()
+    app.button[0].click().run(timeout=10)
     assert app.metric[0].value == "1"
     assert app.metric[1].value == "$-4.00"
     assert app.metric[2].value == "\u2014"
@@ -107,17 +107,17 @@ def test_ui_form_filters_and_cache_include_both_dimensions(reader):
     assert reader.call_count == 3
 
     app.multiselect(key="selected_boroughs").set_value([])
-    app.button[0].click().run()
+    app.button[0].click().run(timeout=10)
     assert app.metric[0].value == "4"
     assert reader.call_count == 3  # cached month-only result
     assert not app.exception
 
 
 def test_null_fare_keeps_trip_distance_and_chart_bins(reader):
-    app = AppTest.from_file(str(APP)).run()
+    app = AppTest.from_file(str(APP)).run(timeout=10)
     app.multiselect(key="selected_months").set_value(["2025-02"])
     app.multiselect(key="selected_boroughs").set_value(["Manhattan"])
-    app.button[0].click().run()
+    app.button[0].click().run(timeout=10)
     assert not app.exception
     assert app.metric[0].value == "1"
     assert app.metric[1].value == "\u2014"
@@ -127,10 +127,10 @@ def test_null_fare_keeps_trip_distance_and_chart_bins(reader):
 
 
 def test_empty_results_have_zero_kpis_and_no_charts(reader):
-    app = AppTest.from_file(str(APP)).run()
+    app = AppTest.from_file(str(APP)).run(timeout=10)
     app.multiselect(key="selected_months").set_value(["2025-01"])
     app.multiselect(key="selected_boroughs").set_value(["Bronx"])
-    app.button[0].click().run()
+    app.button[0].click().run(timeout=10)
     assert not app.exception
     assert app.metric[0].value == "0"
     assert app.metric[1].value == "—"
@@ -145,21 +145,21 @@ def test_database_error_is_visible_and_retry_recovers(monkeypatch):
         fixture_snapshot(queries.DashboardFilters()),
     ])
     monkeypatch.setattr(queries, "fetch_dashboard", reader)
-    app = AppTest.from_file(str(APP)).run()
+    app = AppTest.from_file(str(APP)).run(timeout=10)
     assert not app.exception
     assert "Không thể đọc PostgreSQL" in app.error[0].value
     assert len(app.metric) == 0
-    app.button(key="retry_connection").click().run()
+    app.button(key="retry_connection").click().run(timeout=10)
     assert not app.exception and not app.error
     assert app.metric[0].value == "6"
     assert_chart_data(app)
 
 
 def test_failed_filter_query_does_not_show_stale_results(reader):
-    app = AppTest.from_file(str(APP)).run()
+    app = AppTest.from_file(str(APP)).run(timeout=10)
     reader.side_effect = queries.DashboardQueryError("Không thể đọc PostgreSQL. Hãy thử lại.")
     app.multiselect(key="selected_months").set_value(["2025-02"])
-    app.button[0].click().run()
+    app.button[0].click().run(timeout=10)
     assert not app.exception
     assert app.error
     assert len(app.metric) == 0

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import threading
 import time
@@ -21,6 +22,11 @@ from nyc_taxi.ml.inference import InferenceError, InputError, REQUEST_TIMEOUT_SE
 from nyc_taxi.ml import pretrip_features as features
 from nyc_taxi.ml import pretrip_holdout_model as frozen
 from nyc_taxi.ml import pretrip_serving_contract as contract
+
+
+def allow_unseen_zones() -> bool:
+    """Opt-in policy allowing unseen zones to route through the fitted __unknown bucket."""
+    return os.environ.get("PRETRIP_ALLOW_UNSEEN_ZONES", "0") == "1"
 
 
 class UnsupportedCategories(InferenceError):
@@ -127,7 +133,7 @@ class FrozenPretripPredictor:
         self.model_dir, self.contract_dir, self.zones_file = model_dir, contract_dir, zones_file
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self.ready, self.status = False, "starting"
-        self.spark = self.model = self.audit = self.calendar = None
+        self.spark = self.model = self.audit = self.calendar = self.baselines = None
         self.zones = []
         self.startup_seconds = self.spark_application_id = None
         self.fit_calls = 0
@@ -144,6 +150,7 @@ class FrozenPretripPredictor:
         try:
             verified = validate_artifacts(self.model_dir, self.contract_dir, self.zones_file)
             self.audit, self.calendar = verified["audit"], verified["calendar"]
+            self.baselines = self.audit.get("baselines")
             from pyspark.sql import SparkSession
             self.spark = (SparkSession.builder.master("local[2]").appName("NYC-Taxi-Frozen-Pretrip-V22")
                 .config("spark.ui.enabled", "false").config("spark.sql.session.timeZone", features.TIMEZONE_NAME)
@@ -157,6 +164,7 @@ class FrozenPretripPredictor:
                     self.fit_calls += state["fit_calls"]
             self._known_pickup = set(self.audit["dictionaries"]["pickup_zone"])
             self._known_dropoff = set(self.audit["dictionaries"]["dropoff_zone"])
+            self._warmup()
             self.zones = verified["zones"]
             self.spark_application_id = self.spark.sparkContext.applicationId
             self.startup_seconds = round(time.perf_counter() - tick, 6)
@@ -173,18 +181,51 @@ class FrozenPretripPredictor:
                     pass
             print(json.dumps({"event": "model_load_failed", **contract.identity()}), flush=True)
 
+    def _warmup(self) -> None:
+        if (not callable(getattr(self.model, "transform", None))
+                or not callable(getattr(self.spark, "createDataFrame", None))
+                or not self._known_pickup or not self._known_dropoff):
+            return
+        sample_row = {
+            "pickup_hour_sin": 0.0, "pickup_hour_cos": 1.0,
+            "pickup_dow_sin": 0.0, "pickup_dow_cos": 1.0,
+            "is_weekend": 0.0, "is_holiday": 0.0,
+            "pickup_zone": sorted(self._known_pickup)[0],
+            "dropoff_zone": sorted(self._known_dropoff)[0],
+        }
+        with frozen.no_fit_guard() as state:
+            try:
+                self.model.transform(feature_frame(self.spark, [sample_row])).select("prediction").take(1)
+            finally:
+                self.fit_calls += state["fit_calls"]
+
+    def predict_baseline_reference(self, derived: dict) -> dict[str, float] | None:
+        """Compute global and hierarchical median baselines from the audited baselines.json."""
+        if not isinstance(self.baselines, dict):
+            return None
+        from nyc_taxi.ml.pretrip_training_model import predict_baseline
+        global_preds, hierarchical_preds = predict_baseline([derived], self.baselines)
+        return {"global_median_usd": global_preds[0], "hierarchical_median_usd": hierarchical_preds[0]}
+
     def readiness(self):
         return {"ready": self.ready, "status": self.status, "startup_seconds": self.startup_seconds,
                 "model_load_count": int(self._load_started), "fit_calls": self.fit_calls,
                 "spark_application_id": self.spark_application_id if self.ready else None, **contract.identity()}
 
     def zone_response(self):
+        if allow_unseen_zones():
+            supported_ids = [row["location_id"] for row in self.zones if row["location_id"] != 1]
+            zones = [{**row, "supported_pickup": row["location_id"] != 1, "supported_dropoff": row["location_id"] != 1}
+                     for row in self.zones]
+            return {"zones": zones, "pickup_location_ids": sorted(supported_ids),
+                    "dropoff_location_ids": sorted(supported_ids), **contract.identity()}
         return {"zones": self.zones,
                 "pickup_location_ids": sorted(map(int, self._known_pickup)),
                 "dropoff_location_ids": sorted(map(int, self._known_dropoff)), **contract.identity()}
 
-    def _predict(self, payload, derived, group_id):
+    def _predict(self, payload, derived, group_id, unseen=None):
         try:
+            unseen_flags = dict(unseen) if isinstance(unseen, dict) else {"pickup": False, "dropoff": False}
             self.spark.sparkContext.setJobGroup(group_id, "single pretrip input", interruptOnCancel=True)
             with frozen.no_fit_guard() as state:
                 try:
@@ -197,10 +238,12 @@ class FrozenPretripPredictor:
                 raise ValueError("pretrip_prediction_not_one_finite_row")
             value = float(rows[0]["prediction"])
             warnings = []
+            if any(unseen_flags.values()):
+                warnings.append("Category PU/DO chưa thấy trong train: dùng unknown bucket (__unknown) đã fit, không fit lại.")
             if value < 0:
                 warnings.append("Model returned a negative fare; not a usable quote and not clipped.")
             return {"status": "supported", "fare_amount_usd": value, "unit": "USD",
-                    "unseen_categories": {"pickup": False, "dropoff": False}, "warnings": warnings,
+                    "unseen_categories": unseen_flags, "warnings": warnings,
                     "submission": dict(payload),
                     **{name: payload[name] for name in ("submission_id", "pickup_datetime", "submitted_at", "mode")},
                     **contract.identity()}
@@ -216,7 +259,7 @@ class FrozenPretripPredictor:
             raise InferenceError("model_not_ready")
         unseen = {"pickup": derived["pickup_zone"] not in self._known_pickup,
                   "dropoff": derived["dropoff_zone"] not in self._known_dropoff}
-        if any(unseen.values()):
+        if any(unseen.values()) and not allow_unseen_zones():
             raise UnsupportedCategories(unseen)
         guard_special_rate(payload, self.zones)
         if not self._busy.acquire(blocking=False):
@@ -224,7 +267,10 @@ class FrozenPretripPredictor:
         tick = time.perf_counter()
         group_id = "pretrip-" + uuid4().hex
         try:
-            future = self._executor.submit(self._predict, dict(payload), derived, group_id)
+            future = self._executor.submit(
+                *( (self._predict, dict(payload), derived, group_id, unseen)
+                   if any(unseen.values()) else (self._predict, dict(payload), derived, group_id) )
+            )
         except Exception:
             self._busy.release()
             raise InferenceError("service_unavailable") from None

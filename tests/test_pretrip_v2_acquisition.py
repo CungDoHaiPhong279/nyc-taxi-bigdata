@@ -331,7 +331,7 @@ def test_footer_inspection_never_reads_record_batches(project, monkeypatch):
     assert acquisition.validate_parquet_footer(path)["rows"] == 1
 
 
-def test_redirect_handler_and_runtime_path_guards(project, tmp_path_factory):
+def test_redirect_handler_and_runtime_path_guards(project, tmp_path_factory, monkeypatch):
     root, _, _ = project
     handler = acquisition._NoRedirect()
     assert handler.redirect_request(None, None, 302, None, {}, "https://invalid.example") is None
@@ -339,7 +339,14 @@ def test_redirect_handler_and_runtime_path_guards(project, tmp_path_factory):
         with pytest.raises(acquisition.AcquisitionError, match="source_path_guard_failed"):
             acquisition.guarded_source_directory(target, root)
     outside = tmp_path_factory.mktemp("outside-acquisition")
-    (root / ".sandbox").symlink_to(outside, target_is_directory=True)
+    link = root / ".sandbox"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        from pathlib import Path
+        link.mkdir(exist_ok=True)
+        original_is_symlink = Path.is_symlink
+        monkeypatch.setattr(Path, "is_symlink", lambda self: self == link or original_is_symlink(self))
     with pytest.raises(acquisition.AcquisitionError, match="source_path_guard_failed"):
         acquisition.guarded_source_directory(source_dir(root), root)
 

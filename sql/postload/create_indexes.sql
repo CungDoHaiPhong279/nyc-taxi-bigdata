@@ -12,6 +12,9 @@ CREATE INDEX IF NOT EXISTS fact_trip_weather_idx
     ON analytics.fact_trip (weather_id);
 CREATE INDEX IF NOT EXISTS fact_trip_pickup_hour_idx
     ON analytics.fact_trip (pickup_hour);
+CREATE INDEX IF NOT EXISTS fact_trip_dashboard_bucket_idx
+    ON analytics.fact_trip (source_year, source_month, pickup_hour, pickup_location_id)
+    INCLUDE (fare_amount, trip_distance);
 -- NYC local wall-clock hour is deliberately NOT unique: future fall-back DST
 -- periods may contain two different UTC observations for one local hour.
 CREATE INDEX IF NOT EXISTS dim_weather_local_hour_idx

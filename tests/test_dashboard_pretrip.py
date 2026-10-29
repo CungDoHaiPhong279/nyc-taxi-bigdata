@@ -268,3 +268,23 @@ def test_failed_metadata_load_is_not_cached_and_drift_does_not_use_old_metadata(
     assert app.button(key="address_estimate_submit").disabled
     router.directions.assert_not_called()
     predictor.predict.assert_not_called()
+
+
+def test_format_pretrip_time_error_distinguishes_past_horizon_dst_and_calendar():
+    from nyc_taxi.dashboard.address_page import format_pretrip_time_error
+    past_msg = format_pretrip_time_error(
+        ValueError("Scheduled pickup must be within submit tolerance and seven-day horizon"),
+        {"mode": "scheduled", "scheduled_local": "2026-10-27T08:00:00"},
+        now=NOW,
+    )
+    assert "đã qua" in past_msg
+    future_msg = format_pretrip_time_error(
+        ValueError("Scheduled pickup must be within submit tolerance and seven-day horizon"),
+        {"mode": "scheduled", "scheduled_local": "2026-11-10T12:00:00"},
+        now=NOW,
+    )
+    assert "tối đa 7 ngày" in future_msg
+    gap_msg = format_pretrip_time_error(ValueError("Pickup local time does not exist at the NYC DST transition"))
+    assert "DST mùa xuân" in gap_msg
+    fold_msg = format_pretrip_time_error(ValueError("Ambiguous NYC pickup time requires explicit fold 0 or 1"))
+    assert "Lần thứ nhất/Lần thứ hai" in fold_msg

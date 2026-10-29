@@ -129,3 +129,8 @@ def test_nominal_metadata_does_not_accept_categories_past_fixed_bins():
         sorted(str(index) for index in range(1, 257)) + ["__unknown"])
     with pytest.raises(ValueError, match="including unknown exceed"):
         validate_vector_metadata(frame(metadata), encoding_profile="native")
+
+
+def test_experimental_native_absolute_loss_opt_in():
+    params = gbt_parameters("absolute", encoding_profile="native", allow_experimental_loss=True)
+    assert params["lossType"] == "absolute" and params["maxBins"] == 256

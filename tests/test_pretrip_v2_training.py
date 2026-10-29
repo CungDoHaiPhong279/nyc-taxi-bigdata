@@ -234,7 +234,7 @@ def test_output_requires_new_strict_v2_private_child(tmp_path, value):
     assert not (tmp_path / ".sandbox").exists()
 
 
-def test_output_existing_or_symlink_is_not_overwritten(tmp_path):
+def test_output_existing_or_symlink_is_not_overwritten(tmp_path, monkeypatch):
     directory = tmp_path / ".sandbox/pretrip-v2/existing"
     directory.mkdir(parents=True)
     sentinel = directory / "keep.txt"
@@ -242,7 +242,12 @@ def test_output_existing_or_symlink_is_not_overwritten(tmp_path):
     with pytest.raises(ValueError, match="training_output_not_new_private_attempt"):
         trainer.private_output(directory, tmp_path)
     alias = directory.parent / "alias"
-    alias.symlink_to(directory, target_is_directory=True)
+    try:
+        alias.symlink_to(directory, target_is_directory=True)
+    except OSError:
+        alias.mkdir()
+        original_is_symlink = Path.is_symlink
+        monkeypatch.setattr(Path, "is_symlink", lambda self: self == alias or original_is_symlink(self))
     with pytest.raises(ValueError, match="training_output_symlink_or_junction"):
         trainer.private_output(alias / "new", tmp_path)
     assert sentinel.read_bytes() == b"preserve"
@@ -338,12 +343,17 @@ def test_manifest_rejects_path_escape_before_opening_target(tmp_path, escape):
         trainer.verify_bundle(directory)
 
 
-def test_bundle_rejects_symlink_even_when_same_content_and_inside_bundle(tmp_path):
+def test_bundle_rejects_symlink_even_when_same_content_and_inside_bundle(tmp_path, monkeypatch):
     directory, manifest = bundle(tmp_path)
     target = directory / "baselines.json"
     backup = directory / "baseline-source.json"
     target.rename(backup)
-    target.symlink_to(backup)
+    try:
+        target.symlink_to(backup)
+    except OSError:
+        target.write_bytes(backup.read_bytes())
+        original_is_symlink = Path.is_symlink
+        monkeypatch.setattr(Path, "is_symlink", lambda self: self == target or original_is_symlink(self))
     with pytest.raises(ValueError, match="artifact_manifest_path_escape"):
         trainer.verify_bundle(directory)
 

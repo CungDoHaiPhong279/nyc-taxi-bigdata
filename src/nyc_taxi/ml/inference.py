@@ -156,6 +156,7 @@ class FrozenPredictor:
                 raise ValueError("Fitted GBT parameters mismatch")
             self._known_pickup = set(self.model.stages[0].labels)
             self._known_dropoff = set(self.model.stages[1].labels)
+            self._warmup()
             self.zones = artifacts["zones"]
             self.spark_application_id = self.spark.sparkContext.applicationId
             self.startup_seconds = round(time.perf_counter() - tick, 6)
@@ -172,6 +173,22 @@ class FrozenPredictor:
                     pass
             # A stable public failure code, never a raw path/URI/exception string.
             print(json.dumps({"event": "model_load_failed", **identity()}), flush=True)
+
+    def _warmup(self) -> None:
+        if (not callable(getattr(self.model, "transform", None))
+                or not callable(getattr(self.spark, "createDataFrame", None))
+                or not self._known_pickup or not self._known_dropoff):
+            return
+        from pyspark.sql.types import StructType, StructField, DoubleType, TimestampNTZType, IntegerType
+        from nyc_taxi.ml.pilot_model import prepare_features
+        schema = StructType([StructField("trip_distance", DoubleType(), False),
+                             StructField("pickup_datetime_local", TimestampNTZType(), False),
+                             StructField("pickup_location_id", IntegerType(), False),
+                             StructField("dropoff_location_id", IntegerType(), False)])
+        source = self.spark.createDataFrame([(1.5, datetime(2025, 6, 15, 12, 0),
+                                              int(sorted(self._known_pickup)[0]),
+                                              int(sorted(self._known_dropoff)[0]))], schema)
+        self.model.transform(prepare_features(source, include_labels=False)).select("prediction").take(1)
 
     def readiness(self) -> dict:
         return {"ready": self.ready, "status": self.status, "startup_seconds": self.startup_seconds,
