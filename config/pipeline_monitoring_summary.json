@@ -49,5 +49,47 @@
     },
     "preparation_elapsed_seconds": 28.266,
     "training_elapsed_seconds": 100.2
+  },
+  "historical_multisource_summary": {
+    "by_weather": [
+      {
+        "weather_group": "1. Trời quang / Khô ráo (0 mm/h)",
+        "trips_pct": 74.6,
+        "avg_fare_usd": 16.71,
+        "avg_distance_km": 3.17
+      },
+      {
+        "weather_group": "2. Mưa nhỏ & Mưa vừa (< 2 mm/h)",
+        "trips_pct": 23.6,
+        "avg_fare_usd": 16.87,
+        "avg_distance_km": 3.07
+      },
+      {
+        "weather_group": "3. Mưa lớn / Có tuyết (>= 2 mm/h)",
+        "trips_pct": 1.8,
+        "avg_fare_usd": 16.29,
+        "avg_distance_km": 2.79
+      }
+    ],
+    "by_calendar": [
+      {
+        "calendar_group": "1. Ngày làm việc (Thứ 2 – Thứ 6)",
+        "trips_pct": 71.3,
+        "avg_fare_usd": 16.87,
+        "avg_distance_km": 3.09
+      },
+      {
+        "calendar_group": "2. Cuối tuần (Thứ 7 & Chủ Nhật)",
+        "trips_pct": 26.1,
+        "avg_fare_usd": 16.43,
+        "avg_distance_km": 3.26
+      },
+      {
+        "calendar_group": "3. Ngày nghỉ lễ Liên bang (US Holiday)",
+        "trips_pct": 2.6,
+        "avg_fare_usd": 16.34,
+        "avg_distance_km": 3.32
+      }
+    ]
   }
 }
