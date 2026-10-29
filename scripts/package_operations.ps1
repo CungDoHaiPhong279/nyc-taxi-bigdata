@@ -44,7 +44,9 @@ function Write-PackageCheckpoint {
     Assert-NoEnvironmentReparsePoint $path
     $temporary=Join-Path $Context.StateRoot ('checkpoint.'+[guid]::NewGuid().ToString('N')+'.tmp')
     [IO.File]::WriteAllText($temporary,($State|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
-    if (Test-Path -LiteralPath $path) { [IO.File]::Replace($temporary,$path,$null) }
+    # Windows PowerShell 5.1 converts $null to an empty string for this string
+    # argument. Use a typed null: an empty backup path makes File.Replace fail.
+    if (Test-Path -LiteralPath $path) { [IO.File]::Replace($temporary,$path,[NullString]::Value) }
     else { [IO.File]::Move($temporary,$path) }
 }
 

@@ -1,7 +1,7 @@
 # Checklist bàn giao — ML P6
 
-Các mục ML P6 là mốc lịch sử; cập nhật PACKAGE P1/P2 ở cuối file thay thế trạng
-thái model distribution tương ứng, không thay đổi bằng chứng E2E chưa có.
+Các mục ML P6 là mốc lịch sử; cập nhật PACKAGE P1/P2/P3 ở cuối file thay thế
+trạng thái package tương ứng và phân biệt initial setup với rerun E2E.
 
 2026-10-24. Đây là kiểm kê kỹ thuật, không phải rubric chấm điểm: chưa tìm thấy
 đề/rubric gốc của giảng viên trong repo. Các yêu cầu từng bước và đề xuất nâng cao
@@ -12,7 +12,7 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
 | Hạng mục | Bằng chứng và phạm vi |
 |---|---|
 | Pipeline dữ liệu Jan–Jun/2025 | Raw → Bronze → Silver → Gold → PostgreSQL: checkpoint 23.886.265 facts; dimensions 265/365/4.344, manifest và [load report](postgres_load_report.json). P6 không chạy lại ETL/count toàn fact. |
-| Docker và cách ly bootstrap thử | Worker clean đã build; P6.3 fixture 30 raw → 20 facts, rerun skip/idempotency PASS; README Docker P6.2/P6.3. Không đồng nghĩa full bootstrap PASS. |
+| Docker và cách ly bootstrap thử | P6.3 fixture 30 raw → 20 facts có rerun PASS. Sau đó PACKAGE P3 chạy dữ liệu thật Jan–Jun trong `package-test`, đủ 14 stage và đạt READY; SQL khớp 23.886.265 facts, dimensions 265/365/4.344. Rerun đầy đủ của P3 chưa hoàn tất. |
 | Dashboard lịch sử | 4 KPI/3 charts, filters nhất quán, aggregate PostgreSQL READ ONLY; 23.886.265 toàn bộ, January 3.473.175, January+Manhattan 3.087.471; README P4/P4.1 và [P4 report](ML_P4_REPORT.md). |
 | ML pilot và holdout | [P2.1](ML_P2_1_REPORT.md): train110.356/validation29.979; [P3](ML_P3_REPORT.md): June27.310, GBT MAE2,25014USD/RMSE3,52047/R²0,92063, baseline MAE7,90497USD. Cohort/sampling1% seed42 cố định; overlap được kiểm trên sample, không full cohort. |
 | Frozen inference | [Model card](ML_P3_MODEL_CARD.md), [P4](ML_P4_REPORT.md)/[P5](ML_P5_REPORT.md): API8/8 + AppTest/API3/3 parity0USD, đúng preprocessing/model, no latest/fallback; demo lịch sử2025 theo distance, không routing/báo giá hiện tại. |
@@ -22,8 +22,10 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
 
 ## Chưa kiểm chứng
 
-- Bootstrap tường minh đủ sáu tháng từ clone mới: chưa chạy end-to-end acquisition
-  qua mạng → toàn ETL → nạp DB mới bằng script. P6.3 chỉ fixture nhỏ, không acquisition.
+- PACKAGE P3 đã chạy acquisition → toàn ETL → DB mới → validation bằng dữ liệu
+  thật trong môi trường tách biệt và đạt READY sau sửa lỗi/resume. Chưa kiểm
+  chứng một lượt liên tục trên máy hoàn toàn mới và chưa hoàn tất rerun để chốt
+  skip/idempotency end-to-end.
 - Browser render thật của trang inference: đã AppTest/API/HTTP, chưa browser thật.
 - Power BI: PBIX đã tồn tại và có thay đổi local chưa commit; không stage/sửa/đọc
   nội dung trong ML P6, chưa xác nhận render/refresh/nội dung bản đang sửa.
@@ -32,12 +34,10 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
 
 ## Chưa triển khai / giới hạn bàn giao
 
-- **Model bundle trên máy mới:** chưa có nơi phân phối công khai/release được
-  xác nhận. Model/contract/lock/zone CSV phải được người giữ MLflow/backup của đúng
-  training `d2772f1904d7472490a73b0ac1c0c5d4` và evaluation
-  `58d5008f0ed048f58599a859877ae336` cung cấp riêng. README ML P5 có bốn paths,
-  full hashes và `scripts/model_artifacts.ps1`. Git clone không tự có model/data/
-  dependency image; startup không train/export/bootstrap thay người dùng.
+- **Model bundle trên máy mới:** P2 đã đưa bundle đã pin vào
+  `distribution/models/ml-p4-v1/`; setup không lấy latest hoặc tự training.
+  Git clone vẫn chưa có dữ liệu hay dependency images và cần mạng/tài nguyên cho
+  acquisition/build. Dự án chưa chọn license tái sử dụng tổng thể/model-specific.
 - Thêm kỳ dữ liệu mới chưa thành quy trình tự động đã kiểm chứng. Serving chỉ2025,
   Jul–Dec chỉ cảnh báo ngoại suy; cần nguồn/calendar/cohort/lineage/temporal split,
   kiểm định và model identity mới được duyệt, không ghi đè ứng viên hiện tại.
@@ -53,8 +53,8 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
 
 - Required checks/branch protection và auto-merge PR sau CI; chưa triển khai,
   không phải một phần ngầm của commit/push ML P6.
-- Thử full bootstrap trên môi trường thực sự tách biệt, tối ưu persisted aggregates,
-  kiểm thử tải/browser và phát hành bundle có kiểm soát.
+- Hoàn tất rerun/idempotency full bootstrap trên môi trường trống mới; tối ưu
+  persisted aggregates, kiểm thử tải/browser và phát hành bundle có kiểm soát.
 - Airflow/retraining/drift monitoring, mô hình định tuyến trước chuyến hoặc
   uncertainty calibration; không suy ra đây là yêu cầu bắt buộc nếu chưa có rubric.
 
@@ -89,3 +89,15 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
   tái sử dụng tổng thể/model-specific. Bundle không được bake vào images.
 - Full bootstrap/acquisition/rerun dữ liệu thật trên máy mới vẫn chưa E2E; model
   bundle test/PLAN không thay chứng cứ đó. Chi tiết [PACKAGE P2 report](PACKAGE_P2_REPORT.md).
+
+## PACKAGE P3 — cập nhật kiểm chứng và dọn môi trường thử
+
+- Môi trường `nyc-taxi-package-test` ban đầu tách biệt đã chạy dữ liệu thật
+  Jan–Jun/2025. Sau sửa lỗi checkpoint/diagnostics và resume, đủ 14 stage hoàn
+  thành, validation SQL thực tế đạt READY: 23.886.265 facts và dimensions
+  265/365/4.344; frozen model hash cũng khớp.
+- Không có transcript rerun hoàn chỉnh sau READY, vì vậy chưa báo full
+  skip/idempotency PASS và chưa gọi đây là một lượt liên tục từ clone/máy trống.
+- Containers, volumes, networks, runtime và image/cache riêng của package-test đã
+  được dọn có chọn lọc; hệ thống thật và PBIX được bảo toàn. Bằng chứng/tóm tắt:
+  [PACKAGE P3 report](PACKAGE_P3_REPORT.md).

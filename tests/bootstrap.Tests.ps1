@@ -33,6 +33,7 @@ function Get-BootstrapFixtureModel {
             mlflow = @{ condition = 'service_healthy' }
         }
     }
+    if ($script:BootstrapScenario.PackageDiagnostics) { $worker.environment.POSTGRES_PASSWORD = 'fixture-secret' }
     switch ($script:BootstrapScenario.ModelProblem) {
         'profile' { $worker.profiles = @('other') }
         'host' { $worker.environment.POSTGRES_HOST = 'localhost' }
@@ -175,6 +176,7 @@ function Invoke-BootstrapFakeDocker {
             $mismatches = @()
             if ($script:BootstrapScenario.StaleImage) { $mismatches = @('scripts/bootstrap_calendar.py') }
             $checked = 2
+            if ($script:BootstrapScenario.PackageDiagnostics) { $checked = 3 }
             if ($script:BootstrapScenario.ShortHashCheck) { $checked = 1 }
             return New-BootstrapDockerResult -StdOut (@{
                 ok = (-not $script:BootstrapScenario.StaleImage)
@@ -194,12 +196,13 @@ function Invoke-BootstrapFakeDocker {
 }
 
 function Invoke-BootstrapFixture {
-    param([switch]$Execute)
+    param([switch]$Execute, $Context = $null)
     $parameters = @{
         ProjectRoot = $script:BootstrapFixtureRoot; CommandTimeoutSeconds = 3
         StepTimeoutSeconds = 60
     }
     if ($Execute) { $parameters.Execute = $true }
+    if ($null -ne $Context) { $parameters.Context = $Context }
     $script:BootstrapOutput = @(& { Invoke-DataBootstrap @parameters } *>&1)
     $integers = @($script:BootstrapOutput | Where-Object { $_ -is [int] })
     $script:BootstrapExit = $integers[-1]
@@ -240,7 +243,7 @@ Describe 'P6 explicit data bootstrap orchestration (mock Docker only)' {
             UnhealthyService = ''; WrongProjectService = ''; MissingImage = $false
             ImageChanged = $false; ImageEntrypoint = $false; ImageWorkdir = $false
             HashChecked = $false; BadHashJson = $false; HashProbeFailed = $false; ShortHashCheck = $false
-            StaleImage = $false; FailingStep = ''; FailingExitCode = 7
+            StaleImage = $false; FailingStep = ''; FailingExitCode = 7; PackageDiagnostics = $false
         }
         $script:BootstrapDockerCalls = New-Object 'System.Collections.Generic.List[object]'
         $script:BootstrapExecutedSteps = New-Object 'System.Collections.Generic.List[string]'
@@ -255,6 +258,9 @@ Describe 'P6 explicit data bootstrap orchestration (mock Docker only)' {
             if ($ProjectRoot -ne $script:BootstrapFixtureRoot) { throw 'Wrong hash inventory root' }
             @{ 'scripts/bootstrap_calendar.py' = ('a' * 64); 'requirements.txt' = ('b' * 64) }
         }
+        # Resource isolation is covered by its own suites. These mocked-current
+        # fixtures exercise bootstrap ordering/log capture, not a live inventory.
+        Mock Assert-ProjectEnvironmentIsolation { }
         Mock Invoke-DockerCommand {
             param($Arguments, $WorkingDirectory, $InputText, $TimeoutSeconds)
             if ($WorkingDirectory -ne $script:BootstrapFixtureRoot) { throw 'Wrong project working directory' }
@@ -345,6 +351,26 @@ Describe 'P6 explicit data bootstrap orchestration (mock Docker only)' {
         ($script:BootstrapExecutedSteps -join ',') | Should Be 'calendar,raw,bronze,silver'
         $script:BootstrapText | Should Not Match 'fixture-secret'
         @(Get-BootstrapServiceMutationCalls).Count | Should Be 0
+    }
+
+    It 'persists sanitized failed package stage diagnostics without replaying raw output or continuing' {
+        $script:PackageLogContext = New-ProjectEnvironmentContext -ProjectRoot $script:BootstrapFixtureRoot
+        $script:PackageLogContext.IsPackage = $true
+        $script:BootstrapScenario.PackageDiagnostics = $true
+        [IO.File]::WriteAllText((Join-Path $script:BootstrapFixtureRoot 'requirements-worker-constraints.txt'), '# mock constraints')
+        $script:BootstrapScenario.FailingStep = 'raw'
+        Invoke-BootstrapFixture -Execute -Context $script:PackageLogContext
+        $script:BootstrapExit | Should Be 1
+        ($script:BootstrapExecutedSteps -join ',') | Should Be 'calendar,raw'
+        $logs = @(Get-ChildItem -LiteralPath (Join-Path $script:BootstrapFixtureRoot 'logs/bootstrap') -File)
+        $logs.Count | Should Be 2
+        $failed = @($logs | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json } | Where-Object stage -eq 'raw')[0]
+        $failed.exit_code | Should Be 7
+        $failed.stdout | Should Match '\[REDACTED\]'
+        $failed.stderr | Should Match '\[REDACTED\]'
+        $script:BootstrapText | Should Match 'Sanitized diagnostic log:'
+        $script:BootstrapText | Should Not Match 'fixture-secret'
+        ($logs | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join '' | Should Not Match 'fixture-secret'
     }
 
     It 'stops immediately after a failed fact partition without advancing to June or indexes' {
@@ -549,5 +575,82 @@ Describe 'P6 explicit data bootstrap orchestration (mock Docker only)' {
             $script:BootstrapExit | Should Be 1
         }
         @(Get-BootstrapRunCalls).Count | Should Be 0
+    }
+}
+
+Describe 'Package bootstrap diagnostics filesystem and redaction' {
+    BeforeEach {
+        $script:DiagnosticContext = [pscustomobject]@{
+            IsPackage = $true; RuntimeRoot = (Join-Path $TestDrive ('isolated package runtime ' + [guid]::NewGuid().ToString('N')))
+        }
+        $script:DiagnosticModel = [pscustomobject]@{ services = [pscustomobject]@{
+            worker = [pscustomobject]@{ environment = [pscustomobject]@{
+                POSTGRES_PASSWORD = 'same-length-password-one'
+                ACCESS_TOKEN = 'same-length-password-two'
+                API_KEY = 'encoded key with spaces'
+                PRIVATE_TOKEN = 'shared-password'
+                OTHER_SECRET = 'shared-password-extension'
+            } }
+        } }
+        Mock Invoke-DockerCommand { throw 'No Docker call is allowed in diagnostic filesystem tests.' }
+    }
+
+    It 'redacts all resolved secrets including equal-length values and URL-encoded forms' {
+        $result = New-BootstrapDockerResult -ExitCode 1 -StdOut 'one=same-length-password-one two=same-length-password-two key=encoded%20key%20with%20spaces shared-password-extension shared-password' -StdErr 'HTTP 503 from https://public.example/file.parquet'
+        $path = Save-BootstrapStepDiagnostics $script:DiagnosticContext $script:DiagnosticModel 'raw' $result 1.5
+        $saved = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+        $saved.stdout | Should Not Match 'same-length-password|encoded%20key|shared-password|extension'
+        $saved.stderr | Should Match 'HTTP 503 from https://public.example/file.parquet'
+        $saved.exit_code | Should Be 1
+        Assert-MockCalled Invoke-DockerCommand -Times 0 -Exactly -Scope It
+    }
+
+    It 'redacts credential URLs libpq assignments authorization headers and unknown query tokens' {
+        $result = New-BootstrapDockerResult -StdOut "postgresql://someone:unknown-credential@postgres/db password='unknown spaced password' https://example/file?token=unknown-query-token&ok=1" -StdErr 'Authorization: Bearer unknown-bearer-token'
+        $path = Save-BootstrapStepDiagnostics $script:DiagnosticContext $script:DiagnosticModel 'raw' $result 2
+        $text = Get-Content -LiteralPath $path -Raw
+        $text | Should Not Match 'unknown-credential|unknown spaced password|unknown-query-token|unknown-bearer-token|someone:'
+        $text | Should Match 'postgresql://\[REDACTED\]@postgres/db'
+        $text | Should Match 'REDACTED'
+    }
+
+    It 'uses unique create-new logs and leaves previous attempt bytes unchanged' {
+        $result = New-BootstrapDockerResult -StdOut 'first attempt'
+        $first = Save-BootstrapStepDiagnostics $script:DiagnosticContext $script:DiagnosticModel 'raw' $result 1
+        $hash = (Get-FileHash -LiteralPath $first -Algorithm SHA256).Hash
+        $result.StdOut = 'second attempt'
+        $second = Save-BootstrapStepDiagnostics $script:DiagnosticContext $script:DiagnosticModel 'raw' $result 2
+        ($first -eq $second) | Should Be $false
+        (Get-FileHash -LiteralPath $first -Algorithm SHA256).Hash | Should Be $hash
+        @(Get-ChildItem -LiteralPath (Split-Path $first -Parent) -File).Count | Should Be 2
+        (Get-Content -LiteralPath $second -Raw | ConvertFrom-Json).stdout | Should Be 'second attempt'
+    }
+
+    It 'bounds each sanitized UTF-8 stream to one MiB and retains its diagnostic tail' {
+        $result = New-BootstrapDockerResult -StdOut (('x' * 1100000) + ' final stdout error') -StdErr (('y' * 1100000) + ' final stderr error')
+        $path = Save-BootstrapStepDiagnostics $script:DiagnosticContext $script:DiagnosticModel 'bronze' $result 3
+        $saved = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
+        $saved.stdout_truncated | Should Be $true
+        $saved.stderr_truncated | Should Be $true
+        ([Text.Encoding]::UTF8.GetByteCount($saved.stdout) -le 1048576) | Should Be $true
+        ([Text.Encoding]::UTF8.GetByteCount($saved.stderr) -le 1048576) | Should Be $true
+        $saved.stdout | Should Match 'final stdout error$'
+        $saved.stderr | Should Match 'final stderr error$'
+    }
+
+    It 'does not create diagnostic paths for non-package bootstrap' {
+        $script:DiagnosticContext.IsPackage = $false
+        $result = New-BootstrapDockerResult -StdOut 'not persisted'
+        $path = Save-BootstrapStepDiagnostics $script:DiagnosticContext $script:DiagnosticModel 'raw' $result 1
+        $path | Should BeNullOrEmpty
+        Test-Path -LiteralPath $script:DiagnosticContext.RuntimeRoot | Should Be $false
+    }
+
+    It 'rejects stage traversal and reparse paths before creating a log' {
+        $result = New-BootstrapDockerResult
+        { Save-BootstrapStepDiagnostics $script:DiagnosticContext $script:DiagnosticModel '../raw' $result 1 } | Should Throw
+        Mock Assert-NoEnvironmentReparsePoint { throw 'Synthetic reparse guard rejection.' }
+        { Save-BootstrapStepDiagnostics $script:DiagnosticContext $script:DiagnosticModel 'raw' $result 1 } | Should Throw
+        Test-Path -LiteralPath $script:DiagnosticContext.RuntimeRoot | Should Be $false
     }
 }

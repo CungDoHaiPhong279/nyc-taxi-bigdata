@@ -57,6 +57,7 @@ reports/**
 !reports/ML_P6_REPORT.md
 !reports/PACKAGE_P1_REPORT.md
 !reports/PACKAGE_P2_REPORT.md
+!reports/PACKAGE_P3_REPORT.md
 mlruns/
 
 # IDE

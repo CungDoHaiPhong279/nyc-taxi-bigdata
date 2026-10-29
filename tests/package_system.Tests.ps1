@@ -6,6 +6,69 @@ function Add-PackageTestCall {
     $script:PackageCalls.Add([pscustomobject]@{ Name = $Name; Phase = $Phase; Value = $Value })
 }
 
+Describe 'PACKAGE checkpoint persistence on the real filesystem' {
+    BeforeEach {
+        $script:CheckpointContext = [pscustomobject]@{
+            StateRoot = (Join-Path $TestDrive 'checkpoint state with spaces')
+            RuntimeRoot = (Join-Path $TestDrive 'checkpoint runtime with spaces')
+            Project = 'nyc-taxi-package-test'
+        }
+        $script:CheckpointState = [ordered]@{
+            SchemaVersion = 1; Owner = 'setup_system_v1'
+            Project = $script:CheckpointContext.Project
+            RuntimeRoot = $script:CheckpointContext.RuntimeRoot
+            ModelSHA256 = (Get-FareModelIdentity).ModelSHA256
+            Stage = 'preflight'; Status = 'running'; UpdatedAtUTC = ''; CompletedStages = @()
+        }
+        # Persistence is real; no external command or service is permitted.
+        Mock Invoke-DockerCommand { throw 'Unexpected Docker path in checkpoint filesystem tests.' }
+    }
+
+    It 'creates and reads the first owned checkpoint without a Docker command' {
+        Write-PackageCheckpoint $script:CheckpointContext $script:CheckpointState
+        $saved = Read-PackageCheckpoint $script:CheckpointContext
+        $saved.Stage | Should Be 'preflight'
+        $saved.Status | Should Be 'running'
+        $saved.ModelSHA256 | Should Be (Get-FareModelIdentity).ModelSHA256
+        [DateTimeOffset]::Parse($saved.UpdatedAtUTC).UtcDateTime.Kind | Should Be 'Utc'
+        Assert-MockCalled Invoke-DockerCommand -Times 0 -Exactly -Scope It
+    }
+
+    It 'atomically replaces an existing checkpoint on Windows PowerShell 5.1' {
+        Write-PackageCheckpoint $script:CheckpointContext $script:CheckpointState
+        $script:CheckpointState.Stage = 'images'
+        Write-PackageCheckpoint $script:CheckpointContext $script:CheckpointState
+        $saved = Read-PackageCheckpoint $script:CheckpointContext
+        $saved.Stage | Should Be 'images'
+        $saved.Status | Should Be 'running'
+        @(Get-ChildItem -LiteralPath $script:CheckpointContext.StateRoot -File).Count | Should Be 1
+        Assert-MockCalled Invoke-DockerCommand -Times 0 -Exactly -Scope It
+    }
+
+    It 'persists a failed phase and resumes with repeated owned checkpoint replacements' {
+        Write-PackageCheckpoint $script:CheckpointContext $script:CheckpointState
+        $script:CheckpointState.Stage = 'bootstrap'
+        $script:CheckpointState.Status = 'failed'
+        $script:CheckpointState.CompletedStages = @('images', 'infrastructure')
+        Write-PackageCheckpoint $script:CheckpointContext $script:CheckpointState
+        $failed = Read-PackageCheckpoint $script:CheckpointContext
+        $failed.Status | Should Be 'failed'
+        $failed.Stage | Should Be 'bootstrap'
+        ($failed.CompletedStages -join ',') | Should Be 'images,infrastructure'
+        $script:CheckpointState.Stage = 'preflight'
+        $script:CheckpointState.Status = 'running'
+        Write-PackageCheckpoint $script:CheckpointContext $script:CheckpointState
+        $script:CheckpointState.Stage = 'ready'
+        $script:CheckpointState.Status = 'ready'
+        Write-PackageCheckpoint $script:CheckpointContext $script:CheckpointState
+        $saved = Read-PackageCheckpoint $script:CheckpointContext
+        $saved.Status | Should Be 'ready'
+        $saved.Stage | Should Be 'ready'
+        $saved.ModelSHA256 | Should Be $failed.ModelSHA256
+        Assert-MockCalled Invoke-DockerCommand -Times 0 -Exactly -Scope It
+    }
+}
+
 function Invoke-PackageTestSetup {
     param([switch]$Execute, [switch]$PrepareTest, [string]$Environment = 'package-test')
     $parameters = @{ ProjectRoot = $script:PackageRoot; Environment = $Environment

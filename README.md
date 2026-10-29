@@ -2042,6 +2042,29 @@ Thiếu dependency build, mạng tải dữ liệu, tài nguyên và full acquis
 DB counts/indexes/view → serving/readiness/rerun trên môi trường trống vẫn cần
 kiểm chứng riêng. Xem [PACKAGE P2 report](reports/PACKAGE_P2_REPORT.md).
 
+## PACKAGE P3 — kiểm chứng setup dữ liệu thật và trạng thái sau dọn thử
+
+Trong môi trường tách biệt `package-test`, lệnh sau đã được chạy với dữ liệu thật
+Jan–Jun/2025 và cuối cùng đạt `READY` sau khi giữ checkpoint, sửa lỗi rồi resume:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_system.ps1 -Environment package-test -Execute
+```
+
+Lượt thành công hoàn thành đủ 14 stage và validation SQL thực tế: tổng fact
+**23.886.265**, dimensions **265 / 365 / 4.344**, sáu monthly counts/lineage,
+indexes/view và frozen model identity đều khớp. Đây không phải kết quả suy từ
+load log. Hai sửa lỗi cần giữ là atomic checkpoint replacement tương thích
+Windows PowerShell 5.1 và diagnostics từng stage đã redact/có giới hạn để có thể
+điều tra rồi resume an toàn.
+
+Chưa có transcript hoàn chỉnh của lượt chạy lại toàn bộ cùng lệnh, nên
+skip/idempotency end-to-end **chưa được chốt PASS**. P3 cũng chưa chứng minh một
+lượt liên tục trên máy hoàn toàn mới vì lần kiểm chứng đã cần sửa lỗi và resume.
+Sau kiểm tra, containers/volumes/networks/runtime và image/cache riêng của
+`package-test` đã được dọn; audit nhỏ trong `.sandbox` được giữ nhưng không theo
+dõi Git. Xem [PACKAGE P3 report](reports/PACKAGE_P3_REPORT.md).
+
 ## Địa chỉ → routing → fare: Chặng 2A offline
 
 Đã thêm Mapbox client (suggest/retrieve/Directions `driving`), resolver Taxi Zone

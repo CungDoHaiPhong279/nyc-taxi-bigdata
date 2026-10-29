@@ -171,6 +171,75 @@ print(json.dumps({'ok': not mismatches, 'checked': len(expected), 'mismatches': 
     return $true
 }
 
+function ConvertTo-BootstrapDiagnosticText {
+    param([AllowEmptyString()][string]$Text, [string[]]$Secrets = @(),
+        [ValidateRange(512, 1048576)][int]$MaxBytes = 1048576)
+    # Redact before truncation, including secrets crossing the retained-tail boundary.
+    foreach ($secret in @($Secrets | Where-Object { $_ } | Sort-Object Length -Descending)) {
+        $Text = $Text.Replace($secret, '[REDACTED]')
+        if ($secret.Length -lt 32000) {
+            $encoded = [Uri]::EscapeDataString($secret)
+            $Text = $Text.Replace($encoded, '[REDACTED]')
+        }
+    }
+    $Text = [regex]::Replace($Text, '(?i)\b([a-z][a-z0-9+.-]{0,31}://)[^\s/?#@]+@', '$1[REDACTED]@')
+    $Text = [regex]::Replace($Text, '(?i)\bauthorization\s*:\s*(?:bearer|basic)\s+[^\s,;]+', 'authorization: [REDACTED]')
+    $assignment = '(?i)\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential|signature)\b["'']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|''(?:\\.|[^''\\])*''|[^\s,;&]+)'
+    $Text = [regex]::Replace($Text, $assignment, '$1=[REDACTED]')
+    $encoding = [Text.UTF8Encoding]::new($false)
+    $bytes = $encoding.GetBytes($Text)
+    $truncated = $bytes.Length -gt $MaxBytes
+    if ($truncated) {
+        $prefix = "[earlier output truncated; retained sanitized tail]`n"
+        $start = $bytes.Length - ($MaxBytes - $encoding.GetByteCount($prefix))
+        while ($start -lt $bytes.Length -and ($bytes[$start] -band 0xC0) -eq 0x80) { $start++ }
+        $Text = $prefix + $encoding.GetString($bytes, $start, $bytes.Length - $start)
+    }
+    return [pscustomobject]@{ Text = $Text; Truncated = $truncated }
+}
+
+function Save-BootstrapStepDiagnostics {
+    param($Context, $Model, [string]$StepName, $Result, [double]$ElapsedSeconds)
+    if (-not (Get-OptionalProperty $Context 'IsPackage' $false)) { return $null }
+    if ($StepName -cnotmatch '^[a-z0-9][a-z0-9-]{0,63}$') { Stop-Startup 'Unsafe bootstrap diagnostic stage name.' }
+    $secrets = @()
+    $services = if ($Model -is [Collections.IDictionary]) { $Model['services'] } else { Get-OptionalProperty $Model 'services' }
+    $settings = if ($services -is [Collections.IDictionary]) { @($services.Values) } else { @($services.PSObject.Properties | ForEach-Object { $_.Value }) }
+    foreach ($service in $settings) {
+        $environment = if ($service -is [Collections.IDictionary]) { $service['environment'] } else { Get-OptionalProperty $service 'environment' }
+        if ($null -eq $environment) { continue }
+        $variables = if ($environment -is [Collections.IDictionary]) {
+            @($environment.GetEnumerator() | ForEach-Object { [pscustomobject]@{ Name = $_.Key; Value = $_.Value } })
+        } else { @($environment.PSObject.Properties) }
+        foreach ($variable in $variables) {
+            if ($variable.Name -match '(?i)password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential|authorization|connection[_-]?string|database[_-]?url' -and $variable.Value) {
+                $secrets += [string]$variable.Value
+            }
+        }
+    }
+    $stdout = ConvertTo-BootstrapDiagnosticText -Text ([string]$Result.StdOut) -Secrets $secrets
+    $stderr = ConvertTo-BootstrapDiagnosticText -Text ([string]$Result.StdErr) -Secrets $secrets
+    $directory = Join-Path $Context.RuntimeRoot 'logs/bootstrap'
+    Assert-NoEnvironmentReparsePoint $directory
+    $null = New-Item -ItemType Directory -Path $directory -Force
+    Assert-NoEnvironmentReparsePoint $directory
+    $path = Join-Path $directory (([DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')) + '-' + $StepName + '-' + [guid]::NewGuid().ToString('N') + '.json')
+    Assert-NoEnvironmentReparsePoint $path
+    $entry = [ordered]@{ schema_version = 1; stage = $StepName; exit_code = [int]$Result.ExitCode
+        generated_at_utc = [DateTime]::UtcNow.ToString('o'); elapsed_seconds = $ElapsedSeconds
+        stdout = $stdout.Text; stderr = $stderr.Text
+        stdout_truncated = $stdout.Truncated; stderr_truncated = $stderr.Truncated }
+    $stream = $null
+    try {
+        # CreateNew never overwrites a previous attempt, even on a name collision.
+        $stream = [IO.File]::Open($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($entry | ConvertTo-Json -Depth 4))
+        $stream.Write($bytes, 0, $bytes.Length)
+    } catch { Stop-Startup 'Cannot persist sanitized bootstrap diagnostics; outputs/checkpoint preserved. Review runtime log permissions before resuming.' }
+    finally { if ($null -ne $stream) { $stream.Dispose() } }
+    return $path
+}
+
 function Invoke-DataBootstrap {
     param(
         [string]$ProjectRoot = $script:BootstrapProjectRoot,
@@ -260,6 +329,10 @@ function Invoke-DataBootstrap {
             $arguments = $context.ComposeArguments + @('--profile', 'jobs', 'run', '--rm', '--no-deps', '-T', '--pull', 'never', 'worker') + $step.Arguments
             $result = Invoke-DockerCommand -Arguments $arguments -WorkingDirectory $root -TimeoutSeconds $StepTimeoutSeconds
             $timer.Stop()
+            if (Get-OptionalProperty $context 'IsPackage' $false) {
+                $diagnosticPath = Save-BootstrapStepDiagnostics -Context $context -Model $model -StepName $step.Name -Result $result -ElapsedSeconds $timer.Elapsed.TotalSeconds
+                Write-Host ('Sanitized diagnostic log: ' + $diagnosticPath)
+            }
             # CLI exceptions can contain connection details. Never replay raw streams.
             Write-Host ('RESULT {0}: exit={1}, elapsed={2:N1}s (raw output withheld; existing CLI logs/reports remain in runtime mounts).' -f $step.Name, $result.ExitCode, $timer.Elapsed.TotalSeconds)
             if ($result.ExitCode -ne 0) {
