@@ -682,10 +682,10 @@ def render_pipeline_monitoring(base_url: str) -> None:
                 st.caption("Mỗi tháng hệ thống xử lý và đối soát từ 3,47 triệu đến 4,59 triệu chuyến xe với độ chính xác tuyệt đối (Zero-Loss).")
                 jobs_chart = [
                     {
-                        "Tháng": str(j.get("partition_month") or j.get("source_month", "")),
-                        "Số triệu chuyến": round(int(j.get("loaded_rows", 0)) / 1_000_000, 2),
-                        "Số chuyến chính xác": f"{int(j.get('loaded_rows', 0)):,} chuyến",
-                        "Thời gian nạp (giây)": round(float(j.get("elapsed_seconds", 0.0)), 1),
+                        "Tháng": str(j.get("dataset", "")).replace("taxi (", "Tháng ").replace(")", ""),
+                        "Số triệu chuyến": round(int(j.get("loaded_row_count", 0)) / 1_000_000, 2),
+                        "Số chuyến chính xác": f"{int(j.get('loaded_row_count', 0)):,} chuyến",
+                        "Thời gian nạp (giây)": round(float(j.get("duration_seconds", 0.0)), 1),
                     }
                     for j in jobs
                 ]
@@ -766,12 +766,12 @@ def render_pipeline_monitoring(base_url: str) -> None:
             if jobs:
                 clean_jobs = [
                     {
-                        "Tháng phân vùng": j.get("partition_month") or j.get("source_month", ""),
-                        "Trạng thái": "Thành công (LOADED)" if j.get("status") == "LOADED" else j.get("status", ""),
-                        "Số dòng Parquet (Gold)": f"{int(j.get('parquet_rows', 0)):,}",
-                        "Số dòng nạp PostgreSQL": f"{int(j.get('loaded_rows', 0)):,}",
-                        "Chênh lệch": int(j.get("loaded_rows", 0)) - int(j.get("parquet_rows", 0)),
-                        "Thời gian nạp (giây)": round(float(j.get("elapsed_seconds", 0.0)), 1),
+                        "Tháng phân vùng": str(j.get("dataset", "")).replace("taxi (", "Tháng ").replace(")", ""),
+                        "Trạng thái": "Thành công (LOADED)" if str(j.get("status", "")).lower() == "loaded" else j.get("status", ""),
+                        "Số dòng Parquet (Gold)": f"{int(j.get('source_row_count', 0)):,}",
+                        "Số dòng nạp PostgreSQL": f"{int(j.get('loaded_row_count', 0)):,}",
+                        "Chênh lệch": int(j.get("row_delta", 0)),
+                        "Thời gian nạp (giây)": round(float(j.get("duration_seconds", 0.0)), 1),
                     }
                     for j in jobs
                 ]
