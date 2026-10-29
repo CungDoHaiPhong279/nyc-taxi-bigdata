@@ -91,6 +91,9 @@ def make_predictor(model_version, model_dir, contract_dir, zones):
     if model_version == "v2.2":
         from nyc_taxi.ml.pretrip_inference import FrozenPretripPredictor
         return FrozenPretripPredictor(model_dir, contract_dir, zones)
+    if model_version == "gold-v3":
+        from nyc_taxi.ml.gold_v3_inference import FrozenGoldV3Predictor
+        return FrozenGoldV3Predictor(model_dir, contract_dir, zones)
     raise ValueError("Unsupported explicitly selected model version")
 
 
@@ -99,7 +102,7 @@ def main(argv=None):
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--contract-dir", type=Path, required=True)
     parser.add_argument("--zones", type=Path, required=True)
-    parser.add_argument("--model-version", choices=("v1", "v2.2"), default="v1")
+    parser.add_argument("--model-version", choices=("v1", "v2.2", "gold-v3"), default="v1")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)

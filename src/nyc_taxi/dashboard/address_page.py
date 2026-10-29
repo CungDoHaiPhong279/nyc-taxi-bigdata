@@ -16,8 +16,8 @@ from nyc_taxi.dashboard.mapbox_client import MapboxClient, MapboxError
 from nyc_taxi.dashboard.geometry_assets import load_geometry_bundle
 from nyc_taxi.dashboard.prediction import InferenceClient, DEFAULT_INFERENCE_URL, PredictionError, selected_model_version
 from nyc_taxi.dashboard.route_fare import (
-    RouteFareCoordinator, PretripRouteFareCoordinator, RouteFareError, execute_submission,
-    validate_address_support, validate_standard_route,
+    RouteFareCoordinator, PretripRouteFareCoordinator, GoldV3RouteFareCoordinator,
+    RouteFareError, execute_submission, validate_address_support, validate_standard_route,
 )
 from nyc_taxi.dashboard.route_map import route_map
 from nyc_taxi.dashboard.taxi_zones import GeometryError
@@ -41,8 +41,9 @@ def inputs_changed(stored: dict, draft: dict) -> bool:
         any(address_identity(draft.get(slot)) != address_identity(stored.get(slot))
             for slot in ("pickup", "dropoff"))
         or (draft.get("time_selection") != stored.get("time_selection")
-            if stored.get("model_version") == "v2.2"
+            if stored.get("model_version") in ("v2.2", "gold-v3")
             else draft.get("pickup_datetime") != stored.get("pickup_datetime"))
+        or draft.get("weather_override") != stored.get("request", {}).get("weather_override")
         or draft.get("standard_rate") is not True
     )
 
@@ -83,11 +84,18 @@ def get_geometry():
 
 
 def make_coordinator():
-    if selected_model_version() == "v2.2":
+    version = selected_model_version()
+    if version == "v2.2":
         from nyc_taxi.dashboard.pretrip_prediction import PretripInferenceClient
         return PretripRouteFareCoordinator(
             router=make_search_client(), geometry=get_geometry(), predictor=PretripInferenceClient(),
             metadata=get_pretrip_metadata(os.environ.get("FARE_INFERENCE_URL", DEFAULT_INFERENCE_URL)),
+        )
+    if version == "gold-v3":
+        from nyc_taxi.dashboard.pretrip_prediction import GoldV3InferenceClient
+        return GoldV3RouteFareCoordinator(
+            router=make_search_client(), geometry=get_geometry(), predictor=GoldV3InferenceClient(),
+            metadata=get_gold_v3_metadata(os.environ.get("FARE_INFERENCE_URL", DEFAULT_INFERENCE_URL)),
         )
     return RouteFareCoordinator(router=make_search_client(), geometry=get_geometry(), predictor=InferenceClient())
 
@@ -104,14 +112,19 @@ def load_pretrip_metadata(base_url: str) -> dict:
     return zones
 
 
-def get_pretrip_metadata(base_url: str) -> dict:
-    """Freeze verified public metadata per session, URL and full candidate identity.
+@st.cache_data(ttl=60, max_entries=4, show_spinner=False)
+def load_gold_v3_metadata(base_url: str) -> dict:
+    """Bounded public metadata for Gold V3; never cache addresses or predictions."""
+    from nyc_taxi.dashboard.pretrip_prediction import GoldV3InferenceClient, GOLD_V3_IDENTITY
+    client = GoldV3InferenceClient(base_url)
+    ready, zones = client.ready(), client.zones()
+    if ready.get("model_version") != "gold-v3" or zones.get("contract_version") != GOLD_V3_IDENTITY["contract_version"]:
+        raise PredictionError("Danh sách vùng không khớp hợp đồng Gold V3 đã khóa.")
+    return zones
 
-    The initial loader retains its bounded process cache/TTL. Once verified for
-    this session, ordinary reruns and edited drafts do not call even readiness
-    or zones again. This is not a health assertion: each explicit prediction
-    still validates the actual response identity. Errors are never cached.
-    """
+
+def get_pretrip_metadata(base_url: str) -> dict:
+    """Freeze verified public metadata per session, URL and full candidate identity."""
     from nyc_taxi.ml.pretrip_serving_contract import identity
     expected = identity()
     key = (base_url, tuple(sorted(expected.items())))
@@ -119,12 +132,26 @@ def get_pretrip_metadata(base_url: str) -> dict:
     cached = st.session_state.get(state_key)
     if cached is not None and cached["key"] == key:
         return cached["metadata"]
-    # A changed URL/candidate invalidates the previous entry before loading,
-    # so a failed replacement cannot silently reuse old model metadata.
     st.session_state.pop(state_key, None)
     loaded = load_pretrip_metadata(base_url)
     if not isinstance(loaded, dict) or any(loaded.get(name) != value for name, value in expected.items()):
         raise PredictionError("Metadata không khớp đầy đủ candidate V2.2 đang chọn.")
+    st.session_state[state_key] = {"key": key, "metadata": loaded}
+    return loaded
+
+
+def get_gold_v3_metadata(base_url: str) -> dict:
+    """Freeze verified Gold V3 public metadata per session and URL."""
+    from nyc_taxi.dashboard.pretrip_prediction import GOLD_V3_IDENTITY
+    key = (base_url, tuple(sorted(GOLD_V3_IDENTITY.items())))
+    state_key = "_gold_v3_verified_public_metadata"
+    cached = st.session_state.get(state_key)
+    if cached is not None and cached["key"] == key:
+        return cached["metadata"]
+    st.session_state.pop(state_key, None)
+    loaded = load_gold_v3_metadata(base_url)
+    if not isinstance(loaded, dict) or loaded.get("model_version") != "gold-v3":
+        raise PredictionError("Metadata không khớp mô hình Gold V3 đang chọn.")
     st.session_state[state_key] = {"key": key, "metadata": loaded}
     return loaded
 
@@ -172,13 +199,7 @@ def format_pretrip_time_error(error: ValueError, time_selection: dict | None = N
 
 
 def selection_support(state: dict) -> dict | None:
-    """Keep at most one local support result per field in this user's session.
-
-    Editing/clearing a choice invalidates it. No addresses or coordinates enter
-    the process-wide geometry cache, logs or external services during this check.
-    Configuration changes also invalidate the result; geometry failures are not
-    cached as if they were evidence of an unsupported address.
-    """
+    """Keep at most one local support result per field in this user's session."""
     selected = state.get("selected")
     if selected is None:
         state.pop("_zone_support", None)
@@ -210,38 +231,65 @@ def selection_support(state: dict) -> dict | None:
 
 def render_page() -> None:
     try:
-        pretrip = selected_model_version() == "v2.2"
+        version = selected_model_version()
     except PredictionError as error:
         st.error(str(error))
         return
+    is_v22 = version == "v2.2"
+    is_gold_v3 = version == "gold-v3"
+    pretrip = is_v22 or is_gold_v3
+
     previous = st.session_state.get("address_fare_result")
-    if previous and previous.get("model_version", "v1") != ("v2.2" if pretrip else "v1"):
-        # Never display a price from the other serving mode after a switch.
+    if previous and previous.get("model_version", "v1") != version:
+        # Never display a price from another serving mode after a switch.
         st.session_state.pop("address_fare_result", None)
+
     st.title("Ước tính cước từ địa chỉ")
-    st.markdown("**Cước đồng hồ tiêu chuẩn · USD · chưa gồm tip, tolls và phụ phí.**")
-    if pretrip:
+    if is_gold_v3:
+        st.markdown(
+            "**Cước cơ bản tiêu chuẩn · USD · chưa gồm tiền tip, phí cầu đường (tolls) và phụ phí "
+            "(riêng tuyến Sân bay JFK ↔ Manhattan tự động áp dụng mức cước cố định 70.00 USD).**"
+        )
+        st.write(
+            "Nhập địa chỉ đón và điểm đến tại New York để tự động nhận diện khu vực (263 NYC Taxi Zones), "
+            "hiển thị lộ trình trên bản đồ và dự báo giá cước bằng mô hình học máy **Gold V3 (Spark GBTRegressor)**."
+        )
+        st.caption(
+            "Mô hình được huấn luyện từ 23,88 triệu chuyến xe tầng Medallion Gold 2025 "
+            "(kết hợp dữ liệu Taxi + Thời tiết ERA5 + Lịch nghỉ lễ + Bản đồ vùng), đạt sai số trung bình "
+            "MAE = 2.92 USD (R² = 86.9%) trên tập kiểm thử 2025 và MAE = 3.08 USD (R² = 83.0%) trên dữ liệu thực tế năm 2026."
+        )
+    elif is_v22:
+        st.markdown("**Cước đồng hồ tiêu chuẩn · USD · chưa gồm tip, tolls và phụ phí.**")
         st.write("Ước tính trước chuyến từ vùng đón/đến và thời gian New York. Khoảng cách tuyến trên bản đồ chỉ tham khảo, không phải đầu vào mô hình.")
         st.caption("Mô hình học từ dữ liệu 2026; kết quả kiểm định lịch sử không bảo đảm sai số cho chuyến hiện tại.")
     else:
+        st.markdown("**Cước đồng hồ tiêu chuẩn · USD · chưa gồm tip, tolls và phụ phí.**")
         st.write("Bản hiện tại dùng mô hình lịch sử tháng 1–6/2025, chưa phục vụ ngày hiện tại.")
+
     if not address_flow_enabled() or os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") != "1":
         st.info("Chế độ offline: tìm địa chỉ và bản đồ trực tuyến chưa được bật.")
 
     st.subheader("1. Chọn điểm đón và điểm đến")
-    st.write("Gõ địa chỉ hoặc tên địa điểm, rồi chọn một gợi ý.")
+    st.write("Gõ địa chỉ hoặc tên địa điểm tại New York, sau đó bấm chọn một gợi ý trong danh sách.")
     support_by_slot = {}
     pending_events = []
     pretrip_metadata = None
-    if pretrip:
+    if is_v22:
         try:
             pretrip_metadata = get_pretrip_metadata(os.environ.get("FARE_INFERENCE_URL", DEFAULT_INFERENCE_URL))
         except PredictionError as error:
             st.error(str(error))
         except Exception:
             st.error("Chưa kiểm tra được candidate V2.2. Không có giá hoặc mô hình thay thế.")
-    # Reserve both stable parents before handling either role. Conditional
-    # feedback must not move/remount the other field's iframe and debounce.
+    elif is_gold_v3:
+        try:
+            pretrip_metadata = get_gold_v3_metadata(os.environ.get("FARE_INFERENCE_URL", DEFAULT_INFERENCE_URL))
+        except PredictionError as error:
+            st.error(str(error))
+        except Exception:
+            st.error("Chưa kiểm tra được dịch vụ suy luận Gold V3. Không có giá thay thế.")
+
     picker_slots = {slot: st.container(key="address_" + slot + "_slot")
                     for slot in ("pickup", "dropoff")}
     for slot, label in (("pickup", "Địa chỉ đón"), ("dropoff", "Địa chỉ đến")):
@@ -261,17 +309,21 @@ def render_page() -> None:
                 st.error(state["error"])
 
             support = selection_support(state)
-            if pretrip and support is not None and support["zone"] is not None:
+            if is_v22 and support is not None and support["zone"] is not None:
                 if pretrip_metadata is None:
                     support = {"zone": None, "error": "Chưa xác minh được mô hình V2.2.", "code": "model_unavailable"}
                 elif support["zone"]["location_id"] not in pretrip_metadata[slot + "_location_ids"]:
                     support = {"zone": None, "error": "Chưa hỗ trợ ước tính: vùng này chưa có trong dictionary huấn luyện cho vai trò "
                                + ("đón." if slot == "pickup" else "đến."), "code": "unsupported_categories"}
+            elif is_gold_v3 and support is not None and support["zone"] is not None:
+                if pretrip_metadata is None:
+                    support = {"zone": None, "error": "Chưa xác minh được mô hình Gold V3.", "code": "model_unavailable"}
             support_by_slot[slot] = support
             if support is not None:
                 if support["zone"] is not None:
                     zone = support["zone"]
-                    st.success(f"{label}: hợp lệ trong Taxi Zones · {zone['borough']} · {zone['zone']}")
+                    st.success(f"{label}: hợp lệ trong Taxi Zones · {zone['borough']} · {zone['zone']} (Zone {zone['location_id']})"
+                               if is_gold_v3 else f"{label}: hợp lệ trong Taxi Zones · {zone['borough']} · {zone['zone']}")
                 else:
                     st.warning(f"{label}: {support['error']}")
 
@@ -279,21 +331,26 @@ def render_page() -> None:
     can_submit = not pending_events and all(result is not None and result["zone"] is not None
                                             for result in support_by_slot.values())
     if can_submit:
-        try:
-            validate_standard_route(support_by_slot["pickup"]["zone"], support_by_slot["dropoff"]["zone"])
-        except RouteFareError as error:
-            can_submit = False
-            route_error = str(error)
-            st.warning(route_error)
+        pu_z = support_by_slot["pickup"]["zone"]
+        do_z = support_by_slot["dropoff"]["zone"]
+        if is_gold_v3:
+            if (pu_z["location_id"] == 132 and do_z["borough"] == "Manhattan") or (do_z["location_id"] == 132 and pu_z["borough"] == "Manhattan"):
+                st.info("✈️ Tuyến Sân bay JFK (Zone 132) ↔ Manhattan: Hệ thống tự động áp dụng quy tắc cước cố định 70.00 USD (Ratecode 2) theo quy định NYC TLC.")
+        else:
+            try:
+                validate_standard_route(pu_z, do_z)
+            except RouteFareError as error:
+                can_submit = False
+                route_error = str(error)
+                st.warning(route_error)
     if not can_submit and route_error is None:
         st.info("Chọn đủ hai địa chỉ hợp lệ trước khi tính cước. "
                 "Nếu một điểm chưa được hỗ trợ, chỉ cần sửa ô đó; điểm còn lại được giữ nguyên.")
 
     st.subheader("2. Chọn thời gian đón")
-    st.write("Giờ địa phương America/New_York · hẹn tối đa 7 ngày, trong phạm vi calendar đã pin."
+    st.write("Giờ địa phương America/New_York · hỗ trợ đi ngay hoặc hẹn giờ trước tối đa 7 ngày."
              if pretrip else "Giờ địa phương New York · định dạng 24 giờ · chỉ tháng 1–6/2025.")
-    # Native widgets outside a form commit draft edits on rerun, so the stale
-    # notice is immediate. Only this explicit button can route or predict.
+    weather_override = None
     with st.container(border=True):
         mode = "now" if pretrip else "historical"
         fold = None
@@ -327,12 +384,38 @@ def render_page() -> None:
             if pretrip:
                 fold_label = st.selectbox("Khi giờ New York bị lặp do DST", ["Tự động nếu không bị lặp", "Lần thứ nhất", "Lần thứ hai"], key="address_pretrip_fold")
                 fold = {"Tự động nếu không bị lặp": None, "Lần thứ nhất": 0, "Lần thứ hai": 1}[fold_label]
-        standard = st.checkbox("Tôi xác nhận đây là taxi vàng tính cước đồng hồ tiêu chuẩn, "
-                               "không phải cước cố định, thỏa thuận hoặc đi chung.")
+
+        if is_gold_v3:
+            use_weather = st.checkbox(
+                "🌦️ Tùy chọn thử nghiệm: Nhập thêm điều kiện thời tiết (nhiệt độ, mưa, tuyết, gió) để chạy biến thể mô hình có thời tiết (M3-w)",
+                value=False,
+                key="address_gold_v3_use_weather",
+            )
+            if use_weather:
+                wc1, wc2, wc3, wc4 = st.columns(4)
+                temp_c = wc1.number_input("Nhiệt độ (°C)", min_value=-30.0, max_value=45.0, value=20.0, step=1.0, key="addr_w_temp")
+                precip_mm = wc2.number_input("Lượng mưa (mm/h)", min_value=0.0, max_value=100.0, value=0.0, step=0.5, key="addr_w_rain")
+                snow_cm = wc3.number_input("Tuyết rơi (cm/h)", min_value=0.0, max_value=50.0, value=0.0, step=0.5, key="addr_w_snow")
+                wind_kmh = wc4.number_input("Tốc độ gió (km/h)", min_value=0.0, max_value=120.0, value=12.0, step=1.0, key="addr_w_wind")
+                weather_override = {
+                    "temperature_2m": float(temp_c),
+                    "precipitation": float(precip_mm),
+                    "snowfall": float(snow_cm),
+                    "wind_speed_10m": float(wind_kmh),
+                }
+
+        checkbox_text = (
+            "Tôi hiểu đây là ước tính cước cơ bản (USD) chưa gồm tip, cầu đường và phụ phí; tuyến JFK ↔ Manhattan áp dụng cước cố định 70.00 USD."
+            if is_gold_v3
+            else "Tôi xác nhận đây là taxi vàng tính cước đồng hồ tiêu chuẩn, không phải cước cố định, thỏa thuận hoặc đi chung."
+        )
+        standard = st.checkbox(checkbox_text)
         submitted = st.button("Ước tính", type="primary", disabled=not can_submit, key="address_estimate_submit")
     payload = {"pickup": st.session_state.address_pickup["selected"],
                "dropoff": st.session_state.address_dropoff["selected"],
                "standard_rate": standard}
+    if weather_override is not None:
+        payload["weather_override"] = weather_override
     if pretrip:
         payload["time_selection"] = {"mode": mode, "scheduled_local":
                                      datetime.combine(pickup_date, time(hour, minute)).isoformat() if mode == "scheduled" else None,
@@ -348,11 +431,15 @@ def render_page() -> None:
             try:
                 submission_id = str(uuid4())
                 if pretrip:
-                    payload["pretrip_request"] = build_pretrip_submission(
+                    req_obj = build_pretrip_submission(
                         pickup_id=support_by_slot["pickup"]["zone"]["location_id"],
                         dropoff_id=support_by_slot["dropoff"]["zone"]["location_id"],
                         time_selection=payload["time_selection"], submission_id=submission_id,
                     )
+                    if weather_override is not None:
+                        req_obj.update(weather_override)
+                        req_obj["weather_override"] = weather_override
+                    payload["pretrip_request"] = req_obj
                 with st.spinner("Đang tính tuyến và ước tính cước…"):
                     outcome = execute_submission(st.session_state, submission_id, payload, make_coordinator())
                 if outcome.success:
@@ -371,16 +458,39 @@ def render_page() -> None:
     stored = st.session_state.get("address_fare_result")
     if stored:
         if inputs_changed(stored, payload):
-            # Native Streamlit alert follows the theme's text/background colors;
-            # no opacity or washed-out custom text is applied.
             st.info(DIRTY_INPUTS_MESSAGE)
         st.subheader("Kết quả ước tính")
-        st.metric("Ước tính cước cơ bản (USD)", f"${stored['prediction']['fare_amount_usd']:,.2f}")
+        prediction = stored["prediction"]
         submitted_at = datetime.fromisoformat(stored["pickup_datetime"])
-        st.write(f"**{stored['distance_km']:.3f} km · {submitted_at:%d/%m/%Y %H:%M} — giờ New York**")
+        if stored.get("model_version") == "gold-v3":
+            m1, m2, m3 = st.columns(3)
+            m1.metric(
+                "Giá cước dự kiến (USD)",
+                f"${prediction['fare_amount_usd']:,.2f}",
+                delta="Cước cố định JFK ↔ Manhattan (Ratecode 2)" if prediction.get("flat_fare_applied") else f"Mức trung vị lịch sử: ${prediction.get('baseline_fare_usd', 0.0):,.2f}",
+                delta_color="off",
+            )
+            m2.metric(
+                "Quãng đường lộ trình (Mapbox)",
+                f"{stored['distance_km']:.2f} km",
+                delta=f"{stored['distance_km'] * 0.621371:.2f} dặm (trên bản đồ)",
+                delta_color="off",
+            )
+            m3.metric(
+                "Khoảng cách tâm vùng (Haversine)",
+                f"{prediction.get('zone_centroid_distance_km', 0.0):.2f} km",
+                delta="Đầu vào mô hình học máy",
+                delta_color="off",
+            )
+            st.write(
+                f"**Hành trình:** Zone {stored['pickup']['location_id']} ({stored['pickup']['borough']} — {stored['pickup']['zone']}) "
+                f"→ Zone {stored['dropoff']['location_id']} ({stored['dropoff']['borough']} — {stored['dropoff']['zone']}) "
+                f"· **Giờ đón:** {submitted_at:%d/%m/%Y %H:%M} (Giờ New York)"
+            )
+        else:
+            st.metric("Ước tính cước cơ bản (USD)", f"${prediction['fare_amount_usd']:,.2f}")
+            st.write(f"**{stored['distance_km']:.3f} km · {submitted_at:%d/%m/%Y %H:%M} — giờ New York**")
         online = address_flow_enabled() and os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") == "1"
-        # Use only the immutable submitted route, never the current form draft.
-        # A stable component key preserves the browser map across Streamlit reruns.
         route_map(
             stored.get("route_geometry"), submission_id=stored.get("submission_id"),
             pickup=[stored["pickup"]["longitude"], stored["pickup"]["latitude"]],
@@ -388,16 +498,15 @@ def render_page() -> None:
             access_token=os.environ.get("MAPBOX_ACCESS_TOKEN", "") if online else "",
             online=online, key="address_submitted_route_map",
         )
-        prediction = stored["prediction"]
         case_warnings = [warning for warning in stored["warnings"] if warning not in _GENERAL_NOTICES]
         for warning in dict.fromkeys(case_warnings):
             st.warning(warning)
         unseen = any(prediction.get("unseen_categories", {}).values())
-        if unseen:
+        if unseen and stored.get("model_version") != "gold-v3":
             st.warning("Vùng này chưa có trong dữ liệu huấn luyện; kết quả có thể kém chính xác hơn.")
-        if stored.get("model_version") != "v2.2" and stored["request"]["distance_miles"] == 0:
+        if stored.get("model_version") not in ("v2.2", "gold-v3") and stored["request"]["distance_miles"] == 0:
             st.warning("Quãng đường bằng 0: kết quả có độ bất định lớn hơn, không phải báo giá bảo đảm.")
-        elif stored.get("model_version") != "v2.2" and stored["request"]["distance_miles"] > 50:
+        elif stored.get("model_version") not in ("v2.2", "gold-v3") and stored["request"]["distance_miles"] > 50:
             st.warning("Chuyến xa trên 50 mile có ít bằng chứng đánh giá; không dùng như báo giá bảo đảm.")
         if prediction["fare_amount_usd"] <= 0:
             st.warning("Mô hình trả cước không dương; không tự cắt hoặc thay giá trị dự đoán.")
@@ -406,25 +515,47 @@ def render_page() -> None:
         with st.expander("Chi tiết mô hình và yêu cầu đã gửi"):
             st.text(f"{stored['pickup']['label']} → {stored['dropoff']['label']}")
             st.caption(f"{stored['pickup_datetime']} NYC")
-            pretrip_policy_note = (
-                "Chính sách phục vụ dùng unknown bucket (__unknown) kèm cảnh báo cho vùng chưa thấy trong tập train. "
-                if os.environ.get("PRETRIP_ALLOW_UNSEEN_ZONES", "0") == "1"
-                else "Chính sách phục vụ từ chối category chưa thấy theo từng vai trò. "
-            )
-            st.write("V2.2 dùng vùng/thời gian; khoảng cách tuyến chỉ tham khảo, không được đưa vào model. "
-                     + pretrip_policy_note
-                     + "MAE August giữ nguyên đủ rows, không phải bảo đảm sai số hiện tại hoặc từng chuyến."
-                     if stored.get("model_version") == "v2.2" else
-                     "Mô hình lịch sử 2025; quãng đường ô tô dự kiến có thể khác quãng đường đồng hồ taxi thực tế. "
-                     "MAE lịch sử không bảo đảm sai số hiện tại hoặc sai số của từng chuyến.")
-            st.write({"pickup_zone": stored["pickup"]["location_id"],
-                      "dropoff_zone": stored["dropoff"]["location_id"],
-                      "model_version": stored.get("model_version", "v1"),
-                      **({"distance_miles": stored["request"]["distance_miles"]} if "distance_miles" in stored["request"] else {}),
-                      "model_sha256": stored["prediction"]["model_sha256"]})
+            if stored.get("model_version") == "gold-v3":
+                st.write(
+                    "Mô hình Gold V3 (Spark ML GBTRegressor) huấn luyện trên tầng Medallion Gold 2025 (23,88 triệu chuyến). "
+                    "Đầu vào gồm vùng đón/trả (263 Taxi Zones), khoảng cách tâm vùng Haversine Centroid, chu kỳ giờ/thứ và lịch nghỉ lễ OPM. "
+                    "Tuyến JFK (Zone 132) ↔ Manhattan áp dụng quy tắc cước cố định 70.00 USD (Ratecode 2)."
+                )
+                st.write({
+                    "pickup_zone": stored["pickup"]["location_id"],
+                    "dropoff_zone": stored["dropoff"]["location_id"],
+                    "model_version": "gold-v3",
+                    "model_variant": prediction.get("model_variant"),
+                    "ratecode_id": prediction.get("ratecode_id"),
+                    "flat_fare_applied": prediction.get("flat_fare_applied"),
+                    "zone_centroid_distance_km": prediction.get("zone_centroid_distance_km"),
+                    "mapbox_driving_distance_km": round(stored["distance_km"], 3),
+                    "baseline_fare_usd": prediction.get("baseline_fare_usd"),
+                    "contract_version": prediction.get("contract_version"),
+                    "geometry_sha256": prediction.get("geometry_sha256"),
+                })
+            elif stored.get("model_version") == "v2.2":
+                pretrip_policy_note = (
+                    "Chính sách phục vụ dùng unknown bucket (__unknown) kèm cảnh báo cho vùng chưa thấy trong tập train. "
+                    if os.environ.get("PRETRIP_ALLOW_UNSEEN_ZONES", "0") == "1"
+                    else "Chính sách phục vụ từ chối category chưa thấy theo từng vai trò. "
+                )
+                st.write("V2.2 dùng vùng/thời gian; khoảng cách tuyến chỉ tham khảo, không được đưa vào model. "
+                         + pretrip_policy_note
+                         + "MAE August giữ nguyên đủ rows, không phải bảo đảm sai số hiện tại hoặc từng chuyến.")
+                st.write({"pickup_zone": stored["pickup"]["location_id"],
+                          "dropoff_zone": stored["dropoff"]["location_id"],
+                          "model_version": stored.get("model_version", "v1"),
+                          "model_sha256": stored["prediction"]["model_sha256"]})
+            else:
+                st.write("Mô hình lịch sử 2025; quãng đường ô tô dự kiến có thể khác quãng đường đồng hồ taxi thực tế. "
+                         "MAE lịch sử không bảo đảm sai số hiện tại hoặc sai số của từng chuyến.")
+                st.write({"pickup_zone": stored["pickup"]["location_id"],
+                          "dropoff_zone": stored["dropoff"]["location_id"],
+                          "model_version": stored.get("model_version", "v1"),
+                          **({"distance_miles": stored["request"]["distance_miles"]} if "distance_miles" in stored["request"] else {}),
+                          "model_sha256": stored["prediction"]["model_sha256"]})
 
-    # Register ALL keyed widgets before consuming events and requesting one
-    # rerun; an early pickup rerun would otherwise clean up the dropoff widget.
     if pending_events:
         st.session_state.pop("address_fare_error", None)
         for state, event in pending_events:

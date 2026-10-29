@@ -1,0 +1,41 @@
+# Opt-in Gold V3 serving layer AFTER docker-compose.yml + docker-compose.inference.yml.
+# Serves the Gold 2025 V3 model (M3 with ERA5 weather + M3-nw without weather + JFK $70 flat fare).
+services:
+  fare-inference:
+    image: nyc-taxi-inference:gold-v3
+    command:
+      - python
+      - -m
+      - nyc_taxi.ml.inference_server
+      - --model-version
+      - gold-v3
+      - --model-dir
+      - /model-gold-v3
+      - --contract-dir
+      - /model-gold-v3
+      - --zones
+      - /model-gold-v3/zones.csv
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    memswap_limit: 3g
+    pids_limit: 512
+    tmpfs: !override
+      - /tmp:rw,exec,nosuid,nodev,size=536870912,mode=1777
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:ActiveProcessorCount=2 -XX:ParallelGCThreads=2 -XX:ConcGCThreads=1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+    volumes: !override
+      - type: bind
+        source: ./distribution/models/gold-v3
+        target: /model-gold-v3
+        read_only: true
+        bind:
+          create_host_path: false
+  dashboard:
+    image: nyc-taxi-dashboard:gold-v3
+    environment:
+      FARE_MODEL_VERSION: gold-v3
+      FARE_INFERENCE_URL: http://fare-inference:8000

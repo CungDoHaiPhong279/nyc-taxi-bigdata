@@ -1,0 +1,82 @@
+[
+  {
+    "parity_id": "val-0000",
+    "prediction_m3_no_weather": 6.023965296899131,
+    "prediction_m3_weather": 6.184324456663024
+  },
+  {
+    "parity_id": "val-0001",
+    "prediction_m3_no_weather": 18.755055829938964,
+    "prediction_m3_weather": 19.141043236165014
+  },
+  {
+    "parity_id": "val-0002",
+    "prediction_m3_no_weather": 33.18759514587618,
+    "prediction_m3_weather": 34.87618307876171
+  },
+  {
+    "parity_id": "val-0003",
+    "prediction_m3_no_weather": 10.94927000964357,
+    "prediction_m3_weather": 11.1620557703624
+  },
+  {
+    "parity_id": "val-0004",
+    "prediction_m3_no_weather": 48.8098213500893,
+    "prediction_m3_weather": 49.39483128630347
+  },
+  {
+    "parity_id": "val-0005",
+    "prediction_m3_no_weather": 6.605287159066454,
+    "prediction_m3_weather": 6.741426763379162
+  },
+  {
+    "parity_id": "val-0006",
+    "prediction_m3_no_weather": 6.605065174251277,
+    "prediction_m3_weather": 6.818339739187498
+  },
+  {
+    "parity_id": "val-0007",
+    "prediction_m3_no_weather": 37.68266299098517,
+    "prediction_m3_weather": 38.18001828954483
+  },
+  {
+    "parity_id": "val-0008",
+    "prediction_m3_no_weather": 8.775716839875672,
+    "prediction_m3_weather": 8.80111135092283
+  },
+  {
+    "parity_id": "val-0009",
+    "prediction_m3_no_weather": 26.940372476136766,
+    "prediction_m3_weather": 26.321925616411754
+  },
+  {
+    "parity_id": "val-0010",
+    "prediction_m3_no_weather": 17.519971657723413,
+    "prediction_m3_weather": 17.168456507942963
+  },
+  {
+    "parity_id": "val-0011",
+    "prediction_m3_no_weather": 6.136964955587583,
+    "prediction_m3_weather": 5.989202100439077
+  },
+  {
+    "parity_id": "val-0012",
+    "prediction_m3_no_weather": 32.488403006835874,
+    "prediction_m3_weather": 34.224565224684085
+  },
+  {
+    "parity_id": "val-0013",
+    "prediction_m3_no_weather": 7.226022193632706,
+    "prediction_m3_weather": 7.138351668322924
+  },
+  {
+    "parity_id": "val-0014",
+    "prediction_m3_no_weather": 31.959326952416514,
+    "prediction_m3_weather": 31.941543604734342
+  },
+  {
+    "parity_id": "val-0015",
+    "prediction_m3_no_weather": 37.30228323297706,
+    "prediction_m3_weather": 37.304635487314776
+  }
+]

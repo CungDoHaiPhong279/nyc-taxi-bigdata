@@ -1,0 +1,144 @@
+# Declarative Kubernetes Manifest for NYC Taxi Pre-Trip Fare Inference Microservice
+# Aligns with Course Lecture "Hạ tầng ứng dụng dữ liệu" (Docker, CI/CD, Kubernetes):
+# - Decoupled stateless inference microservice (Deployment + ClusterIP Service + HPA)
+# - Liveness (/health) and Readiness (/ready) HTTP probes
+# - Explicit CPU/Memory requests & limits and read-only root filesystem security context
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nyc-taxi-fare-inference
+  namespace: nyc-taxi-bigdata
+  labels:
+    app: nyc-taxi-fare-inference
+    tier: ml-serving
+    model-version: gold-v3
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nyc-taxi-fare-inference
+  template:
+    metadata:
+      labels:
+        app: nyc-taxi-fare-inference
+        tier: ml-serving
+        model-version: gold-v3
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: fare-inference
+          image: nyc-taxi-inference:gold-v3
+          imagePullPolicy: IfNotPresent
+          args:
+            - "python"
+            - "-m"
+            - "nyc_taxi.ml.inference_server"
+            - "--model-version"
+            - "gold-v3"
+            - "--model-dir"
+            - "/model-gold-v3"
+            - "--contract-dir"
+            - "/model-gold-v3"
+            - "--zones"
+            - "/model-gold-v3/zones.csv"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:ActiveProcessorCount=2 -XX:ParallelGCThreads=2"
+            - name: PYSPARK_SUBMIT_ARGS
+              value: "--driver-memory 1536m --conf spark.ui.enabled=false pyspark-shell"
+            - name: SPARK_LOCAL_IP
+              value: "127.0.0.1"
+            - name: SPARK_LOCAL_DIRS
+              value: "/tmp/spark-local"
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "3Gi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp-scratch
+              mountPath: /tmp
+            - name: model-bundle
+              mountPath: /model-gold-v3
+              readOnly: true
+      volumes:
+        - name: tmp-scratch
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
+        - name: model-bundle
+          persistentVolumeClaim:
+            claimName: nyc-taxi-gold-v3-model-pvc
+            readOnly: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fare-inference
+  namespace: nyc-taxi-bigdata
+  labels:
+    app: nyc-taxi-fare-inference
+spec:
+  type: ClusterIP
+  selector:
+    app: nyc-taxi-fare-inference
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nyc-taxi-fare-inference-hpa
+  namespace: nyc-taxi-bigdata
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nyc-taxi-fare-inference
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75

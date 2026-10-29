@@ -2828,3 +2828,54 @@ cô lập bằng image sẵn có. Full bootstrap/`setup_system.ps1` V2 không đ
 khóa. Xem [entrypoint report](plans/PACKAGE_V22_ENTRYPOINT_REPORT.md) cho
 9/9 AppTest offline PASS, tests mock/static và clean-copy PLAN; chưa phải
 browser live, image build mới hoặc full fresh-machine E2E.
+
+---
+
+## 14. GOLD ML V3 — Huấn luyện đa mô hình trên tầng Gold 2025, Đánh giá Drift 2026 & Giám sát Toàn trình
+
+Nhánh nâng cấp **`gold-v3` (`FARE_MODEL_VERSION=gold-v3`)** kết nối khép kín từ
+tầng **Medallion Gold 2025 (`23.886.265` chuyến đã tích hợp Thời tiết ERA5 +
+Lịch nghỉ lễ + 263 Taxi Zones)** sang **Spark MLlib + MLflow (`nyc-taxi-fare-gold-v3`)**,
+ghi ngược dự đoán vào **PostgreSQL (`analytics.model_metrics`, `analytics.fact_fare_prediction`, `analytics.vw_fare_prediction_enriched`)**
+và phục vụ trực tiếp trên **Streamlit (tích hợp tìm kiếm địa chỉ Mapbox + bản đồ tuyến đường + 5 chỉ số giám sát Pipeline)**.
+
+### 14.1. Đặc trưng chính của Gold V3 (`gold-ml-v3-2025-weather-centroid-1`)
+
+- **Độ phủ 100% Zone hoạt động (`258/258` Pickup, `259/259` Dropoff trong tập Train 2025):**
+  Sử dụng lấy mẫu băm tất định `3% SplitMix64` kết hợp bù phân tầng cho các zone
+  hiếm (`min_train_zone_support = 30`, bổ sung `4.469` dòng), tổng cộng **`507.259` dòng**
+  (`336.864` Train Tháng 01–04/2025, `89.625` Validation Tháng 05/2025, `80.770`
+  Test Holdout Tháng 06/2025). Các đảo/công viên không có chuyến đón vẫn được hỗ trợ
+  qua nhánh `__unknown` (`handleInvalid="keep"`) kết hợp khoảng cách tâm vùng Haversine.
+- **Quy tắc Giá cố định Sân bay JFK (`LocationID = 132`) ↔ Manhattan (`$70,00 USD`, Ratecode 2):**
+  Kiểm chứng trên `574.602` chuyến Gold 2025 (`99,9864%` khớp đúng `$70,00 USD`).
+  Hỗ trợ trực tiếp cả trên luồng tìm địa chỉ Mapbox (vẫn vẽ tuyến đường trên bản đồ
+  và trả mức giá cố định `$70,00 USD` kèm thông báo rõ ràng).
+- **So sánh 5 cấu hình mô hình & Ablation Thời tiết ERA5 (trên Test Holdout Tháng 06/2025 — `80.770` chuyến):**
+  - `B0 (Global Median)`: `MAE = $7,8979`, `RMSE = $13,3313`, `R² = -0,1322`
+  - `B0 (Hierarchical PU-DO-6h Median)`: `MAE = $3,3466`, `RMSE = $6,5173`, `R² = 0,7294`
+  - `M1 (LinearRegression OHE + Weather)`: `MAE = $3,2092`, `RMSE = $4,8180`, `R² = 0,8521`
+  - `M2 (RandomForestRegressor Native Cat + Weather)`: `MAE = $3,1202`, `RMSE = $4,6736`, `R² = 0,8609`
+  - `M3-w (GBTRegressor Native Cat + ERA5 Weather)`: **`MAE = $2,9886`, `RMSE = $4,5993`, `R² = 0,8652`**
+  - `M3-nw (GBTRegressor No-Weather Ablation)`: **`MAE = $2,9157`, `RMSE = $4,5427`, `R² = 0,8685`, `P50 = $2,0529`**
+- **Kiểm định Độ trôi Dữ liệu sang năm 2026 (`721.513` chuyến Tháng 06–08/2026):**
+  Mô hình huấn luyện trên Gold 2025 đạt **`MAE = $3,0806 USD`, `RMSE = $5,3311 USD`, `R² = 0,8297`, `P50 = $2,1061 USD`**
+  khi dự báo sang năm 2026.
+
+### 14.2. Khởi chạy Hệ thống với Gold V3
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.inference.yml -f docker-compose.gold-v3.yml up -d
+```
+
+Sau khi khởi động, mở `http://127.0.0.1:8501` và chọn **Ước tính cước** ở thanh bên để sử dụng:
+1. **Tab `🗺️ Ước tính cước từ địa chỉ (Mapbox)`**: Nhập địa chỉ đón/đến tại NYC, tự động ánh xạ sang 263 Taxi Zones, vẽ tuyến đường bộ trên bản đồ Mapbox và dự đoán giá cước bằng mô hình Gold V3 (hỗ trợ cả JFK ↔ Manhattan `$70,00`).
+2. **Tab `🧪 Mô phỏng Zone & Thời tiết ERA5`**: Thử nghiệm trực tiếp 263 vùng và bật/tắt thông số thời tiết ERA5 (`temperature_2m`, `precipitation`, `snowfall`, `wind_speed_10m`).
+3. **Tab `📊 Đánh giá 5 Mô hình & Drift 2026`**: Bảng chỉ số và biểu đồ trực tiếp từ PostgreSQL (`analytics.model_metrics`, `analytics.vw_fare_prediction_enriched`).
+4. **Tab `🩺 5 Chỉ số Giám sát Pipeline`**: Theo dõi `Job Status (6/6 PASS)`, `PG Load Time (5.184,2s)`, `Row Reconciliation (23.886.265 / Δ=0)`, `Silver Reject Rate (0,82% — 197.119 / 24.083.384 dòng)` và `Serving Health & Container RAM`.
+
+Xem chi tiết tại:
+- [Báo cáo Huấn luyện & Đánh giá Gold V3](reports/GOLD_V3_TRAINING_REPORT.md)
+- [Đề cương Báo cáo Tổng kết Cuối kỳ](reports/FINAL_REPORT_OUTLINE.md)
+- [Hướng dẫn Tích hợp Trang Đánh giá Mô hình trên Power BI](reports/POWER_BI_MODEL_PAGE_GUIDE.md)
+- [Airflow DAG (`nyc_taxi_elt_ml_dag.py`)](airflow/dags/nyc_taxi_elt_ml_dag.py), [Script Sao lưu (`backup.ps1`)](scripts/backup.ps1), và [Kubernetes Manifest (`fare-inference-deployment.yaml`)](k8s/fare-inference-deployment.yaml).
