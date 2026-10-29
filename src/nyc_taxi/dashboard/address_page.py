@@ -43,6 +43,7 @@ def inputs_changed(stored: dict, draft: dict) -> bool:
         or (draft.get("time_selection") != stored.get("time_selection")
             if stored.get("model_version") in ("v2.2", "gold-v3")
             else draft.get("pickup_datetime") != stored.get("pickup_datetime"))
+        or draft.get("weather_override") != stored.get("request", {}).get("weather_override")
         or draft.get("standard_rate") is not True
     )
 
@@ -246,17 +247,17 @@ def render_page() -> None:
     st.title("Ước tính cước từ địa chỉ")
     if is_gold_v3:
         st.markdown(
-            "**Cước cơ bản tiêu chuẩn · USD · chưa gồm tip, cầu đường (tolls) và phụ phí "
-            "(riêng tuyến Sân bay JFK ↔ Manhattan tự động áp dụng cước cố định $70.00 USD).**"
+            "**Cước cơ bản tiêu chuẩn · USD · chưa gồm tiền tip, phí cầu đường (tolls) và phụ phí "
+            "(riêng tuyến Sân bay JFK ↔ Manhattan tự động áp dụng mức cước cố định 70.00 USD).**"
         )
         st.write(
-            "Ước tính trước chuyến từ địa chỉ đón/đến (ánh xạ tự động sang 263 NYC Taxi Zones kết hợp "
-            "khoảng cách tâm vùng Haversine Centroid) và thời gian New York. Tuyến đường bộ Mapbox hiển thị trực quan trên bản đồ."
+            "Nhập địa chỉ đón và điểm đến tại New York để tự động nhận diện khu vực (263 NYC Taxi Zones), "
+            "hiển thị lộ trình trên bản đồ và dự báo giá cước bằng mô hình học máy **Gold V3 (Spark GBTRegressor)**."
         )
         st.caption(
-            "Mô hình Gold V3 (Spark GBTRegressor) huấn luyện từ 23,88 triệu chuyến Medallion Gold 2025 "
-            "(tích hợp Taxi + Thời tiết ERA5 + Lịch nghỉ lễ + Taxi Zones), đã kiểm định trên tập Holdout 2025 (MAE $2.58, R² = 0.858) "
-            "và kiểm định độ trôi Out-of-Time Drift 2026 (MAE $3.08, R² = 0.830)."
+            "Mô hình được huấn luyện từ 23,88 triệu chuyến xe tầng Medallion Gold 2025 "
+            "(kết hợp dữ liệu Taxi + Thời tiết ERA5 + Lịch nghỉ lễ + Bản đồ vùng), đạt sai số trung bình "
+            "MAE = 2.92 USD (R² = 86.9%) trên tập kiểm thử 2025 và MAE = 3.08 USD (R² = 83.0%) trên dữ liệu thực tế năm 2026."
         )
     elif is_v22:
         st.markdown("**Cước đồng hồ tiêu chuẩn · USD · chưa gồm tip, tolls và phụ phí.**")
@@ -270,7 +271,7 @@ def render_page() -> None:
         st.info("Chế độ offline: tìm địa chỉ và bản đồ trực tuyến chưa được bật.")
 
     st.subheader("1. Chọn điểm đón và điểm đến")
-    st.write("Gõ địa chỉ hoặc tên địa điểm, rồi chọn một gợi ý.")
+    st.write("Gõ địa chỉ hoặc tên địa điểm tại New York, sau đó bấm chọn một gợi ý trong danh sách.")
     support_by_slot = {}
     pending_events = []
     pretrip_metadata = None
@@ -289,8 +290,6 @@ def render_page() -> None:
         except Exception:
             st.error("Chưa kiểm tra được dịch vụ suy luận Gold V3. Không có giá thay thế.")
 
-    # Reserve both stable parents before handling either role. Conditional
-    # feedback must not move/remount the other field's iframe and debounce.
     picker_slots = {slot: st.container(key="address_" + slot + "_slot")
                     for slot in ("pickup", "dropoff")}
     for slot, label in (("pickup", "Địa chỉ đón"), ("dropoff", "Địa chỉ đến")):
@@ -336,7 +335,7 @@ def render_page() -> None:
         do_z = support_by_slot["dropoff"]["zone"]
         if is_gold_v3:
             if (pu_z["location_id"] == 132 and do_z["borough"] == "Manhattan") or (do_z["location_id"] == 132 and pu_z["borough"] == "Manhattan"):
-                st.info("✈️ Tuyến Sân bay JFK (Zone 132) ↔ Manhattan: Hệ thống tự động áp dụng quy tắc cước cố định $70.00 USD (Ratecode 2) theo quy định NYC TLC.")
+                st.info("✈️ Tuyến Sân bay JFK (Zone 132) ↔ Manhattan: Hệ thống tự động áp dụng quy tắc cước cố định 70.00 USD (Ratecode 2) theo quy định NYC TLC.")
         else:
             try:
                 validate_standard_route(pu_z, do_z)
@@ -349,8 +348,9 @@ def render_page() -> None:
                 "Nếu một điểm chưa được hỗ trợ, chỉ cần sửa ô đó; điểm còn lại được giữ nguyên.")
 
     st.subheader("2. Chọn thời gian đón")
-    st.write("Giờ địa phương America/New_York · hẹn tối đa 7 ngày, trong phạm vi calendar đã pin."
+    st.write("Giờ địa phương America/New_York · hỗ trợ đi ngay hoặc hẹn giờ trước tối đa 7 ngày."
              if pretrip else "Giờ địa phương New York · định dạng 24 giờ · chỉ tháng 1–6/2025.")
+    weather_override = None
     with st.container(border=True):
         mode = "now" if pretrip else "historical"
         fold = None
@@ -384,8 +384,28 @@ def render_page() -> None:
             if pretrip:
                 fold_label = st.selectbox("Khi giờ New York bị lặp do DST", ["Tự động nếu không bị lặp", "Lần thứ nhất", "Lần thứ hai"], key="address_pretrip_fold")
                 fold = {"Tự động nếu không bị lặp": None, "Lần thứ nhất": 0, "Lần thứ hai": 1}[fold_label]
+
+        if is_gold_v3:
+            use_weather = st.checkbox(
+                "🌦️ Tùy chọn thử nghiệm: Nhập thêm điều kiện thời tiết (nhiệt độ, mưa, tuyết, gió) để chạy biến thể mô hình có thời tiết (M3-w)",
+                value=False,
+                key="address_gold_v3_use_weather",
+            )
+            if use_weather:
+                wc1, wc2, wc3, wc4 = st.columns(4)
+                temp_c = wc1.number_input("Nhiệt độ (°C)", min_value=-30.0, max_value=45.0, value=20.0, step=1.0, key="addr_w_temp")
+                precip_mm = wc2.number_input("Lượng mưa (mm/h)", min_value=0.0, max_value=100.0, value=0.0, step=0.5, key="addr_w_rain")
+                snow_cm = wc3.number_input("Tuyết rơi (cm/h)", min_value=0.0, max_value=50.0, value=0.0, step=0.5, key="addr_w_snow")
+                wind_kmh = wc4.number_input("Tốc độ gió (km/h)", min_value=0.0, max_value=120.0, value=12.0, step=1.0, key="addr_w_wind")
+                weather_override = {
+                    "temperature_2m": float(temp_c),
+                    "precipitation": float(precip_mm),
+                    "snowfall": float(snow_cm),
+                    "wind_speed_10m": float(wind_kmh),
+                }
+
         checkbox_text = (
-            "Tôi hiểu đây là ước tính cước cơ bản (USD) chưa gồm tip, cầu đường và phụ phí; tuyến JFK ↔ Manhattan áp dụng cước cố định $70.00."
+            "Tôi hiểu đây là ước tính cước cơ bản (USD) chưa gồm tip, cầu đường và phụ phí; tuyến JFK ↔ Manhattan áp dụng cước cố định 70.00 USD."
             if is_gold_v3
             else "Tôi xác nhận đây là taxi vàng tính cước đồng hồ tiêu chuẩn, không phải cước cố định, thỏa thuận hoặc đi chung."
         )
@@ -394,6 +414,8 @@ def render_page() -> None:
     payload = {"pickup": st.session_state.address_pickup["selected"],
                "dropoff": st.session_state.address_dropoff["selected"],
                "standard_rate": standard}
+    if weather_override is not None:
+        payload["weather_override"] = weather_override
     if pretrip:
         payload["time_selection"] = {"mode": mode, "scheduled_local":
                                      datetime.combine(pickup_date, time(hour, minute)).isoformat() if mode == "scheduled" else None,
@@ -409,11 +431,15 @@ def render_page() -> None:
             try:
                 submission_id = str(uuid4())
                 if pretrip:
-                    payload["pretrip_request"] = build_pretrip_submission(
+                    req_obj = build_pretrip_submission(
                         pickup_id=support_by_slot["pickup"]["zone"]["location_id"],
                         dropoff_id=support_by_slot["dropoff"]["zone"]["location_id"],
                         time_selection=payload["time_selection"], submission_id=submission_id,
                     )
+                    if weather_override is not None:
+                        req_obj.update(weather_override)
+                        req_obj["weather_override"] = weather_override
+                    payload["pretrip_request"] = req_obj
                 with st.spinner("Đang tính tuyến và ước tính cước…"):
                     outcome = execute_submission(st.session_state, submission_id, payload, make_coordinator())
                 if outcome.success:
@@ -439,27 +465,27 @@ def render_page() -> None:
         if stored.get("model_version") == "gold-v3":
             m1, m2, m3 = st.columns(3)
             m1.metric(
-                "Ước tính cước cơ bản (USD)",
+                "Giá cước dự kiến (USD)",
                 f"${prediction['fare_amount_usd']:,.2f}",
-                delta="Ratecode 2 Flat Fare ($70.00)" if prediction.get("flat_fare_applied") else f"Baseline B0: ${prediction.get('baseline_fare_usd', 0.0):,.2f}",
+                delta="Cước cố định JFK ↔ Manhattan (Ratecode 2)" if prediction.get("flat_fare_applied") else f"Mức trung vị lịch sử: ${prediction.get('baseline_fare_usd', 0.0):,.2f}",
                 delta_color="off",
             )
             m2.metric(
-                "Tuyến đường bộ (Mapbox)",
+                "Quãng đường lộ trình (Mapbox)",
                 f"{stored['distance_km']:.2f} km",
-                delta=f"{stored['distance_km'] * 0.621371:.2f} dặm (hiển thị bản đồ)",
+                delta=f"{stored['distance_km'] * 0.621371:.2f} dặm (trên bản đồ)",
                 delta_color="off",
             )
             m3.metric(
                 "Khoảng cách tâm vùng (Haversine)",
                 f"{prediction.get('zone_centroid_distance_km', 0.0):.2f} km",
-                delta="Đầu vào mô hình Gold V3",
+                delta="Đầu vào mô hình học máy",
                 delta_color="off",
             )
             st.write(
-                f"**Điểm đón:** Zone {stored['pickup']['location_id']} ({stored['pickup']['borough']} — {stored['pickup']['zone']}) "
-                f"→ **Điểm đến:** Zone {stored['dropoff']['location_id']} ({stored['dropoff']['borough']} — {stored['dropoff']['zone']}) "
-                f"· **Giờ đón:** {submitted_at:%d/%m/%Y %H:%M} (America/New_York)"
+                f"**Hành trình:** Zone {stored['pickup']['location_id']} ({stored['pickup']['borough']} — {stored['pickup']['zone']}) "
+                f"→ Zone {stored['dropoff']['location_id']} ({stored['dropoff']['borough']} — {stored['dropoff']['zone']}) "
+                f"· **Giờ đón:** {submitted_at:%d/%m/%Y %H:%M} (Giờ New York)"
             )
         else:
             st.metric("Ước tính cước cơ bản (USD)", f"${prediction['fare_amount_usd']:,.2f}")
@@ -493,7 +519,7 @@ def render_page() -> None:
                 st.write(
                     "Mô hình Gold V3 (Spark ML GBTRegressor) huấn luyện trên tầng Medallion Gold 2025 (23,88 triệu chuyến). "
                     "Đầu vào gồm vùng đón/trả (263 Taxi Zones), khoảng cách tâm vùng Haversine Centroid, chu kỳ giờ/thứ và lịch nghỉ lễ OPM. "
-                    "Tuyến JFK (Zone 132) ↔ Manhattan áp dụng quy tắc cước cố định $70.00 USD (Ratecode 2)."
+                    "Tuyến JFK (Zone 132) ↔ Manhattan áp dụng quy tắc cước cố định 70.00 USD (Ratecode 2)."
                 )
                 st.write({
                     "pickup_zone": stored["pickup"]["location_id"],
@@ -530,8 +556,6 @@ def render_page() -> None:
                           **({"distance_miles": stored["request"]["distance_miles"]} if "distance_miles" in stored["request"] else {}),
                           "model_sha256": stored["prediction"]["model_sha256"]})
 
-    # Register ALL keyed widgets before consuming events and requesting one
-    # rerun; an early pickup rerun would otherwise clean up the dropoff widget.
     if pending_events:
         st.session_state.pop("address_fare_error", None)
         for state, event in pending_events:
