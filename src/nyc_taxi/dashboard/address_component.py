@@ -55,7 +55,7 @@ def _rotate(state: dict) -> None:
 
 def _clear_choice(state: dict) -> None:
     state.update(suggestions=[], suggestions_query="", suggestions_version=0,
-                 retrieved=None, selected=None, error=None, status="idle")
+                 retrieved=None, selected=None, error=None, status="idle", external_sync=False)
 
 
 def _snapshot(state: dict) -> tuple[int, str, str]:
@@ -281,5 +281,6 @@ def address_picker(state: dict, *, label: str, key: str, online: bool = False):
         suggestions=state["suggestions"], suggestions_query=state["suggestions_query"],
         suggestions_version=state["suggestions_version"], status=state["status"],
         error=state["error"], selected=state["selected"],
+        external_sync=bool(state.get("external_sync", False)),
         request_counts=dict(state["request_counts"]), default=None, key=key,
     )
