@@ -1,7 +1,7 @@
 # 🚕 NYC Taxi Big Data — Medallion Lakehouse & Pre-trip Fare AI
 
 Đồ án cuối kỳ học phần **Tích hợp và Phân tích Dữ liệu Lớn** (Khoa Công nghệ Thông tin — Đại học Phenikaa).  
-Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** với **Thời tiết khí tượng ERA5**, **Lịch nghỉ lễ Liên bang Mỹ** và **Bản đồ 263 vùng Taxi Zones** theo kiến trúc **Medallion (`Raw -> Bronze -> Silver -> Gold`)**, lưu trữ lai (**Parquet Data Lake + PostgreSQL 16 Star Schema**) và phục vụ dự đoán giá cước trước chuyến đi bằng **Spark MLlib (`GBTRegressor Gold V3`) + Mapbox**.
+Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** với **Thời tiết khí tượng ERA5**, **Lịch nghỉ lễ Liên bang Mỹ** và **Bản đồ 263 vùng Taxi Zones** theo kiến trúc **Medallion (`Raw -> Bronze -> Silver -> Gold`)**, lưu trữ lai (**Parquet Data Lake + PostgreSQL 16 Star Schema**) và phục vụ dự đoán giá cước trước chuyến đi bằng **Spark MLlib (`GBTRegressor Gold V3`) + Bản đồ tương tác đặt xe Mapbox 2 chiều**.
 
 ---
 
@@ -35,14 +35,14 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
                    • Power BI Desktop (`NYC_Taxi_Dashboard.pbix`)
                    • Streamlit Web App (`http://127.0.0.1:8501`)
                      ├─ Trang 1: Phân tích lịch sử (23,88M chuyến & Đa nguồn)
-                     └─ Trang 2: Ước tính cước (Mapbox + Đánh giá ML + 5 Metrics)
+                     └─ Trang 2: Ước tính cước (Bản đồ tương tác Mapbox 2 chiều + Đánh giá ML + 5 Metrics)
 ```
 
 ### Vai trò của 4 Tầng Dữ liệu (Medallion Architecture)
 1. **Tầng Raw (`data/raw/`)**: Lưu trữ nguyên bản dữ liệu tải về từ nguồn (file Parquet chuyến đi của NYC TLC, JSON thời tiết theo giờ từ Open-Meteo ERA5, CSV lịch nghỉ lễ Mỹ, GeoJSON/CSV ranh giới 263 vùng) kèm kiểm tra mã băm `SHA-256`.
 2. **Tầng Bronze (`data/bronze/`)**: Đưa toàn bộ dữ liệu thô về định dạng chuẩn **Apache Parquet (nén Snappy)**, giữ nguyên giá trị gốc và gắn thêm siêu dữ liệu kiểm toán (`_source_file`, `_ingestion_batch_id`) để truy vết nguồn gốc dữ liệu.
 3. **Tầng Silver (`data/silver/`)**: Làm sạch dữ liệu bẩn và chuẩn hóa múi giờ địa phương `America/New_York`:
-   - Loại bỏ `197.119` dòng lỗi (`0,82%`) trên tổng số `24.083.384` dòng Raw (chủ yếu do thời gian trả khách nhỏ hơn hoặc bằng thời gian đón khách `invalid_duration`, thiếu tọa độ vùng hoặc trùng lặp).
+   - Loại bỏ `197.119` dòng lỗi (`0,82%`) trên tổng số `24.083.384` dòng Raw (chủ yếu do thời gian trả khách nhỏ hoặc bằng thời gian đón khách `invalid_duration`, thiếu tọa độ vùng hoặc trùng lặp).
    - Giữ lại **`23.886.265` chuyến xe hợp lệ**.
 4. **Tầng Gold (`data/gold/taxi_enriched/`)**: Tích hợp đa nguồn dữ liệu bằng phép nối phân tán trên PySpark (`Taxi` ⋈ `Taxi Zones` ⋈ `US Calendar` ⋈ `ERA5 Weather` theo ngày và giờ địa phương NYC). Đạt tỷ lệ khớp **100% vùng bản đồ** và **99,92% bản ghi thời tiết ERA5** (`23.866.019 / 23.886.265` chuyến).
 
@@ -55,7 +55,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 ### 2.1. Thuật ngữ Bài toán & Nghiệp vụ Taxi NYC
 - **`fare_amount` (Cước cơ bản — USD)**: Số tiền cước tính theo đồng hồ (hoặc cước cố định sân bay) cho quãng đường và thời gian di chuyển, **chưa bao gồm** tiền tip, phí cầu đường (`tolls`) và thuế phụ thu. Đây là biến mục tiêu mà mô hình AI dự đoán.
 - **Pre-trip Fare Estimation (Dự báo cước trước chuyến đi)**: Bài toán ước tính giá cước ngay tại thời điểm khách đặt xe. Do xe chưa lăn bánh nên mô hình **tuyệt đối không được dùng** quãng đường thực tế (`trip_distance`) hay thời lượng chuyến đi thực tế để tránh rò rỉ dữ liệu tương lai (*Data Leakage*).
-- **Taxi Zone (`LocationID 1..263`)**: Ủy ban Taxi và Limousine New York (NYC TLC) chia toàn bộ 5 quận (*Manhattan, Queens, Brooklyn, Bronx, Staten Island* và sân bay Newark) thành 263 vùng địa lý. Khi người dùng gõ địa chỉ trên Mapbox, hệ thống tự động xác định tọa độ đó nằm trong vùng nào (*Point-in-Polygon*).
+- **Taxi Zone (`LocationID 1..263`)**: Ủy ban Taxi và Limousine New York (NYC TLC) chia toàn bộ 5 quận (*Manhattan, Queens, Brooklyn, Bronx, Staten Island* và sân bay Newark) thành 263 vùng địa lý. Người dùng có 3 cách chọn điểm đặt xe linh hoạt: **(1) Click hoặc kéo thả ghim A/B trực tiếp trên bản đồ tương tác NYC Mapbox**, **(2) Bấm 1-click chọn nhanh cụm điểm nóng** (*Sân bay JFK/LGA, Times Square, Phố Wall...*), hoặc **(3) Gõ địa chỉ vào ô tìm kiếm**. Hệ thống tự động phân giải tọa độ vào 263 vùng (*Point-in-Polygon*) cục bộ siêu tốc (<2ms, 0 tốn quota API) và đồng bộ 2 chiều tức thì (`external_sync`) lên thanh nhập địa chỉ.
 - **Khoảng cách tâm vùng Haversine (`zone_centroid_distance_km`)**: Khoảng cách đường chim bay (tính theo mặt cầu Trái Đất, đơn vị km) nối từ tâm vùng đón đến tâm vùng trả khách — đặc trưng quan trọng nhất thay thế cho quãng đường đồng hồ khi dự báo trước chuyến đi.
 - **Ratecode 2 (Quy tắc Cước cố định JFK ↔ Manhattan = 70,00 USD)**: Quy định chính thức của NYC TLC áp mức giá cố định `70,00 USD` cho mọi chuyến taxi vàng đi giữa Sân bay Quốc tế JFK (`Zone 132`) và bất kỳ vùng nào thuộc quận `Manhattan`. Kiểm chứng trên `574.602` chuyến thực tế cho thấy `99,9864%` chuyến tuân theo đúng mức giá này.
 
@@ -122,8 +122,8 @@ nyc-taxi-bigdata/
 │   ├── database/                  # Kết nối và nạp dữ liệu COPY vào PostgreSQL
 │   ├── ml/                        # Chuẩn bị mẫu phân tầng, huấn luyện Spark ML & HTTP Server
 │   ├── monitoring/                # Bộ thu thập 5 chỉ số giám sát vận hành Pipeline
-│   └── dashboard/                 # Giao diện Streamlit (Mapbox Address, Đánh giá ML, Giám sát)
-└── tests/                         # Bộ kiểm thử tự động (1.441 bài test Pytest, AppTest, Pester)
+│   └── dashboard/                 # Giao diện Streamlit (Bản đồ tương tác Mapbox 2 chiều, Autocomplete, Đánh giá ML, Giám sát)
+└── tests/                         # Bộ kiểm thử tự động (1.442 bài test Python + 30 bài test frontend Node.js)
 ```
 
 ---
@@ -145,7 +145,7 @@ docker compose -f docker-compose.yml -f docker-compose.inference.yml -f docker-c
 1. **Ứng dụng Web Streamlit (`http://127.0.0.1:8501`)**:
    - **Trang "Phân tích lịch sử"**: Bộ lọc theo Tháng & Quận, 4 thẻ KPI tổng quan (`23.886.265` chuyến), 3 biểu đồ phân bố theo Tháng/Giờ/Quận và 2 bảng đối chiếu Đa nguồn (**Thời tiết ERA5** & **Lịch nghỉ lễ Mỹ**).
    - **Trang "Ước tính cước" (Gồm 3 Tab trực quan)**:
-     - `🚕 Ước tính cước chuyến đi`: Gõ địa chỉ đón/đến thực tế tại NYC (Mapbox Autocomplete), tự động ánh xạ vào 263 vùng, vẽ lộ trình trên bản đồ và dự đoán giá cước Gold V3 (kèm tùy chọn bật/tắt thông số Thời tiết ERA5).
+     - `🚕 Ước tính cước chuyến đi`: Đặt xe chuẩn trải nghiệm thực tế với 3 cách chọn điểm linh hoạt: (1) Click/kéo thả trực tiếp ghim A/B trên bản đồ NYC Mapbox, (2) 1-click chọn nhanh cụm điểm nóng (Sân bay JFK/LGA, Times Square, Phố Wall...), (3) Gõ địa chỉ qua Mapbox Autocomplete. Tự động đồng bộ 2 chiều (`external_sync`), hiển thị ranh giới 263 Taxi Zones dạng đa giác (polygon), thẻ HUD nổi tóm tắt lộ trình (quãng đường, thời gian lái xe thực tế) và dự báo cước bằng mô hình Spark MLlib GBTRegressor Gold V3 (kèm tùy chọn bật/tắt thông số Thời tiết ERA5).
      - `📊 Độ chính xác & So sánh Mô hình`: 4 thẻ KPI kết quả + 3 Sơ đồ trực quan (So sánh MAE giữa các mô hình; Đường Giá thực tế vs Giá AI dự đoán theo 24 giờ; Biểu đồ kiểm chứng độ ổn định sang Năm 2026).
      - `🩺 Giám sát Hệ thống & Dữ liệu`: Sơ đồ luồng Medallion 4 bước, 5 thẻ chỉ số vận hành và 2 biểu đồ cột theo tháng.
 2. **MLflow Tracking UI (`http://127.0.0.1:5000`)**: Quản lý tham số và chỉ số của các lần huấn luyện trong experiment `nyc-taxi-fare-gold-v3`.
@@ -176,8 +176,11 @@ python scripts/package_gold_v3_bundle.py
 # Sao lưu PostgreSQL (Schema + Metadata hoặc Full Dump ra thư mục backups/)
 .\scripts\backup.ps1
 
-# Chạy toàn bộ 1.441 bài kiểm thử tự động theo đúng profile GitHub Actions CI
+# Chạy toàn bộ 1.442 bài kiểm thử Python theo đúng profile GitHub Actions CI
 python scripts/ci_python.py
+
+# Chạy bộ kiểm thử giao diện người dùng (30 bài test frontend Node.js)
+node --test tests/test_address_frontend.js tests/test_route_map_frontend.js
 ```
 
 ---
