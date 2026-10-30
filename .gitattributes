@@ -25,3 +25,4 @@
 /distribution/models/pretrip-v2.2-native/*.sha256 text eol=lf
 /distribution/models/pretrip-v2.2-native/*.md text eol=lf
 /config/pretrip_v22_distribution.lock.json text eol=lf
+/distribution/models/gold-v3/** binary

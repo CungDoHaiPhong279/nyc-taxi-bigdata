@@ -1,5 +1,5 @@
 {
-  "bundle_tree_sha256": "bf00570d18ea2b6c5c9f2246e70c24dafa69adac2bd3aa5e52d4ea2406b80ab5",
+  "bundle_tree_sha256": "82b824adb81dace20881086c549d1176c35e84ed6f5baa614e6458b88d15fa83",
   "file_count": 79,
   "files": [
     {
@@ -8,9 +8,9 @@
       "sha256": "7b4c2597cf745331d29d1ce3b7429d6dc467b5c8aac32d70a86345a43b6b6262"
     },
     {
-      "bytes": 2829,
+      "bytes": 2929,
       "path": "gold_ml_v3_contract.json",
-      "sha256": "466f0b685a3176bde43c095ccca326aceccb7612c76996998e5830e1675e3f72"
+      "sha256": "91f0cb48cb68e7d9db6d1c6d74244ed1499cde878e41bfc2c8ee536435f9cee2"
     },
     {
       "bytes": 7706,
