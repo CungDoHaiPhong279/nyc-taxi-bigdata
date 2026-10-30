@@ -3,6 +3,7 @@
 services:
   fare-inference:
     image: nyc-taxi-inference:gold-v3
+    restart: unless-stopped
     command:
       - python
       - -m
@@ -36,6 +37,7 @@ services:
           create_host_path: false
   dashboard:
     image: nyc-taxi-dashboard:gold-v3
+    restart: unless-stopped
     environment:
       FARE_MODEL_VERSION: gold-v3
       FARE_INFERENCE_URL: http://fare-inference:8000
