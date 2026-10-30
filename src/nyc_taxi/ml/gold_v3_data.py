@@ -42,7 +42,8 @@ def _nonexistent_spring_mask(pu_us: np.ndarray) -> np.ndarray:
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONTRACT_PATH = ROOT / "config" / "gold_ml_v3_contract.json"
 DEFAULT_GOLD_ROOT = ROOT / "data" / "gold" / "taxi_enriched"
-DEFAULT_ZONES_CSV = ROOT / "data" / "raw" / "taxi_zones" / "taxi_zone_lookup.csv"
+DEFAULT_ZONES_CSV = ROOT / "distribution" / "models" / "gold-v3" / "zones.csv"
+FALLBACK_RAW_ZONES_CSV = ROOT / "data" / "raw" / "taxi_zones" / "taxi_zone_lookup.csv"
 
 CONTRACT_VERSION = "gold-ml-v3-2025-weather-centroid-1"
 
@@ -132,6 +133,7 @@ def load_manhattan_zone_ids(zones_csv: Path = DEFAULT_ZONES_CSV) -> set[int]:
     """Load LocationIDs belonging to Manhattan for JFK flat-fare verification."""
     import csv
 
+    zones_csv = zones_csv if zones_csv.is_file() else FALLBACK_RAW_ZONES_CSV
     if not zones_csv.is_file():
         return set()
     with zones_csv.open(encoding="utf-8-sig", newline="") as stream:
