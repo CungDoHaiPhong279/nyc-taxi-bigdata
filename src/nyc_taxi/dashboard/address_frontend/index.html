@@ -174,6 +174,18 @@
       if (!initialized) {
         initialized = true; session = nextSession; version = serverVersion; query = serverQuery;
         input.value = query;
+      } else if (args.external_sync === true && serverVersion > version) {
+        // Explicit server-driven pin/preset/swap/clear sync from the interactive map.
+        cancelTimer(); closeChoices(); retrieving = null; dismissed = null;
+        if (nextSession && nextSession !== session) {
+          retiredSessions.push(session); if (retiredSessions.length > 16) retiredSessions.shift();
+          session = nextSession;
+        }
+        version = serverVersion; query = serverQuery;
+        if (input.value !== query) input.value = query;
+        selected = (args.selected && typeof args.selected.label === "string")
+          ? {label: args.selected.label} : null;
+        phase = selected ? "selected" : "idle";
       } else if (nextSession && nextSession !== session) {
         retiredSessions.push(session); if (retiredSessions.length > 16) retiredSessions.shift();
         session = nextSession;

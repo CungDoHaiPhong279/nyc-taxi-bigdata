@@ -274,3 +274,29 @@ test("light and dark address text keep strong contrast without dimming status", 
     assert.equal(ui.events().length, 0);
   }
 });
+
+test("external_sync from interactive map pin/drag/preset overwrites stale draft input without emitting events", () => {
+  const ui = harness();
+  ui.render();
+  ui.type("qc");
+  ui.advance(400);
+  assert.equal(ui.nodes.query.value, "qc");
+  const suggestCountBefore = ui.events("suggest").length;
+  const editCountBefore = ui.events("edit").length;
+
+  const pinLabel = "Astoria, Queens (Zone 7 · 40.7615, -73.9210)";
+  ui.render(defaults({
+    session_token: NEXT_SESSION,
+    query: pinLabel,
+    version: 101,
+    status: "selected",
+    selected: {label: pinLabel, longitude: -73.921, latitude: 40.7615},
+    external_sync: true,
+  }));
+
+  assert.equal(ui.nodes.query.value, pinLabel);
+  assert.equal(ui.nodes.status.textContent, "Đã chọn địa chỉ.");
+  assert.equal(ui.events("suggest").length, suggestCountBefore);
+  assert.equal(ui.events("edit").length, editCountBefore);
+  assert.equal(ui.timers.size, 0);
+});

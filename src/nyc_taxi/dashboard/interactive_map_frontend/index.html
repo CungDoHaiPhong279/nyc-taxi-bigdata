@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: rgba(15, 23, 42, 0.90);
+      --card-border: rgba(148, 163, 184, 0.25);
+      --fg: #f8fafc;
+      --muted: #cbd5e1;
+      --pickup-green: #10b981;
+      --dropoff-orange: #f97316;
+      --route-blue: #3b82f6;
+      --font: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      font: 14px/1.45 var(--font);
+      color: var(--fg);
+      background: transparent;
+      user-select: none;
+    }
+    #wrapper {
+      position: relative;
+      width: 100%;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      background: #0b1120;
+      box-shadow: 0 8px 26px rgba(0, 0, 0, 0.32);
+    }
+    #toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #0f172a;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .mode-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: #1e293b;
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .mode-btn:hover {
+      background: #334155;
+      border-color: #94a3b8;
+    }
+    .mode-btn.active-pickup {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: #10b981;
+      color: #34d399;
+      box-shadow: 0 0 0 1px #10b981;
+    }
+    .mode-btn.active-dropoff {
+      background: rgba(249, 115, 22, 0.22);
+      border-color: #f97316;
+      color: #fb923c;
+      box-shadow: 0 0 0 1px #f97316;
+    }
+    .mode-btn.active-style {
+      background: #2563eb;
+      border-color: #60a5fa;
+      color: #ffffff;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot-a { background: #10b981; box-shadow: 0 0 6px #10b981; }
+    .dot-b { background: #f97316; box-shadow: 0 0 6px #f97316; }
+
+    #map-container {
+      position: relative;
+      width: 100%;
+      height: 490px;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+    #hint-banner {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 5;
+      max-width: calc(100% - 70px);
+      padding: 8px 13px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      color: #f1f5f9;
+      font-size: 13px;
+      pointer-events: none;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    }
+    #hud-card {
+      position: absolute;
+      bottom: 14px;
+      left: 14px;
+      right: 14px;
+      z-index: 5;
+      display: none;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(59, 130, 246, 0.45);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+    .hud-route {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 13px;
+    }
+    .hud-badges {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    .hud-pill {
+      padding: 6px 11px;
+      border-radius: 8px;
+      background: rgba(30, 41, 59, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .hud-price {
+      padding: 7px 14px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 800;
+      box-shadow: 0 2px 10px rgba(16, 185, 129, 0.4);
+    }
+    #status {
+      padding: 16px;
+      text-align: center;
+      color: #cbd5e1;
+      font-size: 14px;
+      display: none;
+    }
+
+    /* Uber/Grab Style Pin Markers */
+    .uber-pin-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: grab;
+    }
+    .uber-pin-wrap:active {
+      cursor: grabbing;
+    }
+    .uber-pin-label {
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.92);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      margin-bottom: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    }
+    .uber-pin-head {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 3px solid #ffffff;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 800;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      transition: transform 0.15s ease;
+    }
+    .uber-pin-wrap:hover .uber-pin-head {
+      transform: scale(1.12);
+    }
+    .uber-pin-pickup .uber-pin-head {
+      background: #10b981;
+    }
+    .uber-pin-dropoff .uber-pin-head {
+      background: #f97316;
+    }
+    .uber-pin-stem {
+      width: 3px;
+      height: 9px;
+      background: #ffffff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+
+    .mapboxgl-popup-content {
+      background: #0f172a !important;
+      color: #f8fafc !important;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 10px !important;
+      padding: 10px 13px !important;
+      font: 12.5px/1.45 var(--font) !important;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45) !important;
+    }
+    .mapboxgl-popup-tip {
+      border-top-color: #0f172a !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="status" role="status" aria-live="polite">Đang khởi tạo bản đồ đặt xe tương tác NYC…</div>
+  <div id="wrapper">
+    <div id="toolbar">
+      <div class="btn-group">
+        <button id="btn-mode-pickup" type="button" class="mode-btn active-pickup" title="Click lên bản đồ để đặt Điểm đón (A)">
+          <span class="dot dot-a"></span> Click chọn Điểm đón (A)
+        </button>
+        <button id="btn-mode-dropoff" type="button" class="mode-btn" title="Click lên bản đồ để đặt Điểm đến (B)">
+          <span class="dot dot-b"></span> Click chọn Điểm đến (B)
+        </button>
+        <button id="btn-swap" type="button" class="mode-btn" title="Đảo chiều Điểm đón A ↔ Điểm đến B">
+          🔄 Đảo chiều A ↔ B
+        </button>
+        <button id="btn-fit-nyc" type="button" class="mode-btn" title="Thu phóng vừa khung hình tuyến đường hoặc toàn bộ NYC">
+          🎯 Căn giữa khung hình
+        </button>
+        <button id="btn-clear" type="button" class="mode-btn" title="Xóa ghim trên bản đồ để chọn lại">
+          🗑️ Xóa ghim
+        </button>
+      </div>
+      <div class="btn-group">
+        <button id="style-streets" type="button" class="mode-btn active-style" data-style="mapbox://styles/mapbox/streets-v12">
+          🗺️ Đường phố
+        </button>
+        <button id="style-dark" type="button" class="mode-btn" data-style="mapbox://styles/mapbox/dark-v11">
+          🌙 Ban đêm
+        </button>
+        <button id="style-satellite" type="button" class="mode-btn" data-style="mapbox://styles/mapbox/satellite-streets-v12">
+          🛰️ Vệ tinh
+        </button>
+      </div>
+    </div>
+
+    <div id="map-container">
+      <div id="hint-banner">
+        💡 <b>Mẹo đặt xe nhanh:</b> Click trực tiếp lên bản đồ New York để thả ghim <b>Điểm đón (A)</b>, hoặc <b>nắm kéo thả ghim A / B</b> tới vị trí mong muốn.
+      </div>
+      <div id="map" aria-label="Bản đồ tương tác chọn điểm đón và điểm đến tại New York"></div>
+      <div id="hud-card"></div>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+    const GL_VERSION = "3.15.0";
+    const GL_ORIGIN = "https://api.mapbox.com/mapbox-gl-js/v" + GL_VERSION + "/";
+    const NYC_DEFAULT_CENTER = [-73.978, 40.752];
+    const NYC_DEFAULT_ZOOM = 11.2;
+
+    const ROUTE_SOURCE_ID = "interactive-driving-route";
+    const DIRECT_LINE_SOURCE_ID = "interactive-direct-line";
+    const PICKUP_ZONE_SOURCE_ID = "interactive-pickup-zone";
+    const DROPOFF_ZONE_SOURCE_ID = "interactive-dropoff-zone";
+
+    let libraryPromise = null;
+    let map = null;
+    let mapReady = false;
+    let currentStyle = "mapbox://styles/mapbox/streets-v12";
+    let activeTarget = "pickup";
+    let userManuallySelectedTarget = false;
+    let lastArgs = null;
+    let lastBoundsFingerprint = "";
+    let pickupMarker = null;
+    let dropoffMarker = null;
+
+    const statusEl = document.getElementById("status");
+    const wrapperEl = document.getElementById("wrapper");
+    const hintBannerEl = document.getElementById("hint-banner");
+    const hudCardEl = document.getElementById("hud-card");
+    const btnPickup = document.getElementById("btn-mode-pickup");
+    const btnDropoff = document.getElementById("btn-mode-dropoff");
+    const btnSwap = document.getElementById("btn-swap");
+    const btnFit = document.getElementById("btn-fit-nyc");
+    const btnClear = document.getElementById("btn-clear");
+    const styleButtons = [
+      document.getElementById("style-streets"),
+      document.getElementById("style-dark"),
+      document.getElementById("style-satellite"),
+    ];
+
+    const send = (type, payload = {}) => window.parent.postMessage(
+      {isStreamlitMessage: true, type, ...payload}, "*"
+    );
+    const updateHeight = () => {
+      const h = Math.max(document.body.scrollHeight, 555);
+      send("streamlit:setFrameHeight", {height: h + 6});
+    };
+
+    const makeUuid = () => {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    };
+
+    const emitMapEvent = (payload) => {
+      send("streamlit:setComponentValue", {
+        value: {event_id: makeUuid(), ...payload},
+        dataType: "json",
+      });
+    };
+
+    const setTargetMode = (target, fromUser = false) => {
+      activeTarget = target === "dropoff" ? "dropoff" : "pickup";
+      if (fromUser) userManuallySelectedTarget = true;
+      btnPickup.classList.toggle("active-pickup", activeTarget === "pickup");
+      btnDropoff.classList.toggle("active-dropoff", activeTarget === "dropoff");
+      if (activeTarget === "pickup") {
+        hintBannerEl.innerHTML =
+          '🟢 <b>Đang chọn Điểm đón (A):</b> Click vào bất kỳ vị trí nào trên bản đồ NYC để đặt Điểm đón, hoặc kéo thả ghim A/B.';
+      } else {
+        hintBannerEl.innerHTML =
+          '🟠 <b>Đang chọn Điểm đến (B):</b> Click vào bất kỳ vị trí nào trên bản đồ NYC để đặt Điểm đến, hoặc kéo thả ghim A/B.';
+      }
+    };
+
+    btnPickup.addEventListener("click", () => setTargetMode("pickup", true));
+    btnDropoff.addEventListener("click", () => setTargetMode("dropoff", true));
+    btnSwap.addEventListener("click", () => emitMapEvent({action: "swap_points"}));
+    btnClear.addEventListener("click", () => {
+      userManuallySelectedTarget = false;
+      setTargetMode("pickup", false);
+      emitMapEvent({action: "clear_points"});
+    });
+    btnFit.addEventListener("click", () => fitMapToCurrentState(true));
+
+    styleButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetStyle = btn.getAttribute("data-style");
+        if (!map || !targetStyle || targetStyle === currentStyle) return;
+        currentStyle = targetStyle;
+        styleButtons.forEach((b) => b.classList.toggle("active-style", b === btn));
+        mapReady = false;
+        map.setStyle(currentStyle);
+        map.once("style.load", () => {
+          mapReady = true;
+          syncMapOverlays();
+        });
+      });
+    });
+
+    const loadLibrary = () => {
+      if (libraryPromise) return libraryPromise;
+      libraryPromise = new Promise((resolve, reject) => {
+        if (window.mapboxgl) {
+          resolve(window.mapboxgl);
+          return;
+        }
+        const deadline = window.setTimeout(() => reject(new Error("timeout")), 15000);
+        const fail = () => { window.clearTimeout(deadline); reject(new Error("load_error")); };
+        const css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = GL_ORIGIN + "mapbox-gl.css";
+        css.referrerPolicy = "no-referrer";
+        const script = document.createElement("script");
+        script.src = GL_ORIGIN + "mapbox-gl.js";
+        script.crossOrigin = "anonymous";
+        script.referrerPolicy = "no-referrer";
+        script.onload = () => {
+          window.clearTimeout(deadline);
+          if (window.mapboxgl) resolve(window.mapboxgl);
+          else reject(new Error("missing_gl"));
+        };
+        script.onerror = fail;
+        css.onerror = fail;
+        document.head.appendChild(css);
+        document.head.appendChild(script);
+      });
+      return libraryPromise;
+    };
+
+    const escapeHtml = (text) => {
+      const div = document.createElement("div");
+      div.textContent = String(text || "");
+      return div.innerHTML;
+    };
+
+    const createPinElement = (role, info) => {
+      const wrap = document.createElement("div");
+      wrap.className = "uber-pin-wrap uber-pin-" + role;
+
+      const badge = document.createElement("div");
+      badge.className = "uber-pin-label";
+      const shortZone = info && info.zone
+        ? (role === "pickup" ? "Đón: " : "Đến: ") + info.zone
+        : (role === "pickup" ? "Điểm đón (A)" : "Điểm đến (B)");
+      badge.textContent = shortZone;
+
+      const head = document.createElement("div");
+      head.className = "uber-pin-head";
+      head.textContent = role === "pickup" ? "A" : "B";
+
+      const stem = document.createElement("div");
+      stem.className = "uber-pin-stem";
+
+      wrap.appendChild(badge);
+      wrap.appendChild(head);
+      wrap.appendChild(stem);
+      return wrap;
+    };
+
+    const buildPopupHtml = (role, info) => {
+      const title = role === "pickup" ? "🟢 Điểm đón (Pickup A)" : "🟠 Điểm đến (Dropoff B)";
+      const zoneLine = info.zone
+        ? `<div><b>Khu vực:</b> ${escapeHtml(info.borough)} — ${escapeHtml(info.zone)} (Zone ${escapeHtml(info.location_id)})</div>`
+        : `<div><i>Đang kiểm tra vùng NYC TLC…</i></div>`;
+      const addrLine = info.label ? `<div style="color:#cbd5e1;margin-top:2px;">${escapeHtml(info.label)}</div>` : "";
+      const coordLine = `<div style="color:#94a3b8;font-size:11px;margin-top:3px;">WGS84: ${Number(info.latitude).toFixed(5)}, ${Number(info.longitude).toFixed(5)} · Kéo ghim để đổi vị trí</div>`;
+      return `<div><div style="font-weight:700;margin-bottom:3px;">${title}</div>${zoneLine}${addrLine}${coordLine}</div>`;
+    };
+
+    const setOrUpdateGeoJsonSource = (sourceId, data) => {
+      const existing = map.getSource(sourceId);
+      if (existing) {
+        existing.setData(data);
+        return true;
+      }
+      map.addSource(sourceId, {type: "geojson", data});
+      return false;
+    };
+
+    const ensureZoneLayers = () => {
+      const emptyCollection = {type: "FeatureCollection", features: []};
+      if (!map.getSource(PICKUP_ZONE_SOURCE_ID)) {
+        map.addSource(PICKUP_ZONE_SOURCE_ID, {type: "geojson", data: emptyCollection});
+        map.addLayer({
+          id: PICKUP_ZONE_SOURCE_ID + "-fill",
+          type: "fill",
+          source: PICKUP_ZONE_SOURCE_ID,
+          paint: {"fill-color": "#10b981", "fill-opacity": 0.18},
+        });
+        map.addLayer({
+          id: PICKUP_ZONE_SOURCE_ID + "-outline",
+          type: "line",
+          source: PICKUP_ZONE_SOURCE_ID,
+          paint: {"line-color": "#059669", "line-width": 2.5, "line-dasharray": [2, 1]},
+        });
+      }
+      if (!map.getSource(DROPOFF_ZONE_SOURCE_ID)) {
+        map.addSource(DROPOFF_ZONE_SOURCE_ID, {type: "geojson", data: emptyCollection});
+        map.addLayer({
+          id: DROPOFF_ZONE_SOURCE_ID + "-fill",
+          type: "fill",
+          source: DROPOFF_ZONE_SOURCE_ID,
+          paint: {"fill-color": "#f97316", "fill-opacity": 0.18},
+        });
+        map.addLayer({
+          id: DROPOFF_ZONE_SOURCE_ID + "-outline",
+          type: "line",
+          source: DROPOFF_ZONE_SOURCE_ID,
+          paint: {"line-color": "#ea580c", "line-width": 2.5, "line-dasharray": [2, 1]},
+        });
+      }
+      if (!map.getSource(DIRECT_LINE_SOURCE_ID)) {
+        map.addSource(DIRECT_LINE_SOURCE_ID, {type: "geojson", data: emptyCollection});
+        map.addLayer({
+          id: DIRECT_LINE_SOURCE_ID + "-layer",
+          type: "line",
+          source: DIRECT_LINE_SOURCE_ID,
+          layout: {"line-cap": "round", "line-join": "round"},
+          paint: {"line-color": "#94a3b8", "line-width": 2.5, "line-dasharray": [2, 2]},
+        });
+      }
+      if (!map.getSource(ROUTE_SOURCE_ID)) {
+        map.addSource(ROUTE_SOURCE_ID, {type: "geojson", data: emptyCollection});
+        map.addLayer({
+          id: ROUTE_SOURCE_ID + "-casing",
+          type: "line",
+          source: ROUTE_SOURCE_ID,
+          layout: {"line-cap": "round", "line-join": "round"},
+          paint: {"line-color": "#1e3a8a", "line-width": 8},
+        });
+        map.addLayer({
+          id: ROUTE_SOURCE_ID + "-line",
+          type: "line",
+          source: ROUTE_SOURCE_ID,
+          layout: {"line-cap": "round", "line-join": "round"},
+          paint: {"line-color": "#3b82f6", "line-width": 5},
+        });
+      }
+    };
+
+    const fitMapToCurrentState = (force = false) => {
+      if (!map || !mapReady || !lastArgs) return;
+      const pts = [];
+      if (lastArgs.pickup) pts.push([lastArgs.pickup.longitude, lastArgs.pickup.latitude]);
+      if (lastArgs.dropoff) pts.push([lastArgs.dropoff.longitude, lastArgs.dropoff.latitude]);
+      if (lastArgs.route_geometry && Array.isArray(lastArgs.route_geometry.coordinates)) {
+        for (const c of lastArgs.route_geometry.coordinates) pts.push(c);
+      }
+      const fp = JSON.stringify(pts);
+      if (!force && fp === lastBoundsFingerprint) return;
+      lastBoundsFingerprint = fp;
+
+      if (pts.length === 0) {
+        if (force) map.flyTo({center: NYC_DEFAULT_CENTER, zoom: NYC_DEFAULT_ZOOM, duration: 650});
+        return;
+      }
+      if (pts.length === 1) {
+        map.flyTo({center: pts[0], zoom: 13.6, duration: 550});
+        return;
+      }
+      const lons = pts.map((p) => p[0]);
+      const lats = pts.map((p) => p[1]);
+      const bounds = [
+        [Math.min(...lons), Math.min(...lats)],
+        [Math.max(...lons), Math.max(...lats)],
+      ];
+      map.fitBounds(bounds, {
+        padding: {top: 75, bottom: lastArgs.trip_summary ? 110 : 55, left: 65, right: 65},
+        maxZoom: 14.8,
+        duration: 600,
+      });
+    };
+
+    const renderHudSummary = (args) => {
+      const sum = args && args.trip_summary;
+      const pu = args && args.pickup;
+      const doff = args && args.dropoff;
+      if (sum) {
+        hudCardEl.style.display = "flex";
+        const rateBadge = sum.flat_fare_applied
+          ? `<span class="hud-pill" style="border-color:#f59e0b;color:#fcd34d;">✈️ Cước cố định JFK ↔ Manhattan (Ratecode 2)</span>`
+          : `<span class="hud-pill">🤖 Spark GBT (Gold V3)</span>`;
+        hudCardEl.innerHTML = `
+          <div class="hud-route">
+            <div style="font-weight:700;color:#f8fafc;">
+              🟢 ${escapeHtml(sum.pickup_zone_text)} &nbsp;➜&nbsp; 🟠 ${escapeHtml(sum.dropoff_zone_text)}
+            </div>
+            <div style="color:#94a3b8;font-size:12px;">
+              Lộ trình lái xe thực tế Mapbox Directions · Bạn có thể kéo ghim A/B để đổi điểm và bấm Ước tính lại
+            </div>
+          </div>
+          <div class="hud-badges">
+            ${rateBadge}
+            <span class="hud-pill">🛣️ Lộ trình: ${Number(sum.distance_km).toFixed(2)} km</span>
+            <span class="hud-pill">📐 Tâm vùng: ${Number(sum.centroid_km).toFixed(2)} km</span>
+            <span class="hud-price">$${Number(sum.fare_usd).toFixed(2)} USD</span>
+          </div>
+        `;
+      } else if (pu || doff) {
+        hudCardEl.style.display = "flex";
+        const puText = pu && pu.zone
+          ? `${escapeHtml(pu.borough)} · ${escapeHtml(pu.zone)} (Zone ${escapeHtml(pu.location_id)})`
+          : (pu ? "Ngoài vùng phục vụ NYC TLC" : "Chưa chọn (Click bản đồ)");
+        const doText = doff && doff.zone
+          ? `${escapeHtml(doff.borough)} · ${escapeHtml(doff.zone)} (Zone ${escapeHtml(doff.location_id)})`
+          : (doff ? "Ngoài vùng phục vụ NYC TLC" : "Chưa chọn (Click bản đồ)");
+        hudCardEl.innerHTML = `
+          <div class="hud-route">
+            <div><b style="color:#34d399;">🟢 Điểm đón (A):</b> ${puText}</div>
+            <div><b style="color:#fb923c;">🟠 Điểm đến (B):</b> ${doText}</div>
+          </div>
+          <div class="hud-badges">
+            <span class="hud-pill">✨ Kéo thả ghim A / B hoặc bấm "Ước tính" bên dưới để vẽ tuyến đường & tính cước</span>
+          </div>
+        `;
+      } else {
+        hudCardEl.style.display = "none";
+        hudCardEl.innerHTML = "";
+      }
+    };
+
+    const syncMapOverlays = () => {
+      if (!map || !mapReady || !lastArgs) return;
+      ensureZoneLayers();
+
+      const emptyCollection = {type: "FeatureCollection", features: []};
+      setOrUpdateGeoJsonSource(
+        PICKUP_ZONE_SOURCE_ID,
+        lastArgs.pickup_zone_feature
+          ? {type: "FeatureCollection", features: [lastArgs.pickup_zone_feature]}
+          : emptyCollection
+      );
+      setOrUpdateGeoJsonSource(
+        DROPOFF_ZONE_SOURCE_ID,
+        lastArgs.dropoff_zone_feature
+          ? {type: "FeatureCollection", features: [lastArgs.dropoff_zone_feature]}
+          : emptyCollection
+      );
+
+      if (lastArgs.route_geometry) {
+        setOrUpdateGeoJsonSource(ROUTE_SOURCE_ID, {
+          type: "Feature",
+          properties: {},
+          geometry: lastArgs.route_geometry,
+        });
+        setOrUpdateGeoJsonSource(DIRECT_LINE_SOURCE_ID, emptyCollection);
+      } else if (lastArgs.pickup && lastArgs.dropoff) {
+        setOrUpdateGeoJsonSource(ROUTE_SOURCE_ID, emptyCollection);
+        setOrUpdateGeoJsonSource(DIRECT_LINE_SOURCE_ID, {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [lastArgs.pickup.longitude, lastArgs.pickup.latitude],
+              [lastArgs.dropoff.longitude, lastArgs.dropoff.latitude],
+            ],
+          },
+        });
+      } else {
+        setOrUpdateGeoJsonSource(ROUTE_SOURCE_ID, emptyCollection);
+        setOrUpdateGeoJsonSource(DIRECT_LINE_SOURCE_ID, emptyCollection);
+      }
+
+      if (pickupMarker) { pickupMarker.remove(); pickupMarker = null; }
+      if (dropoffMarker) { dropoffMarker.remove(); dropoffMarker = null; }
+
+      if (lastArgs.pickup) {
+        const elA = createPinElement("pickup", lastArgs.pickup);
+        const popupA = new window.mapboxgl.Popup({offset: 24, closeButton: false}).setHTML(
+          buildPopupHtml("pickup", lastArgs.pickup)
+        );
+        pickupMarker = new window.mapboxgl.Marker({element: elA, draggable: true, anchor: "bottom"})
+          .setLngLat([lastArgs.pickup.longitude, lastArgs.pickup.latitude])
+          .setPopup(popupA)
+          .addTo(map);
+        pickupMarker.on("dragend", () => {
+          const pos = pickupMarker.getLngLat();
+          emitMapEvent({
+            action: "pick_point",
+            target: "pickup",
+            longitude: pos.lng,
+            latitude: pos.lat,
+          });
+        });
+      }
+
+      if (lastArgs.dropoff) {
+        const elB = createPinElement("dropoff", lastArgs.dropoff);
+        const popupB = new window.mapboxgl.Popup({offset: 24, closeButton: false}).setHTML(
+          buildPopupHtml("dropoff", lastArgs.dropoff)
+        );
+        dropoffMarker = new window.mapboxgl.Marker({element: elB, draggable: true, anchor: "bottom"})
+          .setLngLat([lastArgs.dropoff.longitude, lastArgs.dropoff.latitude])
+          .setPopup(popupB)
+          .addTo(map);
+        dropoffMarker.on("dragend", () => {
+          const pos = dropoffMarker.getLngLat();
+          emitMapEvent({
+            action: "pick_point",
+            target: "dropoff",
+            longitude: pos.lng,
+            latitude: pos.lat,
+          });
+        });
+      }
+
+      renderHudSummary(lastArgs);
+      fitMapToCurrentState(false);
+      updateHeight();
+    };
+
+    const renderComponent = async (args) => {
+      if (!args || args.online !== true || typeof args.access_token !== "string" || !/^pk\.[A-Za-z0-9._-]+$/.test(args.access_token)) {
+        wrapperEl.style.display = "none";
+        statusEl.style.display = "block";
+        statusEl.textContent = "Bản đồ tương tác trực tuyến chưa được bật (Cần cấu hình MAPBOX_ACCESS_TOKEN và FARE_ADDRESS_ALLOW_NETWORK=1).";
+        updateHeight();
+        return;
+      }
+
+      statusEl.style.display = "none";
+      wrapperEl.style.display = "block";
+      lastArgs = args;
+
+      if (!userManuallySelectedTarget) {
+        if (!args.pickup) setTargetMode("pickup", false);
+        else if (!args.dropoff) setTargetMode("dropoff", false);
+        else if (args.active_target) setTargetMode(args.active_target, false);
+      }
+
+      if (map) {
+        if (mapReady) syncMapOverlays();
+        return;
+      }
+
+      try {
+        const gl = await loadLibrary();
+        map = new gl.Map({
+          container: "map",
+          accessToken: args.access_token,
+          style: currentStyle,
+          center: NYC_DEFAULT_CENTER,
+          zoom: NYC_DEFAULT_ZOOM,
+          attributionControl: true,
+          logoPosition: "bottom-right",
+          performanceMetricsCollection: false,
+          collectResourceTiming: false,
+        });
+        map.addControl(new gl.NavigationControl({showCompass: true, showZoom: true}), "top-right");
+        if (typeof gl.FullscreenControl === "function") {
+          map.addControl(new gl.FullscreenControl(), "top-right");
+        }
+        map.on("load", () => {
+          mapReady = true;
+          syncMapOverlays();
+        });
+        map.on("click", (ev) => {
+          if (!ev || !ev.lngLat) return;
+          const chosenTarget = activeTarget;
+          if (chosenTarget === "pickup" && (!lastArgs || !lastArgs.dropoff)) {
+            userManuallySelectedTarget = false;
+            setTargetMode("dropoff", false);
+          }
+          emitMapEvent({
+            action: "pick_point",
+            target: chosenTarget,
+            longitude: ev.lngLat.lng,
+            latitude: ev.lngLat.lat,
+          });
+        });
+        updateHeight();
+      } catch (_) {
+        wrapperEl.style.display = "none";
+        statusEl.style.display = "block";
+        statusEl.textContent = "Không thể tải thư viện bản đồ Mapbox GL JS. Vui lòng kiểm tra kết nối mạng.";
+        updateHeight();
+      }
+    };
+
+    window.addEventListener("message", (event) => {
+      if (event.source !== window.parent || !event.data || event.data.type !== "streamlit:render") return;
+      void renderComponent(event.data.args);
+    });
+
+    send("streamlit:componentReady", {apiVersion: 1});
+    updateHeight();
+  </script>
+</body>
+</html>
+

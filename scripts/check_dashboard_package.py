@@ -62,11 +62,13 @@ def check_package(project_root: Path = PROJECT_ROOT) -> None:
         dashboard / "address_frontend" / "index.html",
         dashboard / "route_map.py",
         dashboard / "route_map_frontend" / "index.html",
+        dashboard / "interactive_map.py",
+        dashboard / "interactive_map_frontend" / "index.html",
     )
     for path in required:
         if not path.is_file() or not path.stat().st_size:
             raise PackagingError(f"Packaged dashboard asset is missing: {path.relative_to(project_root)}")
-    frontend = required[-1].read_text(encoding="utf-8")
+    frontend = (dashboard / "route_map_frontend" / "index.html").read_text(encoding="utf-8")
     version_pattern = rf'const\s+GL_VERSION\s*=\s*"{re.escape(MAPBOX_GL_VERSION)}"\s*;'
     required_markers = (
         '"https://api.mapbox.com/mapbox-gl-js/v"', '"mapbox-gl.js"', '"mapbox-gl.css"',

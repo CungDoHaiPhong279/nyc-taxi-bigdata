@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import date, datetime, time, timezone
 import os
 from uuid import uuid4
@@ -12,6 +13,7 @@ from nyc_taxi.dashboard.address_component import (
     AddressSelectionError, address_picker, new_address_state, process_address_event,
     wait_for_address_request,
 )
+from nyc_taxi.dashboard.interactive_map import NYC_POPULAR_PRESETS, interactive_booking_map
 from nyc_taxi.dashboard.mapbox_client import MapboxClient, MapboxError
 from nyc_taxi.dashboard.geometry_assets import load_geometry_bundle
 from nyc_taxi.dashboard.prediction import InferenceClient, DEFAULT_INFERENCE_URL, PredictionError, selected_model_version
@@ -229,6 +231,134 @@ def selection_support(state: dict) -> dict | None:
     return result
 
 
+def apply_direct_selection(slot: str, *, longitude: float, latitude: float, custom_label: str | None = None) -> None:
+    """Apply a map click/drag or quick preset directly to an address slot and sync autocomplete UI."""
+    key = "address_" + slot
+    if key not in st.session_state:
+        st.session_state[key] = new_address_state()
+    state = st.session_state[key]
+
+    label = custom_label
+    if not label:
+        try:
+            zone_meta = get_geometry().resolve(longitude, latitude)
+            label = (
+                f"{zone_meta['zone']}, {zone_meta['borough']} "
+                f"(Zone {zone_meta['location_id']} · {latitude:.4f}, {longitude:.4f})"
+            )
+        except Exception:
+            label = f"Điểm ghim trên bản đồ ({latitude:.5f}, {longitude:.5f})"
+
+    next_version = int(state.get("version", 0)) + 100
+    candidate = {"label": label, "longitude": float(longitude), "latitude": float(latitude)}
+    state.update(
+        session_token=str(uuid4()),
+        query=label,
+        version=next_version,
+        suggested_version=next_version,
+        suggestions=[],
+        suggestions_query="",
+        suggestions_version=0,
+        retrieved=deepcopy(candidate),
+        selected=deepcopy(candidate),
+        error=None,
+        status="selected",
+        external_sync=True,
+    )
+    state.pop("_zone_support", None)
+
+
+def swap_pickup_and_dropoff() -> None:
+    """Swap Pickup (A) and Dropoff (B) selections cleanly."""
+    for slot in ("pickup", "dropoff"):
+        if "address_" + slot not in st.session_state:
+            st.session_state["address_" + slot] = new_address_state()
+    pu_sel = deepcopy(st.session_state["address_pickup"].get("selected"))
+    do_sel = deepcopy(st.session_state["address_dropoff"].get("selected"))
+    if pu_sel is None and do_sel is None:
+        return
+    if do_sel is not None:
+        apply_direct_selection(
+            "pickup",
+            longitude=do_sel["longitude"],
+            latitude=do_sel["latitude"],
+            custom_label=do_sel["label"],
+        )
+    else:
+        clear_slot("pickup")
+    if pu_sel is not None:
+        apply_direct_selection(
+            "dropoff",
+            longitude=pu_sel["longitude"],
+            latitude=pu_sel["latitude"],
+            custom_label=pu_sel["label"],
+        )
+    else:
+        clear_slot("dropoff")
+
+
+def clear_slot(slot: str) -> None:
+    key = "address_" + slot
+    if key not in st.session_state:
+        st.session_state[key] = new_address_state()
+        return
+    state = st.session_state[key]
+    next_version = int(state.get("version", 0)) + 100
+    state.update(
+        session_token=str(uuid4()),
+        query="",
+        version=next_version,
+        suggested_version=next_version,
+        suggestions=[],
+        suggestions_query="",
+        suggestions_version=0,
+        retrieved=None,
+        selected=None,
+        error=None,
+        status="idle",
+        external_sync=True,
+    )
+    state.pop("_zone_support", None)
+
+
+def _render_gold_v3_quick_presets() -> None:
+    """Render 1-click NYC hub preset chips for Pickup (A) and Dropoff (B) like Uber/Grab."""
+    with st.expander("⚡ Chọn nhanh các điểm nóng tại New York (Sân bay JFK, Times Square, LaGuardia, Phố Wall…)", expanded=False):
+        col_pu, col_do = st.columns(2)
+        with col_pu:
+            st.caption("🟢 **Đặt nhanh Điểm đón (Pickup A):**")
+            p_cols = st.columns(2)
+            for idx, preset in enumerate(NYC_POPULAR_PRESETS):
+                if p_cols[idx % 2].button(
+                    preset["short_name"],
+                    key=f"preset_pu_{preset['id']}",
+                    use_container_width=True,
+                ):
+                    apply_direct_selection(
+                        "pickup",
+                        longitude=preset["longitude"],
+                        latitude=preset["latitude"],
+                        custom_label=preset["label"],
+                    )
+                    st.rerun()
+        with col_do:
+            st.caption("🟠 **Đặt nhanh Điểm đến (Dropoff B):**")
+            d_cols = st.columns(2)
+            for idx, preset in enumerate(NYC_POPULAR_PRESETS):
+                if d_cols[idx % 2].button(
+                    preset["short_name"],
+                    key=f"preset_do_{preset['id']}",
+                    use_container_width=True,
+                ):
+                    apply_direct_selection(
+                        "dropoff",
+                        longitude=preset["longitude"],
+                        latitude=preset["latitude"],
+                        custom_label=preset["label"],
+                    )
+                    st.rerun()
+
+
 def render_page() -> None:
     try:
         version = selected_model_version()
@@ -251,8 +381,8 @@ def render_page() -> None:
             "(riêng tuyến Sân bay JFK ↔ Manhattan tự động áp dụng mức cước cố định 70.00 USD).**"
         )
         st.write(
-            "Nhập địa chỉ đón và điểm đến tại New York để tự động nhận diện khu vực (263 NYC Taxi Zones), "
-            "hiển thị lộ trình trên bản đồ và dự báo giá cước bằng mô hình học máy **Gold V3 (Spark GBTRegressor)**."
+            "Bạn có thể **click trực tiếp lên bản đồ New York**, **kéo thả ghim A / B**, **bấm chọn điểm nóng** "
+            "hoặc **gõ tìm địa chỉ** để tự động nhận diện khu vực (263 NYC Taxi Zones), vẽ lộ trình lái xe thực tế và dự báo giá cước bằng **Gold V3 (Spark GBTRegressor)**."
         )
         st.caption(
             "Mô hình được huấn luyện từ 23,88 triệu chuyến xe tầng Medallion Gold 2025 "
@@ -267,11 +397,22 @@ def render_page() -> None:
         st.markdown("**Cước đồng hồ tiêu chuẩn · USD · chưa gồm tip, tolls và phụ phí.**")
         st.write("Bản hiện tại dùng mô hình lịch sử tháng 1–6/2025, chưa phục vụ ngày hiện tại.")
 
-    if not address_flow_enabled() or os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") != "1":
+    online = address_flow_enabled() and os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") == "1"
+    if not online:
         st.info("Chế độ offline: tìm địa chỉ và bản đồ trực tuyến chưa được bật.")
 
     st.subheader("1. Chọn điểm đón và điểm đến")
-    st.write("Gõ địa chỉ hoặc tên địa điểm tại New York, sau đó bấm chọn một gợi ý trong danh sách.")
+    if is_gold_v3:
+        st.write(
+            "Chọn điểm bằng **1 trong 3 cách linh hoạt** (giống Uber/Grab): "
+            "**(1)** Click / kéo thả ghim trực tiếp trên bản đồ NYC bên dưới, "
+            "**(2)** Gõ tìm địa chỉ vào 2 ô dưới đây, hoặc "
+            "**(3)** Mở bảng Chọn nhanh các điểm nóng NYC."
+        )
+        _render_gold_v3_quick_presets()
+    else:
+        st.write("Gõ địa chỉ hoặc tên địa điểm tại New York, sau đó bấm chọn một gợi ý trong danh sách.")
+
     support_by_slot = {}
     pending_events = []
     pretrip_metadata = None
@@ -290,8 +431,16 @@ def render_page() -> None:
         except Exception:
             st.error("Chưa kiểm tra được dịch vụ suy luận Gold V3. Không có giá thay thế.")
 
-    picker_slots = {slot: st.container(key="address_" + slot + "_slot")
-                    for slot in ("pickup", "dropoff")}
+    if is_gold_v3:
+        col_a, col_b = st.columns(2)
+        picker_slots = {
+            "pickup": col_a.container(key="address_pickup_slot"),
+            "dropoff": col_b.container(key="address_dropoff_slot"),
+        }
+    else:
+        picker_slots = {slot: st.container(key="address_" + slot + "_slot")
+                        for slot in ("pickup", "dropoff")}
+
     for slot, label in (("pickup", "Địa chỉ đón"), ("dropoff", "Địa chỉ đến")):
         with picker_slots[slot]:
             key = "address_" + slot
@@ -301,7 +450,7 @@ def render_page() -> None:
             wait_for_address_request(state)
             event = address_picker(
                 state, label=label, key=key + "_picker",
-                online=address_flow_enabled() and os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") == "1",
+                online=online,
             )
             if isinstance(event, dict) and event.get("event_id") not in state["events"]:
                 pending_events.append((state, event))
@@ -326,6 +475,86 @@ def render_page() -> None:
                                if is_gold_v3 else f"{label}: hợp lệ trong Taxi Zones · {zone['borough']} · {zone['zone']}")
                 else:
                     st.warning(f"{label}: {support['error']}")
+
+    if is_gold_v3:
+        geom = None
+        try:
+            geom = get_geometry()
+        except Exception:
+            geom = None
+
+        pu_selected = st.session_state["address_pickup"].get("selected")
+        do_selected = st.session_state["address_dropoff"].get("selected")
+        pu_zone = support_by_slot["pickup"]["zone"] if support_by_slot.get("pickup") else None
+        do_zone = support_by_slot["dropoff"]["zone"] if support_by_slot.get("dropoff") else None
+
+        pu_marker = {**pu_selected, **(pu_zone or {})} if isinstance(pu_selected, dict) else None
+        do_marker = {**do_selected, **(do_zone or {})} if isinstance(do_selected, dict) else None
+
+        pu_poly = geom.zone_feature(pu_zone["location_id"]) if (geom and pu_zone and hasattr(geom, "zone_feature")) else None
+        do_poly = geom.zone_feature(do_zone["location_id"]) if (geom and do_zone and hasattr(geom, "zone_feature")) else None
+
+        stored_for_map = st.session_state.get("address_fare_result")
+        current_draft_for_check = {
+            "pickup": pu_selected,
+            "dropoff": do_selected,
+            "standard_rate": True,
+        }
+        same_points_as_submitted = (
+            isinstance(stored_for_map, dict)
+            and stored_for_map.get("model_version") == "gold-v3"
+            and isinstance(pu_selected, dict)
+            and isinstance(do_selected, dict)
+            and (pu_selected.get("longitude"), pu_selected.get("latitude"))
+            == (stored_for_map["pickup"].get("longitude"), stored_for_map["pickup"].get("latitude"))
+            and (do_selected.get("longitude"), do_selected.get("latitude"))
+            == (stored_for_map["dropoff"].get("longitude"), stored_for_map["dropoff"].get("latitude"))
+        )
+        active_route_geom = stored_for_map.get("route_geometry") if same_points_as_submitted else None
+        active_trip_summary = None
+        if same_points_as_submitted:
+            pred_map = stored_for_map["prediction"]
+            active_trip_summary = {
+                "fare_usd": pred_map["fare_amount_usd"],
+                "distance_km": stored_for_map["distance_km"],
+                "centroid_km": pred_map.get("zone_centroid_distance_km", 0.0),
+                "flat_fare_applied": bool(pred_map.get("flat_fare_applied")),
+                "pickup_zone_text": f"{stored_for_map['pickup']['borough']} · {stored_for_map['pickup']['zone']} (Zone {stored_for_map['pickup']['location_id']})",
+                "dropoff_zone_text": f"{stored_for_map['dropoff']['borough']} · {stored_for_map['dropoff']['zone']} (Zone {stored_for_map['dropoff']['location_id']})",
+            }
+
+        map_event = interactive_booking_map(
+            access_token=os.environ.get("MAPBOX_ACCESS_TOKEN", "") if online else "",
+            online=online,
+            pickup=pu_marker,
+            dropoff=do_marker,
+            pickup_zone_feature=pu_poly,
+            dropoff_zone_feature=do_poly,
+            route_geometry=active_route_geom,
+            trip_summary=active_trip_summary,
+            active_target="dropoff" if (pu_marker and not do_marker) else "pickup",
+            key="gold_v3_interactive_booking_map",
+        )
+        seen_map_events = st.session_state.setdefault("_interactive_map_seen_events", [])
+        if isinstance(map_event, dict) and map_event.get("event_id") not in seen_map_events:
+            seen_map_events.append(map_event["event_id"])
+            del seen_map_events[:-64]
+            action = map_event.get("action")
+            if action == "pick_point":
+                apply_direct_selection(
+                    map_event["target"],
+                    longitude=map_event["longitude"],
+                    latitude=map_event["latitude"],
+                )
+                st.rerun()
+            elif action == "swap_points":
+                swap_pickup_and_dropoff()
+                st.rerun()
+            elif action == "clear_points":
+                clear_slot("pickup")
+                clear_slot("dropoff")
+                st.session_state.pop("address_fare_result", None)
+                st.rerun()
 
     route_error = None
     can_submit = not pending_events and all(result is not None and result["zone"] is not None
@@ -409,7 +638,7 @@ def render_page() -> None:
             if is_gold_v3
             else "Tôi xác nhận đây là taxi vàng tính cước đồng hồ tiêu chuẩn, không phải cước cố định, thỏa thuận hoặc đi chung."
         )
-        standard = st.checkbox(checkbox_text)
+        standard = st.checkbox(checkbox_text, value=True if is_gold_v3 else False)
         submitted = st.button("Ước tính", type="primary", disabled=not can_submit, key="address_estimate_submit")
     payload = {"pickup": st.session_state.address_pickup["selected"],
                "dropoff": st.session_state.address_dropoff["selected"],
@@ -444,6 +673,8 @@ def render_page() -> None:
                     outcome = execute_submission(st.session_state, submission_id, payload, make_coordinator())
                 if outcome.success:
                     st.session_state.address_fare_result = outcome.estimate.to_dict()
+                    if is_gold_v3:
+                        st.rerun()
                 else:
                     st.session_state.address_fare_error = outcome.error
             except (AddressSelectionError, MapboxError, GeometryError):
@@ -490,14 +721,13 @@ def render_page() -> None:
         else:
             st.metric("Ước tính cước cơ bản (USD)", f"${prediction['fare_amount_usd']:,.2f}")
             st.write(f"**{stored['distance_km']:.3f} km · {submitted_at:%d/%m/%Y %H:%M} — giờ New York**")
-        online = address_flow_enabled() and os.environ.get("FARE_ADDRESS_ALLOW_NETWORK", "0") == "1"
-        route_map(
-            stored.get("route_geometry"), submission_id=stored.get("submission_id"),
-            pickup=[stored["pickup"]["longitude"], stored["pickup"]["latitude"]],
-            dropoff=[stored["dropoff"]["longitude"], stored["dropoff"]["latitude"]],
-            access_token=os.environ.get("MAPBOX_ACCESS_TOKEN", "") if online else "",
-            online=online, key="address_submitted_route_map",
-        )
+            route_map(
+                stored.get("route_geometry"), submission_id=stored.get("submission_id"),
+                pickup=[stored["pickup"]["longitude"], stored["pickup"]["latitude"]],
+                dropoff=[stored["dropoff"]["longitude"], stored["dropoff"]["latitude"]],
+                access_token=os.environ.get("MAPBOX_ACCESS_TOKEN", "") if online else "",
+                online=online, key="address_submitted_route_map",
+            )
         case_warnings = [warning for warning in stored["warnings"] if warning not in _GENERAL_NOTICES]
         for warning in dict.fromkeys(case_warnings):
             st.warning(warning)

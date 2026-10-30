@@ -176,3 +176,62 @@ def test_gold_v3_streamlit_page_renders_mapbox_address_flow_first(monkeypatch):
     assert any("2. Chọn thời gian đón" in s.value for s in app.subheader)
     assert any("0.82%" in m.value for m in app.metric)
 
+
+
+def test_interactive_map_bridge_and_direct_pin_selection():
+    from nyc_taxi.dashboard.interactive_map import (
+        NYC_POPULAR_PRESETS,
+        interactive_map_arguments,
+        parse_interactive_map_event,
+    )
+    from nyc_taxi.dashboard.geometry_assets import load_geometry_bundle
+
+    geom = load_geometry_bundle()
+    feature_161 = geom.zone_feature(161)
+    assert isinstance(feature_161, dict)
+    assert feature_161["properties"]["location_id"] == 161
+    assert feature_161["properties"]["borough"] == "Manhattan"
+    assert feature_161["geometry"]["type"] in ("Polygon", "MultiPolygon")
+
+    args = interactive_map_arguments(
+        access_token="pk.synthetic_test_token",
+        online=True,
+        pickup={"longitude": -73.9855, "latitude": 40.7580, "label": "Times Square", "location_id": 230, "borough": "Manhattan", "zone": "Times Sq"},
+        dropoff={"longitude": -73.7781, "latitude": 40.6413, "label": "JFK Airport", "location_id": 132, "borough": "Queens", "zone": "JFK Airport"},
+        pickup_zone_feature=feature_161,
+        dropoff_zone_feature=None,
+        route_geometry={"type": "LineString", "coordinates": [[-73.9855, 40.7580], [-73.7781, 40.6413]]},
+        trip_summary={
+            "fare_usd": 70.0,
+            "distance_km": 26.5,
+            "centroid_km": 20.69,
+            "flat_fare_applied": True,
+            "pickup_zone_text": "Manhattan · Times Sq (Zone 230)",
+            "dropoff_zone_text": "Queens · JFK Airport (Zone 132)",
+        },
+    )
+    assert args["online"] is True
+    assert args["pickup"]["location_id"] == 230
+    assert args["dropoff"]["location_id"] == 132
+    assert args["trip_summary"]["fare_usd"] == 70.0
+    assert len(NYC_POPULAR_PRESETS) >= 6
+
+    ev = parse_interactive_map_event(
+        {
+            "event_id": "11111111-2222-4333-8444-555555555555",
+            "action": "pick_point",
+            "target": "pickup",
+            "longitude": -73.98551234,
+            "latitude": 40.75801234,
+        }
+    )
+    assert ev is not None
+    assert ev["action"] == "pick_point"
+    assert ev["target"] == "pickup"
+    assert ev["longitude"] == -73.985512
+
+    swap_ev = parse_interactive_map_event(
+        {"event_id": "11111111-2222-4333-8444-555555555555", "action": "swap_points"}
+    )
+    assert swap_ev == {"event_id": "11111111-2222-4333-8444-555555555555", "action": "swap_points"}
+    assert parse_interactive_map_event({"action": "pick_point"}) is None

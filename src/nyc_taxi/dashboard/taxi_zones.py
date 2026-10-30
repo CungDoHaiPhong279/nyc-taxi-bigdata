@@ -174,6 +174,26 @@ class TaxiZoneGeometry:
         """Public geometry inventory; 264/265 are non-geographic sentinels."""
         return tuple(sorted(metadata["location_id"] for metadata, _polygons in self._zones))
 
+    def zone_feature(self, location_id: int) -> dict[str, Any] | None:
+        """Return a fresh GeoJSON Feature for a single LocationID (for map polygon overlay)."""
+        if type(location_id) is not int or not 1 <= location_id <= 263:
+            return None
+        for metadata, polygons in self._zones:
+            if metadata["location_id"] == location_id:
+                multi_coords = [
+                    [[[float(lon), float(lat)] for lon, lat in ring] for ring in rings]
+                    for _bounds, rings in polygons
+                ]
+                return {
+                    "type": "Feature",
+                    "properties": dict(metadata),
+                    "geometry": {
+                        "type": "Polygon" if len(multi_coords) == 1 else "MultiPolygon",
+                        "coordinates": multi_coords[0] if len(multi_coords) == 1 else multi_coords,
+                    },
+                }
+        return None
+
     @classmethod
     def load(cls, path: str | Path, expected_sha256: str) -> TaxiZoneGeometry:
         """Load local bytes only; never fetch missing assets or skip verification."""

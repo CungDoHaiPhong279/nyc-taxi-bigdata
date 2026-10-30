@@ -32,7 +32,8 @@ def packaged(tmp_path, monkeypatch):
 
     monkeypatch.setattr(smoke, "load_geometry_bundle", load)
     dashboard = tmp_path / "src" / "nyc_taxi" / "dashboard"
-    for relative in ("address_component.py", "address_frontend/index.html", "route_map.py"):
+    for relative in ("address_component.py", "address_frontend/index.html", "route_map.py",
+                     "interactive_map.py", "interactive_map_frontend/index.html"):
         path = dashboard / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("synthetic asset", encoding="utf-8")
