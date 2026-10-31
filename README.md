@@ -5,34 +5,16 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 
 ---
 
-## 1. Bài toán Nghiệp vụ & Phương pháp Giải quyết (Problem & Solution Overview)
+## 1. Tóm tắt Bài toán & Phương pháp Giải quyết (Problem & Solution)
 
-### 1.1. Bài toán Đặt ra: Dự báo Cước Trước Chuyến Đi (Pre-trip Fare Estimation)
-- **Mục tiêu**: Dự đoán chính xác số tiền cước cơ bản (`fare_amount`, USD) ngay khi hành khách chọn điểm đón và điểm đến trên ứng dụng (chuẩn trải nghiệm như Uber/Grab), giúp người dùng biết trước chi phí chuyến đi.
-- **Thách thức cốt lõi (Tuyệt đối tránh rò rỉ dữ liệu — Zero Data Leakage)**:
-  - Khi xe chưa lăn bánh, hệ thống **hoàn toàn không biết** thời lượng chuyến đi thực tế (`trip_duration`) hay quãng đường đồng hồ thực tế (`trip_distance`) vì lộ trình còn phụ thuộc tình trạng giao thông, đèn đỏ, đường vòng.
-  - Do đó, mô hình **tuyệt đối không được dùng dữ liệu sau chuyến đi**.
-  - **Bộ đặc trưng hợp lệ trước chuyến đi bao gồm**:
-    1. *Không gian địa lý*: Tọa độ đón/trả, mã vùng Taxi Zone (`1..263`), quận (`Borough`), khoảng cách đường chim bay giữa 2 tâm vùng (*Haversine distance*), cờ đi trong cùng một vùng (*same zone*).
-    2. *Thời gian*: Giờ trong ngày (mã hóa lượng giác chu kỳ `hour_sin/hour_cos`), thứ trong tuần (`dow_sin/dow_cos`), ngày cuối tuần (`is_weekend`), ngày nghỉ lễ Liên bang Mỹ (`is_holiday`).
-    3. *Khí tượng*: Thời tiết theo giờ từ ERA5 (nhiệt độ, lượng mưa, lượng tuyết, tốc độ gió).
-
-### 1.2. Cách Chúng Ta Giải Quyết Bài Toán (Quy trình 4 Bước End-to-End)
-1. **Xử lý Dữ liệu Lớn Đa Nguồn (Data Lakehouse Medallion trên PySpark)**:
-   - Thu thập và chuẩn hóa **24,08 triệu** chuyến xe thô qua 4 tầng `Raw -> Bronze -> Silver -> Gold`.
-   - Lọc bỏ `197.119` bản ghi lỗi (`0,82%`, lỗi giờ trả trước giờ đón hoặc thiếu tọa độ), giữ lại **`23.886.265`** chuyến hợp lệ.
-   - Nối phân tán đa nguồn: Dữ liệu Taxi kết hợp bản đồ ranh giới 263 vùng, lịch nghỉ lễ và thời tiết ERA5 (đạt tỷ lệ khớp thời tiết `99,92%`).
-2. **Kho Dữ liệu Phân tích & Phục vụ (PostgreSQL 16 Star Schema)**:
-   - Lưu trữ bảng Fact trung tâm (`fact_trip`: 23,88M dòng, bảo toàn 100% dữ liệu / *Zero-Loss*) cùng 4 bảng Dim (`dim_location`, `dim_weather`, `dim_calendar`, `fact_fare_prediction`).
-   - Kỹ thuật **Deferred Indexing** và truy vấn tiền tổng hợp giúp Dashboard phân tích 23,88 triệu chuyến chỉ trong `~1–2 giây`.
-3. **Mô hình Dự đoán AI: Spark MLlib `GBTRegressor` kết hợp Quy tắc Nghiệp vụ**:
-   - **Nền tảng thực thi**: **Apache Spark (PySpark)** kết hợp thư viện học máy phân tán **Spark MLlib**.
-   - **Thuật toán cốt lõi**: Chuỗi cây quyết định tăng cường độ dốc **`GBTRegressor` (Gradient Boosted Trees)** — mô hình chiến thắng sau khi thực nghiệm đối chứng 5 mô hình khác nhau (Baseline B0, Linear Regression, Random Forest, GBT Full Weather, GBT No-Weather).
-   - **Quy tắc nghiệp vụ kết hợp (Hybrid AI Rule)**: Áp dụng mức cước cố định sân bay JFK ↔ Manhattan = **`70,00 USD`** (`Ratecode 2`, chuẩn quy định NYC TLC với độ chính xác thực tế `99,986%`).
-   - **Hiệu năng thực nghiệm**: Đạt sai số trung bình **`MAE = 2,92 USD`** và độ chính xác **`R² = 86,85%`** trên tập kiểm thử 2025; kiểm chứng trôi dữ liệu năm 2026 đạt **`MAE = 3,08 USD`** (`R² = 83,0%`).
-4. **Phục vụ Trực tiếp & Trực quan hóa (Microservice & Mapbox UI)**:
-   - Đóng băng mô hình thành gói bất biến (`fit_calls = 0`), triển khai container microservice `fare-inference:8000` với thời gian phản hồi tức thì (`<50ms`).
-   - Web Streamlit tích hợp bản đồ tương tác Mapbox 2 chiều: click/kéo thả ghim A/B, chọn nhanh điểm nóng hoặc gõ địa chỉ, tự động phân giải vùng cục bộ (*Point-in-Polygon*) `<2ms` (không tốn quota API).
+| Thành phần Cốt lõi | Chi tiết Thực thi trong Dự án |
+| :--- | :--- |
+| **1. Bài toán đặt ra** | **Dự báo cước trước chuyến đi (*Pre-trip Fare Estimation*)**: Ước tính cước cơ bản (`fare_amount`, USD) ngay khi khách chọn điểm đón/đến trên ứng dụng, trước khi xe lăn bánh. |
+| **2. Thách thức lớn nhất** | **Tuyệt đối tránh rò rỉ dữ liệu (*Zero Data Leakage*)**: Không dùng quãng đường hay thời gian di chuyển thực tế trên đồng hồ. Dự báo hoàn toàn dựa trên: khoảng cách tâm vùng Taxi Zones (*Haversine*), chu kỳ giờ/thứ/ngày lễ và thời tiết khí tượng ERA5. |
+| **3. Xử lý Dữ liệu Lớn** | Pipeline **PySpark Batch ELT** xử lý **24,08M** dòng thô qua 4 tầng Medallion (`Raw -> Bronze -> Silver -> Gold`), lọc sạch `0,82%` dữ liệu bẩn, lưu trữ **23,88M** dòng sạch (khớp 100% bản đồ, 99,92% thời tiết ERA5). |
+| **4. Kho Dữ liệu Phục vụ** | **PostgreSQL 16 Star Schema** (`analytics.fact_trip`: 23,88M dòng, Zero-Loss), tối ưu Deferred Indexing giúp Dashboard truy vấn phân tích chỉ trong ~1–2 giây. |
+| **5. Mô hình Học máy (AI)** | **`GBTRegressor` (Chuỗi cây tăng cường độ dốc) trên Spark MLlib** kết hợp **Quy tắc cước cố định JFK $70** (`Ratecode 2`). Vượt trội 4 mô hình đối chứng (Baseline B0, LR, RF, GBT-w) với **`MAE = 2,92 USD`** và **`R² = 86,85%`**. |
+| **6. Triển khai & Giao diện** | Microservice suy luận đóng băng (`fare-inference:8000`, phản hồi <50ms) + Giao diện Streamlit Bản đồ tương tác Mapbox 2 chiều (click/kéo ghim/gõ địa chỉ tự động nhận diện vùng <2ms). |
 
 ---
 
@@ -92,7 +74,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 
 ### 3.2. Thuật toán Học máy & Chỉ số Đánh giá Mô hình
 - **Phân biệt Nền tảng (Platform) vs. Mô hình (Model)**:
-  - **Nền tảng thực thi**: **Apache Spark (PySpark)** + **Spark MLlib** (bộ công cụ tính toán phân tán giúp huấn luyện trên hàng chục triệu bản ghi dữ liệu lớn).
+  - **Nền tảng thực thi**: **Apache Spark (PySpark)** + **Spark MLlib** (bộ công cụ tính toán phân tán giúp huấn luyện song song trên hàng chục triệu bản ghi dữ liệu lớn).
   - **Mô hình / Thuật toán AI cụ thể**: **`GBTRegressor` (Gradient Boosted Trees)** — thuật toán chuỗi cây quyết định tăng cường độ dốc, mỗi cây kế tiếp học cách sửa sai số thặng dư của cây phía trước.
 - **Baseline `B0` (Mô hình Thống kê Cơ sở)**: Phương pháp tra cứu giá cước trung vị lịch sử theo cặp *(Vùng đón, Vùng trả, Khung giờ)* mà không dùng trí tuệ nhân tạo, dùng làm mốc chuẩn để chứng minh hiệu quả vượt trội của Học máy.
 - **`M1` (Linear Regression - Hồi quy Tuyến tính)**: Mô hình học máy cơ bản giả định mối quan hệ tuyến tính giữa các đặc trưng và giá cước.
