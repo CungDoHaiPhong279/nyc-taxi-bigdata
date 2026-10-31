@@ -24,6 +24,11 @@ import streamlit as st
 from sqlalchemy import text
 
 from nyc_taxi.dashboard.address_page import address_flow_enabled, render_page as render_address_page
+from nyc_taxi.dashboard.ai_fare_advisor import (
+    build_fare_explanation_and_advice,
+    fetch_nyc_hourly_weather,
+    render_smart_fare_advisor_panel,
+)
 from nyc_taxi.database.postgres import get_engine
 from nyc_taxi.dashboard.prediction import DEFAULT_INFERENCE_URL
 from nyc_taxi.monitoring.metrics import (
@@ -250,7 +255,7 @@ def render_zone_weather_simulator(base_url: str) -> None:
             )
 
         use_weather = st.checkbox(
-            "Nhập thêm thông tin thời tiết ERA5 (dùng mô hình M3-w; bỏ chọn sẽ dùng M3-nw)",
+            "Tùy chỉnh thủ công thông số thời tiết ERA5 (Mặc định: Tự động lấy dự báo thời tiết NYC thực tế để chạy M3-w)",
             value=False,
         )
         wcol1, wcol2, wcol3, wcol4 = st.columns(4)
@@ -266,28 +271,46 @@ def render_zone_weather_simulator(base_url: str) -> None:
         submitted = st.form_submit_button("Dự đoán giá cước (Gold V3)", type="primary")
 
     if submitted:
-        dt_iso = datetime.combine(pickup_date, pickup_time).replace(tzinfo=NYC_TZ).isoformat()
+        target_dt = datetime.combine(pickup_date, pickup_time).replace(tzinfo=NYC_TZ)
+        dt_iso = target_dt.isoformat()
         req_payload: dict[str, Any] = {
             "pickup_location_id": int(pu_id),
             "dropoff_location_id": int(do_id),
             "pickup_datetime": dt_iso,
         }
         if use_weather:
-            req_payload.update(
-                {
-                    "temperature_2m": float(temp_c),
-                    "precipitation": float(precip_mm),
-                    "snowfall": float(snow_cm),
-                    "wind_speed_10m": float(wind_kmh),
-                }
-            )
+            weather_info_used = {
+                "temperature_2m": float(temp_c),
+                "precipitation": float(precip_mm),
+                "snowfall": float(snow_cm),
+                "wind_speed_10m": float(wind_kmh),
+                "condition_vi": "Thông số thời tiết giả lập thủ công",
+                "source": "manual-override",
+            }
+        else:
+            weather_info_used = fetch_nyc_hourly_weather(target_dt, allow_network=True)
+        for w_k in ("temperature_2m", "precipitation", "snowfall", "wind_speed_10m"):
+            req_payload[w_k] = float(weather_info_used[w_k])
+
+        zone_by_id = {int(z["location_id"]): z for z in zones}
         try:
             res = _predict_gold_v3(base_url, req_payload)
+            advice = build_fare_explanation_and_advice(
+                prediction=res,
+                pickup_zone=zone_by_id.get(int(pu_id), {"location_id": int(pu_id), "borough": "", "zone": ""}),
+                dropoff_zone=zone_by_id.get(int(do_id), {"location_id": int(do_id), "borough": "", "zone": ""}),
+                pickup_dt=target_dt,
+                mapbox_distance_km=None,
+                weather_info=weather_info_used,
+                mode="scheduled",
+            )
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Giá cước dự đoán (GBT)", f"${res['fare_amount_usd']:.2f} USD")
-            m2.metric("Giá tham chiếu (Baseline B0)", f"${res.get('baseline_fare_usd', 0.0):.2f} USD")
+            m1.metric("Tổng giá cước dự kiến", f"${advice['total_estimated_fare_usd']:.2f} USD")
+            m2.metric("Cước đồng hồ ML (M3-w)", f"${res['fare_amount_usd']:.2f} USD")
             m3.metric("Khoảng cách tâm vùng (Haversine)", f"{res.get('zone_centroid_distance_km', 0.0):.2f} km")
-            m4.metric("Biến thể phục vụ", "Ratecode 2 (70 USD)" if res.get("flat_fare_applied") else ("M3-w (Weather)" if use_weather else "M3-nw (No-Weather)"))
+            m4.metric("Biến thể phục vụ", "Ratecode 2 (70 USD)" if res.get("flat_fare_applied") else "M3-w (Weather)")
+
+            render_smart_fare_advisor_panel(advice)
 
             for w in res.get("warnings", []):
                 st.info(str(w).replace("$", ""))

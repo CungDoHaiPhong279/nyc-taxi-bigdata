@@ -245,17 +245,25 @@ class GoldV3InferenceClient(InferenceClient):
         warnings = result.get("warnings", [])
         if not isinstance(warnings, list) or len(warnings) > 20:
             raise PredictionError("Thông tin giới hạn Gold V3 không hợp lệ.")
+        m3_w = result.get("m3_weather_estimate_usd")
+        m3_nw = result.get("m3_no_weather_estimate_usd")
+        metered_ml = result.get("metered_ml_estimate_usd", fare)
+        hourly_curve = result.get("hourly_curve") if isinstance(result.get("hourly_curve"), list) else []
         return {
             **model,
             "status": "supported",
             "unit": "USD",
             "fare_amount_usd": float(fare),
+            "metered_ml_estimate_usd": float(metered_ml) if _finite_number(metered_ml) else float(fare),
+            "m3_weather_estimate_usd": float(m3_w) if _finite_number(m3_w) else None,
+            "m3_no_weather_estimate_usd": float(m3_nw) if _finite_number(m3_nw) else float(fare),
             "baseline_fare_usd": float(result.get("baseline_fare_usd", fare)),
             "zone_centroid_distance_km": float(result.get("zone_centroid_distance_km", 0.0)),
             "is_same_zone": int(result.get("is_same_zone", 0)),
             "model_variant": str(result.get("model_variant", "M3-nw (GBT Pre-trip No-Weather + Centroid)")),
             "ratecode_id": int(result.get("ratecode_id", 1)),
             "flat_fare_applied": bool(result.get("flat_fare_applied", False)),
+            "hourly_curve": hourly_curve,
             "request_seconds": float(elapsed),
             "unseen_categories": unseen,
             "warnings": [_text(value, maximum=1000) for value in warnings],

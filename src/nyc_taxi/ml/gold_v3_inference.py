@@ -106,6 +106,32 @@ def derive_single_trip_features(
     return row
 
 
+def derive_24h_horizon_features(
+    *,
+    pickup_location_id: int,
+    dropoff_location_id: int,
+    pickup_dt: datetime,
+    calendar=None,
+    centroids=None,
+    weather: dict[str, float] | None = None,
+) -> list[dict[str, Any]]:
+    """Derive 24 hourly feature rows (00..23 at pickup_dt.minute) for the same date and route."""
+    cal = calendar or load_calendar()
+    cen = centroids or load_zone_centroids()
+    base_date = pickup_dt.replace(tzinfo=None)
+    return [
+        derive_single_trip_features(
+            pickup_location_id=pickup_location_id,
+            dropoff_location_id=dropoff_location_id,
+            pickup_dt=base_date.replace(hour=h),
+            calendar=cal,
+            centroids=cen,
+            weather=weather,
+        )
+        for h in range(24)
+    ]
+
+
 def is_jfk_manhattan_flat_fare(
     pickup_location_id: int,
     dropoff_location_id: int,
@@ -237,11 +263,17 @@ class FrozenGoldV3Predictor:
             **gold_v3_identity(),
         }
 
-    def _run_spark_predict(self, derived: dict[str, Any], has_weather: bool) -> dict[str, Any]:
+    def _run_spark_predict(
+        self,
+        derived: dict[str, Any],
+        has_weather: bool,
+        horizon_rows: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         from pyspark.sql.types import DoubleType, StringType, StructField, StructType
 
         try:
-            # Always evaluate M3-nw (base features)
+            all_rows = [derived, *(horizon_rows or [])]
+            # Always evaluate M3-nw (base features) in a single Spark batch
             schema_nw = StructType(
                 [
                     *[StructField(c, DoubleType(), False) for c in BASE_NUMERIC_FEATURES],
@@ -249,13 +281,18 @@ class FrozenGoldV3Predictor:
                 ]
             )
             df_nw = self.spark.createDataFrame(
-                [tuple(derived[c] for c in BASE_ONLY_FEATURE_COLUMNS)], schema_nw
+                [tuple(r[c] for c in BASE_ONLY_FEATURE_COLUMNS) for r in all_rows],
+                schema_nw,
             )
-            pred_nw = float(
-                self.model_no_weather.transform(df_nw).select("prediction").take(1)[0]["prediction"]
-            )
+            preds_nw = [
+                float(row["prediction"])
+                for row in self.model_no_weather.transform(df_nw).select("prediction").collect()
+            ]
+            pred_nw = preds_nw[0]
+            horizon_nw = preds_nw[1:]
 
             pred_w = None
+            horizon_w: list[float] | None = None
             if has_weather:
                 schema_w = StructType(
                     [
@@ -264,13 +301,22 @@ class FrozenGoldV3Predictor:
                     ]
                 )
                 df_w = self.spark.createDataFrame(
-                    [tuple(derived[c] for c in FEATURE_COLUMNS)], schema_w
+                    [tuple(r[c] for c in FEATURE_COLUMNS) for r in all_rows],
+                    schema_w,
                 )
-                pred_w = float(
-                    self.model_weather.transform(df_w).select("prediction").take(1)[0]["prediction"]
-                )
+                preds_w = [
+                    float(row["prediction"])
+                    for row in self.model_weather.transform(df_w).select("prediction").collect()
+                ]
+                pred_w = preds_w[0]
+                horizon_w = preds_w[1:]
 
-            return {"pred_weather": pred_w, "pred_no_weather": pred_nw}
+            return {
+                "pred_weather": pred_w,
+                "pred_no_weather": pred_nw,
+                "horizon_weather": horizon_w,
+                "horizon_no_weather": horizon_nw,
+            }
         finally:
             self._busy.release()
 
@@ -304,17 +350,27 @@ class FrozenGoldV3Predictor:
             centroids=self.centroids,
             weather=weather_dict,
         )
+        horizon_rows = derive_24h_horizon_features(
+            pickup_location_id=pu_id,
+            dropoff_location_id=do_id,
+            pickup_dt=pickup_dt,
+            calendar=self.calendar,
+            centroids=self.centroids,
+            weather=weather_dict,
+        )
 
         baseline_h = 14.2
+        horizon_baselines = [14.2] * 24
         if self.baselines:
             _, h_preds = predict_v3_baseline(
-                [derived["pickup_zone"]],
-                [derived["dropoff_zone"]],
-                [derived["pickup_hour_sin"]],
-                [derived["pickup_hour_cos"]],
+                [derived["pickup_zone"], *[r["pickup_zone"] for r in horizon_rows]],
+                [derived["dropoff_zone"], *[r["dropoff_zone"] for r in horizon_rows]],
+                [derived["pickup_hour_sin"], *[r["pickup_hour_sin"] for r in horizon_rows]],
+                [derived["pickup_hour_cos"], *[r["pickup_hour_cos"] for r in horizon_rows]],
                 self.baselines,
             )
             baseline_h = round(float(h_preds[0]), 2)
+            horizon_baselines = [round(float(x), 2) for x in h_preds[1:]]
 
         flat_fare = is_jfk_manhattan_flat_fare(pu_id, do_id, self.borough_by_id)
         unseen = {
@@ -328,7 +384,10 @@ class FrozenGoldV3Predictor:
         tick = time.perf_counter()
         try:
             future = self._executor.submit(
-                self._run_spark_predict, derived, weather_dict is not None
+                self._run_spark_predict,
+                derived,
+                weather_dict is not None,
+                horizon_rows,
             )
             preds = future.result(timeout=timeout)
         except FutureTimeout:
@@ -349,6 +408,27 @@ class FrozenGoldV3Predictor:
                 else "M3-nw (GBT Pre-trip No-Weather + Centroid)"
             )
         )
+
+        horizon_nw = preds.get("horizon_no_weather") or []
+        horizon_w = preds.get("horizon_weather")
+        hourly_curve: list[dict[str, Any]] = []
+        for h in range(min(24, len(horizon_nw))):
+            nw_val = float(horizon_nw[h])
+            w_val = float(horizon_w[h]) if (horizon_w is not None and h < len(horizon_w)) else None
+            ml_val = w_val if w_val is not None else nw_val
+            fare_val = JFK_MANHATTAN_FLAT_FARE_USD if flat_fare else ml_val
+            hourly_curve.append(
+                {
+                    "hour": h,
+                    "time_label": f"{h:02d}:{pickup_dt.minute:02d}",
+                    "fare_amount_usd": round(fare_val, 2),
+                    "metered_ml_usd": round(ml_val, 2),
+                    "m3_weather_usd": round(w_val, 2) if w_val is not None else None,
+                    "m3_no_weather_usd": round(nw_val, 2),
+                    "baseline_usd": 70.0 if flat_fare else horizon_baselines[h],
+                }
+            )
+
         warnings: list[str] = []
         if flat_fare:
             warnings.append(
@@ -382,6 +462,7 @@ class FrozenGoldV3Predictor:
             "model_variant": variant,
             "zone_centroid_distance_km": round(float(derived["zone_centroid_distance_km"]), 3),
             "is_same_zone": int(derived["is_same_zone"]),
+            "hourly_curve": hourly_curve,
             "unit": "USD",
             "unseen_categories": unseen,
             "warnings": warnings,

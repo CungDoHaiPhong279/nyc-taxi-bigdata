@@ -14,7 +14,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 | **3. Xử lý Dữ liệu Lớn** | Pipeline **PySpark Batch ELT** xử lý **24,08M** dòng thô qua 4 tầng Medallion (`Raw -> Bronze -> Silver -> Gold`), lọc sạch `0,82%` dữ liệu bẩn, lưu trữ **23,88M** dòng sạch (khớp 100% bản đồ, 99,92% thời tiết ERA5). |
 | **4. Kho Dữ liệu Phục vụ** | **PostgreSQL 16 Star Schema** (`analytics.fact_trip`: 23,88M dòng, Zero-Loss), tối ưu Deferred Indexing giúp Dashboard truy vấn phân tích chỉ trong ~1–2 giây. |
 | **5. Mô hình Học máy (AI)** | **`GBTRegressor` (Chuỗi cây tăng cường độ dốc) trên Spark MLlib** kết hợp **Quy tắc cước cố định JFK $70** (`Ratecode 2`). Vượt trội 4 mô hình đối chứng (Baseline B0, LR, RF, GBT-w) với **`MAE = 2,92 USD`** và **`R² = 86,85%`**. |
-| **6. Triển khai & Giao diện** | Microservice suy luận đóng băng (`fare-inference:8000`, phản hồi <50ms) + Giao diện Streamlit Bản đồ tương tác Mapbox 2 chiều (click/kéo ghim/gõ địa chỉ tự động nhận diện vùng <2ms). |
+| **6. Triển khai & Giao diện** | Microservice suy luận đóng băng (`fare-inference:8000`, chấm điểm đồng thời đường cong 24h trong ~150ms) + Giao diện Streamlit Bản đồ tương tác Mapbox 2 chiều + **Trợ lý Đặt xe AI (`ai_fare_advisor.py`)**: Đặt xe bằng ngôn ngữ tự nhiên, tự động lấy Dự báo Thời tiết NYC (`M3-w`), công khai Phụ phí chính thức NYC TLC và chủ động đề xuất khung giờ gần nhất có giá tốt hơn. |
 
 ---
 
@@ -138,8 +138,8 @@ nyc-taxi-bigdata/
 │   ├── database/                  # Kết nối và nạp dữ liệu COPY vào PostgreSQL
 │   ├── ml/                        # Chuẩn bị mẫu phân tầng, huấn luyện Spark ML & HTTP Server
 │   ├── monitoring/                # Bộ thu thập 5 chỉ số giám sát vận hành Pipeline
-│   └── dashboard/                 # Giao diện Streamlit (Bản đồ tương tác Mapbox 2 chiều, Autocomplete, Đánh giá ML, Giám sát)
-└── tests/                         # Bộ kiểm thử tự động (1.442 bài test Python + 30 bài test frontend Node.js)
+│   └── dashboard/                 # Giao diện Streamlit (Bản đồ Mapbox 2 chiều, Trợ lý AI Smart Fare Advisor, Đánh giá ML, Giám sát)
+└── tests/                         # Bộ kiểm thử tự động (1.449 bài test Python + 30 bài test frontend Node.js)
 ```
 
 ---
@@ -163,7 +163,7 @@ docker compose -f docker-compose.yml -f docker-compose.inference.yml -f docker-c
 1. **Ứng dụng Web Streamlit (`http://127.0.0.1:8501`)**:
    - **Trang "Phân tích lịch sử"**: Bộ lọc theo Tháng & Quận, 4 thẻ KPI tổng quan (`23.886.265` chuyến), 3 biểu đồ phân bố theo Tháng/Giờ/Quận và 2 bảng đối chiếu Đa nguồn (**Thời tiết ERA5** & **Lịch nghỉ lễ Mỹ**).
    - **Trang "Ước tính cước" (Gồm 3 Tab trực quan)**:
-     - `🚕 Ước tính cước chuyến đi`: Đặt xe chuẩn trải nghiệm thực tế với 3 cách chọn điểm linh hoạt: (1) Click/kéo thả trực tiếp ghim A/B trên bản đồ NYC Mapbox, (2) 1-click chọn nhanh cụm điểm nóng (Sân bay JFK/LGA, Times Square, Phố Wall...), (3) Gõ địa chỉ qua Mapbox Autocomplete. Tự động đồng bộ 2 chiều (`external_sync`), hiển thị ranh giới 263 Taxi Zones dạng đa giác (polygon), thẻ HUD nổi tóm tắt lộ trình (quãng đường, thời gian lái xe thực tế) và dự báo cước bằng mô hình Spark MLlib GBTRegressor Gold V3 (kèm tùy chọn bật/tắt thông số Thời tiết ERA5).
+     - `🚕 Ước tính cước chuyến đi`: Đặt xe chuẩn trải nghiệm thực tế với 4 cách chọn điểm linh hoạt: (1) Nhập câu lệnh đặt xe bằng ngôn ngữ tự nhiên (**AI Quick-Book**), (2) Click/kéo thả trực tiếp ghim A/B trên bản đồ NYC Mapbox, (3) 1-click chọn nhanh cụm điểm nóng (Sân bay JFK/LGA, Times Square, Phố Wall...), (4) Gõ địa chỉ qua Mapbox Autocomplete. Hệ thống **tự động lấy Dự báo Thời tiết chính xác tại NYC (Open-Meteo ERA5)** theo giờ đón để kích hoạt mô hình có thời tiết **`M3-w`**, hiển thị **Bảng kê Tổng giá cước kèm các khoản Phụ phí chính thức NYC TLC thực tế phát sinh** (Giờ cao điểm `+$2.50`, Ban đêm `+$1.00`, Tắc đường Manhattan `+$2.50`, Sân bay `+$1.75`) và **AI chủ động đề xuất khung giờ gần nhất có mức giá tiết kiệm hơn**.
      - `📊 Độ chính xác & So sánh Mô hình`: 4 thẻ KPI kết quả + 3 Sơ đồ trực quan (So sánh MAE giữa các mô hình; Đường Giá thực tế vs Giá AI dự đoán theo 24 giờ; Biểu đồ kiểm chứng độ ổn định sang Năm 2026).
      - `🩺 Giám sát Hệ thống & Dữ liệu`: Sơ đồ luồng Medallion 4 bước, 5 thẻ chỉ số vận hành và 2 biểu đồ cột theo tháng.
 2. **MLflow Tracking UI (`http://127.0.0.1:5000`)**: Quản lý tham số và chỉ số của các lần huấn luyện trong experiment `nyc-taxi-fare-gold-v3`.
@@ -194,7 +194,7 @@ python scripts/package_gold_v3_bundle.py
 # Sao lưu PostgreSQL (Schema + Metadata hoặc Full Dump ra thư mục backups/)
 .\scripts\backup.ps1
 
-# Chạy toàn bộ 1.442 bài kiểm thử Python theo đúng profile GitHub Actions CI
+# Chạy toàn bộ 1.449 bài kiểm thử Python theo đúng profile GitHub Actions CI
 python scripts/ci_python.py
 
 # Chạy bộ kiểm thử giao diện người dùng (30 bài test frontend Node.js)
