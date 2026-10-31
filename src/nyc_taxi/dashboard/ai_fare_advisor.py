@@ -280,7 +280,7 @@ def compute_active_tlc_surcharges(
     active.append(
         {
             "code": "mta_and_improvement",
-            "label_vi": "Thuế Bang MTA ($0.50) & Phí cải tiến TLC ($1.00)",
+            "label_vi": "Thuế Bang MTA (0,50 USD) & Phí cải tiến TLC (1,00 USD)",
             "column_name": "mta_tax + improvement_surcharge",
             "amount_usd": round(TLC_MANDATORY_BASE_TAX_USD, 2),
             "reason_vi": "Khoản phí bắt buộc cố định trên mọi chuyến NYC Yellow Taxi.",
@@ -332,15 +332,16 @@ def compute_active_tlc_surcharges(
         )
 
     # 5. Airport Access Fee ($1.75 at JFK Zone 132 or LaGuardia Zone 138)
-    if int(pickup_location_id) in (132, 138) or int(dropoff_location_id) in (132, 138):
-        airport_name = "Sân bay JFK" if 132 in (int(pickup_location_id), int(dropoff_location_id)) else "Sân bay LaGuardia (LGA)"
+    # Official TLC airport fee is charged on PICK-UP at LGA/JFK only, not on drop-off.
+    if int(pickup_location_id) in (132, 138):
+        airport_name = "Sân bay JFK" if int(pickup_location_id) == 132 else "Sân bay LaGuardia (LGA)"
         active.append(
             {
                 "code": "airport_fee",
                 "label_vi": f"Phí Ra vào {airport_name} (PANYNJ)",
                 "column_name": "airport_fee",
                 "amount_usd": round(TLC_AIRPORT_ACCESS_FEE_USD, 2),
-                "reason_vi": f"Phí cảng hàng không bắt buộc khi đón/trả khách tại {airport_name}.",
+                "reason_vi": f"Phí cảng hàng không bắt buộc khi đón khách tại {airport_name}.",
                 "is_time_sensitive": False,
             }
         )
