@@ -65,6 +65,7 @@ TEST_FILES = (
     "tests/test_gold_v3_data.py",
     "tests/test_gold_v3_inference_and_monitoring.py",
     "tests/test_gold_v3_training.py",
+    "tests/test_ai_fare_advisor.py",
 )
 EXCLUDED_TEST_FILES = {
     "tests/test_bronze.py": "Spark/JVM tests remain outside the lightweight CI profile",
