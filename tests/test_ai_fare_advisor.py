@@ -463,3 +463,39 @@ def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkey
     assert "Bảng kê Chi tiết Giá cước & Phụ phí Chính thức NYC TLC" in md_joined
     assert "Phụ phí Tắc đường Bang NY" in md_joined
     assert "undefined" not in md_joined
+
+
+
+def _real_tlc_zones():
+    from nyc_taxi.dashboard.geometry_assets import load_geometry_bundle
+
+    geom = load_geometry_bundle()
+    rows = []
+    for lid in geom.location_ids:
+        feature = geom.zone_feature(lid) or {}
+        props = feature.get("properties", {}) if isinstance(feature, dict) else {}
+        rows.append({"location_id": lid, "zone": props.get("zone", ""), "borough": props.get("borough", "")})
+    return rows
+
+
+def test_parse_natural_language_booking_matches_real_tlc_zone_names_without_crash():
+    """Regression: 'ZoneCentroidLookup' object has no attribute 'coords' when a TLC zone name matched."""
+    now_ref = datetime(2026, 11, 1, 12, 0, tzinfo=NYC_TZ)
+    zones = _real_tlc_zones()
+    assert any(z["zone"] == "Greenpoint" for z in zones)
+
+    # Two real TLC zone names -> both resolved to WGS84 centroids inside NYC
+    res = parse_natural_language_booking("Đặt xe từ Astoria đi Greenpoint lúc 9h sáng mai", now_nyc=now_ref, zones=zones)
+    assert res["ok"] is True
+    assert res["pickup"]["zone"] == "Astoria"
+    assert res["dropoff"]["zone"] == "Greenpoint"
+    for loc in (res["pickup"], res["dropoff"]):
+        assert -74.35 <= loc["longitude"] <= -73.65
+        assert 40.45 <= loc["latitude"] <= 40.95
+
+    # Unknown place + 'đi Greenpoint' -> Greenpoint is the DROPOFF, clear partial-match message, no exception
+    partial = parse_natural_language_booking("đặt xe từ queens college đi greenpoint", now_nyc=now_ref, zones=zones)
+    assert partial["ok"] is False
+    assert partial["pickup"] is None
+    assert partial["dropoff"]["zone"] == "Greenpoint"
+    assert "Điểm đến" in partial["error"] and "$" not in partial["error"]

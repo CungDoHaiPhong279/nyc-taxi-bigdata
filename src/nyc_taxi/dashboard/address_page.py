@@ -383,11 +383,25 @@ def _render_gold_v3_ai_quick_book(zones: list[dict] | None = None) -> None:
 
         target_prompt = chosen_sample if chosen_sample is not None else (nl_prompt if apply_nl else None)
         if target_prompt is not None:
-            parsed = parse_natural_language_booking(target_prompt, zones=zones)
+            try:
+                parsed = parse_natural_language_booking(target_prompt, zones=zones)
+            except Exception:  # never crash the whole page on a parsing bug
+                logging.getLogger(__name__).exception("AI Quick-Book parsing failed")
+                parsed = {"ok": False, "error": "Không thể phân tích câu lệnh đặt xe. Hãy thử diễn đạt lại hoặc ghim trực tiếp trên bản đồ."}
             if parsed.get("ok"):
                 _apply_parsed_nl_booking(parsed)
                 st.rerun()
             else:
+                # Partial success: pin whichever endpoint was recognised so the user only picks the other one.
+                for slot in ("pickup", "dropoff"):
+                    loc = parsed.get(slot)
+                    if isinstance(loc, dict):
+                        apply_direct_selection(
+                            slot,
+                            longitude=loc["longitude"],
+                            latitude=loc["latitude"],
+                            custom_label=loc["label"],
+                        )
                 st.warning(parsed.get("error", "Không thể phân tích câu lệnh đặt xe."))
 
         if st.session_state.get("_ai_quick_book_notice"):

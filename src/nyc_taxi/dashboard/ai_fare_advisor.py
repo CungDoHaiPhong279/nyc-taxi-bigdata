@@ -841,7 +841,11 @@ def parse_natural_language_booking(
             pos = clean.find(z_name_clean)
             if pos != -1:
                 lid = int(z["location_id"])
-                lat, lon = centroids.coords.get(lid, (40.7580, -73.9855))
+                try:
+                    # ZoneCentroidLookup stores WGS84 (longitude, latitude) tuples.
+                    lon, lat = centroids.centroid(lid)
+                except (KeyError, ValueError, TypeError):
+                    continue
                 key_id = f"zone_{lid}"
                 if key_id not in used_ids:
                     used_ids.add(key_id)
@@ -878,7 +882,11 @@ def parse_natural_language_booking(
         else:
             pickup_loc, dropoff_loc = first_loc, second_loc
     elif len(matched_locs) == 1:
-        pickup_loc = matched_locs[0][1]
+        # Respect the preposition: "... đi Greenpoint" means Greenpoint is the DROPOFF.
+        if matched_locs[0][2] == "dropoff":
+            dropoff_loc = matched_locs[0][1]
+        else:
+            pickup_loc = matched_locs[0][1]
 
     # 2. Extract Date & Time
     mode = "now"
@@ -941,14 +949,30 @@ def parse_natural_language_booking(
         target_minute = ref_now.minute
 
     if pickup_loc is None or dropoff_loc is None:
+        if pickup_loc is None and dropoff_loc is None:
+            error = (
+                "Chưa nhận diện được Điểm đón và Điểm đến trong câu lệnh. AI Quick-Book hiểu các điểm nóng "
+                "(Times Square, JFK, LaGuardia, Phố Wall, Midtown, Penn Station, Central Park, Brooklyn) và tên "
+                "263 Taxi Zone chính thức của TLC (ví dụ: Greenpoint, Astoria, Flushing, Harlem). "
+                "Với địa danh khác, hãy ghim trực tiếp trên bản đồ hoặc gõ vào ô tìm địa chỉ bên dưới."
+            )
+        else:
+            known_role, known = ("Điểm đón", pickup_loc) if pickup_loc else ("Điểm đến", dropoff_loc)
+            missing_role = "Điểm đến" if pickup_loc else "Điểm đón"
+            error = (
+                f"Đã nhận diện {known_role}: {known['short_name']} và ghim sẵn trên bản đồ. "
+                f"Chưa tìm thấy {missing_role} trong danh sách điểm nóng / 263 Taxi Zone của TLC — "
+                f"hãy ghim {missing_role} trên bản đồ hoặc gõ địa chỉ vào ô tìm kiếm bên dưới, rồi bấm Ước tính."
+            )
         return {
             "ok": False,
             "pickup": pickup_loc,
             "dropoff": dropoff_loc,
-            "error": (
-                "Chưa nhận diện đủ cả Điểm đón và Điểm đến trong câu lệnh. "
-                "Hãy nêu rõ 2 địa điểm (ví dụ: 'Đặt xe từ Times Square đi sân bay JFK lúc 6h sáng mai')."
-            ),
+            "mode": mode,
+            "pickup_date": target_date,
+            "pickup_hour": target_hour,
+            "pickup_minute": target_minute,
+            "error": error,
         }
 
     scheduled_dt = datetime.combine(target_date, time(target_hour, target_minute), tzinfo=NYC_TZ)
