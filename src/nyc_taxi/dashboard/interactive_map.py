@@ -216,6 +216,21 @@ def parse_interactive_map_event(event: object) -> dict[str, Any] | None:
     return None
 
 
+_COMPONENT = None
+
+
+def _get_component():
+    global _COMPONENT
+    if _COMPONENT is None:
+        import streamlit.components.v1 as components
+
+        _COMPONENT = components.declare_component(
+            "nyc_interactive_booking_map",
+            path=str(Path(__file__).with_name("interactive_map_frontend")),
+        )
+    return _COMPONENT
+
+
 def interactive_booking_map(
     *,
     access_token: str,
@@ -230,12 +245,7 @@ def interactive_booking_map(
     key: str = "nyc_interactive_booking_map",
 ) -> dict[str, Any] | None:
     """Render the interactive 2-way Uber/Grab-style Mapbox ride-booking map."""
-    import streamlit.components.v1 as components
-
-    component = components.declare_component(
-        "nyc_interactive_booking_map",
-        path=str(Path(__file__).with_name("interactive_map_frontend")),
-    )
+    component = _get_component()
     raw_event = component(
         **interactive_map_arguments(
             access_token=access_token,
@@ -252,4 +262,3 @@ def interactive_booking_map(
         key=key,
     )
     return parse_interactive_map_event(raw_event)
-

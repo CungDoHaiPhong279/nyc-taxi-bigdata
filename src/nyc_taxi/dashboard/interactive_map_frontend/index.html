@@ -297,10 +297,22 @@
     const PICKUP_ZONE_SOURCE_ID = "interactive-pickup-zone";
     const DROPOFF_ZONE_SOURCE_ID = "interactive-dropoff-zone";
 
+    const ALLOWED_STYLES = [
+      "mapbox://styles/mapbox/streets-v12",
+      "mapbox://styles/mapbox/dark-v11",
+      "mapbox://styles/mapbox/satellite-streets-v12",
+    ];
     let libraryPromise = null;
     let map = null;
     let mapReady = false;
     let currentStyle = "mapbox://styles/mapbox/streets-v12";
+    try {
+      const savedStyle = window.sessionStorage.getItem("nyc_taxi_map_style");
+      if (savedStyle && ALLOWED_STYLES.includes(savedStyle)) {
+        currentStyle = savedStyle;
+      }
+    } catch (_) {}
+    let styleLoadVersion = 0;
     let activeTarget = "pickup";
     let userManuallySelectedTarget = false;
     let lastArgs = null;
@@ -373,18 +385,59 @@
     });
     btnFit.addEventListener("click", () => fitMapToCurrentState(true));
 
+    const syncStyleButtonsUI = () => {
+      styleButtons.forEach((b) => {
+        if (!b) return;
+        b.classList.toggle("active-style", b.getAttribute("data-style") === currentStyle);
+      });
+    };
+    syncStyleButtonsUI();
+
+    const applyStyleChange = (targetStyle) => {
+      if (!targetStyle || !ALLOWED_STYLES.includes(targetStyle) || targetStyle === currentStyle) return;
+      currentStyle = targetStyle;
+      try {
+        window.sessionStorage.setItem("nyc_taxi_map_style", currentStyle);
+      } catch (_) {}
+      syncStyleButtonsUI();
+      if (!map) return;
+
+      const savedCamera = {
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+        bearing: map.getBearing(),
+        pitch: map.getPitch(),
+      };
+      const myVersion = ++styleLoadVersion;
+      mapReady = false;
+      let handled = false;
+
+      const onStyleReady = () => {
+        if (handled || myVersion !== styleLoadVersion) return;
+        if (!map.isStyleLoaded()) return;
+        handled = true;
+        map.off("style.load", onStyleReady);
+        map.off("styledata", onStyleReady);
+        map.off("idle", onStyleReady);
+        try {
+          map.jumpTo(savedCamera);
+        } catch (_) {}
+        mapReady = true;
+        syncMapOverlays(true);
+      };
+
+      map.on("style.load", onStyleReady);
+      map.on("styledata", onStyleReady);
+      map.on("idle", onStyleReady);
+      // Must pass {diff: false} in Mapbox GL JS v3 so style.load fires reliably and
+      // satellite-streets-v12's default Dubai center [55.13, 25.12] is never diff-applied.
+      map.setStyle(currentStyle, {diff: false});
+    };
+
     styleButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         const targetStyle = btn.getAttribute("data-style");
-        if (!map || !targetStyle || targetStyle === currentStyle) return;
-        currentStyle = targetStyle;
-        styleButtons.forEach((b) => b.classList.toggle("active-style", b === btn));
-        mapReady = false;
-        map.setStyle(currentStyle);
-        map.once("style.load", () => {
-          mapReady = true;
-          syncMapOverlays();
-        });
+        applyStyleChange(targetStyle);
       });
     });
 
@@ -470,61 +523,109 @@
 
     const ensureZoneLayers = () => {
       const emptyCollection = {type: "FeatureCollection", features: []};
+      const isSatOrDark = currentStyle.includes("satellite") || currentStyle.includes("dark");
+      const fillOpacity = isSatOrDark ? 0.28 : 0.18;
+      const outlineWidth = isSatOrDark ? 3.0 : 2.5;
+      const puOutlineColor = isSatOrDark ? "#34d399" : "#059669";
+      const doOutlineColor = isSatOrDark ? "#fb923c" : "#ea580c";
+      const directLineColor = isSatOrDark ? "#38bdf8" : "#64748b";
+      const routeGlowColor = isSatOrDark ? "#ffffff" : "#1e3a8a";
+
       if (!map.getSource(PICKUP_ZONE_SOURCE_ID)) {
         map.addSource(PICKUP_ZONE_SOURCE_ID, {type: "geojson", data: emptyCollection});
+      }
+      if (!map.getLayer(PICKUP_ZONE_SOURCE_ID + "-fill")) {
         map.addLayer({
           id: PICKUP_ZONE_SOURCE_ID + "-fill",
           type: "fill",
           source: PICKUP_ZONE_SOURCE_ID,
-          paint: {"fill-color": "#10b981", "fill-opacity": 0.18},
+          paint: {"fill-color": "#10b981", "fill-opacity": fillOpacity},
         });
+      } else {
+        map.setPaintProperty(PICKUP_ZONE_SOURCE_ID + "-fill", "fill-opacity", fillOpacity);
+      }
+      if (!map.getLayer(PICKUP_ZONE_SOURCE_ID + "-outline")) {
         map.addLayer({
           id: PICKUP_ZONE_SOURCE_ID + "-outline",
           type: "line",
           source: PICKUP_ZONE_SOURCE_ID,
-          paint: {"line-color": "#059669", "line-width": 2.5, "line-dasharray": [2, 1]},
+          paint: {"line-color": puOutlineColor, "line-width": outlineWidth, "line-dasharray": [2, 1]},
         });
+      } else {
+        map.setPaintProperty(PICKUP_ZONE_SOURCE_ID + "-outline", "line-color", puOutlineColor);
+        map.setPaintProperty(PICKUP_ZONE_SOURCE_ID + "-outline", "line-width", outlineWidth);
       }
+
       if (!map.getSource(DROPOFF_ZONE_SOURCE_ID)) {
         map.addSource(DROPOFF_ZONE_SOURCE_ID, {type: "geojson", data: emptyCollection});
+      }
+      if (!map.getLayer(DROPOFF_ZONE_SOURCE_ID + "-fill")) {
         map.addLayer({
           id: DROPOFF_ZONE_SOURCE_ID + "-fill",
           type: "fill",
           source: DROPOFF_ZONE_SOURCE_ID,
-          paint: {"fill-color": "#f97316", "fill-opacity": 0.18},
+          paint: {"fill-color": "#f97316", "fill-opacity": fillOpacity},
         });
+      } else {
+        map.setPaintProperty(DROPOFF_ZONE_SOURCE_ID + "-fill", "fill-opacity", fillOpacity);
+      }
+      if (!map.getLayer(DROPOFF_ZONE_SOURCE_ID + "-outline")) {
         map.addLayer({
           id: DROPOFF_ZONE_SOURCE_ID + "-outline",
           type: "line",
           source: DROPOFF_ZONE_SOURCE_ID,
-          paint: {"line-color": "#ea580c", "line-width": 2.5, "line-dasharray": [2, 1]},
+          paint: {"line-color": doOutlineColor, "line-width": outlineWidth, "line-dasharray": [2, 1]},
         });
+      } else {
+        map.setPaintProperty(DROPOFF_ZONE_SOURCE_ID + "-outline", "line-color", doOutlineColor);
+        map.setPaintProperty(DROPOFF_ZONE_SOURCE_ID + "-outline", "line-width", outlineWidth);
       }
+
       if (!map.getSource(DIRECT_LINE_SOURCE_ID)) {
         map.addSource(DIRECT_LINE_SOURCE_ID, {type: "geojson", data: emptyCollection});
+      }
+      if (!map.getLayer(DIRECT_LINE_SOURCE_ID + "-casing")) {
+        map.addLayer({
+          id: DIRECT_LINE_SOURCE_ID + "-casing",
+          type: "line",
+          source: DIRECT_LINE_SOURCE_ID,
+          layout: {"line-cap": "round", "line-join": "round"},
+          paint: {"line-color": "#0f172a", "line-width": 5.0, "line-opacity": 0.65},
+        });
+      }
+      if (!map.getLayer(DIRECT_LINE_SOURCE_ID + "-layer")) {
         map.addLayer({
           id: DIRECT_LINE_SOURCE_ID + "-layer",
           type: "line",
           source: DIRECT_LINE_SOURCE_ID,
           layout: {"line-cap": "round", "line-join": "round"},
-          paint: {"line-color": "#94a3b8", "line-width": 2.5, "line-dasharray": [2, 2]},
+          paint: {"line-color": directLineColor, "line-width": 2.8, "line-dasharray": [2, 2]},
         });
+      } else {
+        map.setPaintProperty(DIRECT_LINE_SOURCE_ID + "-layer", "line-color", directLineColor);
       }
+
       if (!map.getSource(ROUTE_SOURCE_ID)) {
         map.addSource(ROUTE_SOURCE_ID, {type: "geojson", data: emptyCollection});
+      }
+      if (!map.getLayer(ROUTE_SOURCE_ID + "-casing")) {
         map.addLayer({
           id: ROUTE_SOURCE_ID + "-casing",
           type: "line",
           source: ROUTE_SOURCE_ID,
           layout: {"line-cap": "round", "line-join": "round"},
-          paint: {"line-color": "#1e3a8a", "line-width": 8},
+          paint: {"line-color": routeGlowColor, "line-width": 9, "line-opacity": 0.9},
         });
+      } else {
+        map.setPaintProperty(ROUTE_SOURCE_ID + "-casing", "line-color", routeGlowColor);
+      }
+      if (!map.getLayer(ROUTE_SOURCE_ID + "-line")) {
         map.addLayer({
           id: ROUTE_SOURCE_ID + "-line",
           type: "line",
           source: ROUTE_SOURCE_ID,
           layout: {"line-cap": "round", "line-join": "round"},
-          paint: {"line-color": "#3b82f6", "line-width": 5},
+          paint: {"line-color": "#2563eb", "line-width": 5.5},
         });
       }
     };
@@ -610,7 +711,7 @@
       }
     };
 
-    const syncMapOverlays = () => {
+    const syncMapOverlays = (preserveCamera = false) => {
       if (!map || !mapReady || !lastArgs) return;
       ensureZoneLayers();
 
@@ -697,7 +798,9 @@
       }
 
       renderHudSummary(lastArgs);
-      fitMapToCurrentState(false);
+      if (!preserveCamera) {
+        fitMapToCurrentState(false);
+      }
       updateHeight();
     };
 
@@ -721,7 +824,7 @@
       }
 
       if (map) {
-        if (mapReady) syncMapOverlays();
+        if (mapReady) syncMapOverlays(false);
         return;
       }
 
@@ -731,6 +834,7 @@
           container: "map",
           accessToken: args.access_token,
           style: currentStyle,
+          projection: "mercator",
           center: NYC_DEFAULT_CENTER,
           zoom: NYC_DEFAULT_ZOOM,
           attributionControl: true,
@@ -744,7 +848,7 @@
         }
         map.on("load", () => {
           mapReady = true;
-          syncMapOverlays();
+          syncMapOverlays(false);
         });
         map.on("click", (ev) => {
           if (!ev || !ev.lngLat) return;
@@ -779,4 +883,3 @@
   </script>
 </body>
 </html>
-

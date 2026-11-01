@@ -235,3 +235,19 @@ def test_interactive_map_bridge_and_direct_pin_selection():
     )
     assert swap_ev == {"event_id": "11111111-2222-4333-8444-555555555555", "action": "swap_points"}
     assert parse_interactive_map_event({"action": "pick_point"}) is None
+
+
+    from pathlib import Path
+
+    frontend_html = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "nyc_taxi"
+        / "dashboard"
+        / "interactive_map_frontend"
+        / "index.html"
+    ).read_text(encoding="utf-8")
+    assert "mapbox://styles/mapbox/satellite-streets-v12" in frontend_html
+    assert "map.setStyle(currentStyle, {diff: false})" in frontend_html
+    assert "map.jumpTo(savedCamera)" in frontend_html
+    assert 'projection: "mercator"' in frontend_html
