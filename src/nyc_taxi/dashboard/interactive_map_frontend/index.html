@@ -524,6 +524,12 @@
     const ensureZoneLayers = () => {
       const emptyCollection = {type: "FeatureCollection", features: []};
       const isSatOrDark = currentStyle.includes("satellite") || currentStyle.includes("dark");
+      if (currentStyle.includes("satellite")) {
+        const satSource = map.getSource("mapbox-satellite");
+        if (satSource && typeof satSource.maxzoom === "number" && satSource.maxzoom > 19) {
+          satSource.maxzoom = 19;
+        }
+      }
       const fillOpacity = isSatOrDark ? 0.28 : 0.18;
       const outlineWidth = isSatOrDark ? 3.0 : 2.5;
       const puOutlineColor = isSatOrDark ? "#34d399" : "#059669";
@@ -841,6 +847,15 @@
           logoPosition: "bottom-right",
           performanceMetricsCollection: false,
           collectResourceTiming: false,
+          transformRequest: (url) => {
+            const m = typeof url === "string" && url.match(/mapbox\.satellite\/(\d+)\/(\d+)\/(\d+)/);
+            if (m) {
+              return {
+                url: `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${m[1]}/${m[3]}/${m[2]}`,
+              };
+            }
+            return {url};
+          },
         });
         map.addControl(new gl.NavigationControl({showCompass: true, showZoom: true}), "top-right");
         if (typeof gl.FullscreenControl === "function") {
