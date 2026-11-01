@@ -251,3 +251,4 @@ def test_interactive_map_bridge_and_direct_pin_selection():
     assert "map.setStyle(currentStyle, {diff: false})" in frontend_html
     assert "map.jumpTo(savedCamera)" in frontend_html
     assert 'projection: "mercator"' in frontend_html
+    assert "World_Imagery/MapServer/tile" in frontend_html
