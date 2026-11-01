@@ -1,5 +1,5 @@
 """Gold V3 Serving Predictor (supports M3 with ERA5 weather, M3-nw without weather,
-and the deterministic JFK <-> Manhattan $70.00 Ratecode 2 flat-fare rule).
+and the deterministic JFK <-> Manhattan 70.00 USD Ratecode 2 flat-fare rule).
 """
 
 from __future__ import annotations
@@ -106,6 +106,22 @@ def derive_single_trip_features(
     return row
 
 
+def _coerce_hour_weather(
+    item: Any,
+    fallback_weather: dict[str, float] | None,
+) -> dict[str, float] | None:
+    if isinstance(item, dict) and all(k in item and item[k] is not None for k in WEATHER_NUMERIC_FEATURES):
+        return {k: float(item[k]) for k in WEATHER_NUMERIC_FEATURES}
+    if isinstance(item, (list, tuple)) and len(item) == 4:
+        return {
+            "temperature_2m": float(item[0]),
+            "precipitation": float(item[1]),
+            "snowfall": float(item[2]),
+            "wind_speed_10m": float(item[3]),
+        }
+    return fallback_weather
+
+
 def derive_24h_horizon_features(
     *,
     pickup_location_id: int,
@@ -114,11 +130,13 @@ def derive_24h_horizon_features(
     calendar=None,
     centroids=None,
     weather: dict[str, float] | None = None,
+    hourly_weather_24h: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Derive 24 hourly feature rows (00..23 at pickup_dt.minute) for the same date and route."""
     cal = calendar or load_calendar()
     cen = centroids or load_zone_centroids()
     base_date = pickup_dt.replace(tzinfo=None)
+    has_24h_arr = isinstance(hourly_weather_24h, list) and len(hourly_weather_24h) == 24
     return [
         derive_single_trip_features(
             pickup_location_id=pickup_location_id,
@@ -126,7 +144,7 @@ def derive_24h_horizon_features(
             pickup_dt=base_date.replace(hour=h),
             calendar=cal,
             centroids=cen,
-            weather=weather,
+            weather=_coerce_hour_weather(hourly_weather_24h[h], weather) if has_24h_arr else weather,
         )
         for h in range(24)
     ]
@@ -273,7 +291,6 @@ class FrozenGoldV3Predictor:
 
         try:
             all_rows = [derived, *(horizon_rows or [])]
-            # Always evaluate M3-nw (base features) in a single Spark batch
             schema_nw = StructType(
                 [
                     *[StructField(c, DoubleType(), False) for c in BASE_NUMERIC_FEATURES],
@@ -293,7 +310,7 @@ class FrozenGoldV3Predictor:
 
             pred_w = None
             horizon_w: list[float] | None = None
-            if has_weather:
+            if has_weather and all(all(c in r for c in WEATHER_NUMERIC_FEATURES) for r in all_rows):
                 schema_w = StructType(
                     [
                         *[StructField(c, DoubleType(), False) for c in NUMERIC_FEATURE_COLUMNS],
@@ -341,6 +358,8 @@ class FrozenGoldV3Predictor:
         weather_dict = None
         if all(k in payload and payload[k] is not None for k in WEATHER_NUMERIC_FEATURES):
             weather_dict = {k: float(payload[k]) for k in WEATHER_NUMERIC_FEATURES}
+        raw_hourly_w = payload.get("hourly_weather_24h")
+        hourly_w_24 = raw_hourly_w if (isinstance(raw_hourly_w, list) and len(raw_hourly_w) == 24) else None
 
         derived = derive_single_trip_features(
             pickup_location_id=pu_id,
@@ -357,6 +376,7 @@ class FrozenGoldV3Predictor:
             calendar=self.calendar,
             centroids=self.centroids,
             weather=weather_dict,
+            hourly_weather_24h=hourly_w_24,
         )
 
         baseline_h = 14.2
@@ -432,7 +452,7 @@ class FrozenGoldV3Predictor:
         warnings: list[str] = []
         if flat_fare:
             warnings.append(
-                "Tuyến JFK (Zone 132) ↔ Manhattan áp dụng giá cước cố định (Ratecode 2 Flat Fare = $70.00 USD)."
+                "Tuyến JFK (Zone 132) ↔ Manhattan áp dụng giá cước cố định (Ratecode 2 Flat Fare = 70.00 USD)."
             )
         if any(unseen.values()):
             warnings.append(
@@ -467,7 +487,7 @@ class FrozenGoldV3Predictor:
             "unseen_categories": unseen,
             "warnings": warnings,
             "request_seconds": round(time.perf_counter() - tick, 6),
-            "submission": payload,
+            "submission": {k: v for k, v in payload.items() if k != "hourly_weather_24h"},
             **echo_fields,
             **gold_v3_identity(),
         }

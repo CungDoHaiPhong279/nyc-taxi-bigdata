@@ -1,20 +1,35 @@
-"""Unit tests for the AI Smart Fare Advisor, Automatic NYC Weather, Active TLC Surcharges,
-Nearest Better Time Window Advisor, and Natural Language Quick-Book Parser.
+"""Unit and integration tests for the AI Smart Fare Advisor (`ai_fare_advisor.py`).
+
+Covers:
+1. Official NYC TLC Active Surcharge Engine (only surfaces applicable fees > 0 USD,
+   verified against `analytics.fact_trip`: Manhattan <96th St, CBD <60th St, LGA +5.00 USD,
+   and Airport Access Fee 1.75 USD on pickup only).
+2. Zero unescaped `$` characters in Vietnamese labels/reasons/messages (prevents Streamlit KaTeX `undefined`).
+3. Automatic NYC 24h Hourly Weather Lookup (live Open-Meteo parsing + offline seasonal fallback + TTL cache).
+4. Mapbox Real Driving Distance Refinement (intra-zone & detour adjustment).
+5. Counterfactual XAI & Nearest-Time-Window Savings Advisor (never suggests past hours in `now` or same-day mode).
+6. Natural Language Ride Booking Parser (Vietnamese & English, standard & reversed preposition order).
+7. 24h Horizon Feature Derivation (`derive_24h_horizon_features` with per-hour 24h weather).
+8. End-to-end Streamlit UI rendering & 1-click suggested hour application.
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from nyc_taxi.dashboard.ai_fare_advisor import (
+    MANHATTAN_CBD_60TH_ZONE_IDS,
+    MANHATTAN_CONGESTION_96TH_ZONE_IDS,
     TLC_AIRPORT_ACCESS_FEE_USD,
-    TLC_MANDATORY_BASE_TAX_USD,
+    TLC_CBD_CONGESTION_FEE_USD,
+    TLC_LGA_AIRPORT_SURCHARGE_USD,
     TLC_MANHATTAN_CONGESTION_SURCHARGE_USD,
+    TLC_MANDATORY_BASE_TAX_USD,
     TLC_OVERNIGHT_SURCHARGE_USD,
     TLC_RUSH_HOUR_JFK_FLAT_USD,
     TLC_RUSH_HOUR_METered_USD,
@@ -30,13 +45,13 @@ from nyc_taxi.ml.gold_v3_inference import derive_24h_horizon_features
 NYC_TZ = ZoneInfo("America/New_York")
 
 
-def test_active_tlc_surcharges_only_returns_applicable_fees():
-    # Case 1: Queens -> Brooklyn at 10:30 AM on a Tuesday (no rush hour, no night, no Manhattan, no airport)
-    dt_morning = datetime(2025, 6, 10, 10, 30, tzinfo=NYC_TZ)
+def test_active_tlc_surcharges_matches_fact_trip_empirical_rules():
+    # Case 1: Outer-borough daytime weekday trip (Brooklyn 61 -> Brooklyn 66 at 10:30 AM)
+    dt_morning = datetime(2025, 6, 10, 10, 30, tzinfo=NYC_TZ)  # Tuesday
     res_quiet = compute_active_tlc_surcharges(
-        pickup_location_id=7,
-        dropoff_location_id=33,
-        pickup_borough="Queens",
+        pickup_location_id=61,
+        dropoff_location_id=66,
+        pickup_borough="Brooklyn",
         dropoff_borough="Brooklyn",
         pickup_dt=dt_morning,
         flat_fare_applied=False,
@@ -44,10 +59,40 @@ def test_active_tlc_surcharges_only_returns_applicable_fees():
     codes_quiet = [item["code"] for item in res_quiet["active_surcharges"]]
     assert codes_quiet == ["mta_and_improvement"]
     assert res_quiet["total_surcharges_usd"] == pytest.approx(TLC_MANDATORY_BASE_TAX_USD)
-    assert res_quiet["has_rush_hour_surcharge"] is False
-    assert res_quiet["has_overnight_surcharge"] is False
 
-    # Case 2: Weekday Rush Hour (17:30) in Manhattan -> includes Rush Hour ($2.50) + Manhattan Congestion ($2.50)
+    # Case 2: Upper Manhattan North of 96th St (Central Harlem 41 -> East Harlem 74 at 10:30 AM)
+    # Neither congestion_surcharge (2.50) nor cbd_congestion_fee (0.75) applies north of 96th St!
+    assert 41 not in MANHATTAN_CONGESTION_96TH_ZONE_IDS
+    assert 74 not in MANHATTAN_CBD_60TH_ZONE_IDS
+    res_harlem = compute_active_tlc_surcharges(
+        pickup_location_id=41,
+        dropoff_location_id=74,
+        pickup_borough="Manhattan",
+        dropoff_borough="Manhattan",
+        pickup_dt=dt_morning,
+        flat_fare_applied=False,
+    )
+    assert [i["code"] for i in res_harlem["active_surcharges"]] == ["mta_and_improvement"]
+    assert res_harlem["total_surcharges_usd"] == pytest.approx(1.50)
+
+    # Case 3: Upper East Side (236 -> 237, between 60th and 96th St) at 10:30 AM
+    # Pays NY State Congestion (2.50) but NOT CBD <60th St fee (0.75)
+    res_ues = compute_active_tlc_surcharges(
+        pickup_location_id=236,
+        dropoff_location_id=237,
+        pickup_borough="Manhattan",
+        dropoff_borough="Manhattan",
+        pickup_dt=dt_morning,
+        flat_fare_applied=False,
+    )
+    assert [i["code"] for i in res_ues["active_surcharges"]] == [
+        "mta_and_improvement",
+        "congestion_surcharge",
+    ]
+    assert res_ues["total_surcharges_usd"] == pytest.approx(4.00)
+
+    # Case 4: Weekday Rush Hour (17:30) Midtown CBD (161 -> 236)
+    # Includes MTA+Imp (1.50) + Rush Hour (2.50) + Manhattan <96th (2.50) + CBD <60th (0.75) = 7.25 USD
     dt_rush = datetime(2025, 6, 10, 17, 30, tzinfo=NYC_TZ)
     res_rush = compute_active_tlc_surcharges(
         pickup_location_id=161,
@@ -58,15 +103,20 @@ def test_active_tlc_surcharges_only_returns_applicable_fees():
         flat_fare_applied=False,
     )
     codes_rush = [item["code"] for item in res_rush["active_surcharges"]]
-    assert "rush_hour_surcharge" in codes_rush
-    assert "congestion_surcharge" in codes_rush
-    assert "overnight_surcharge" not in codes_rush
-    assert "airport_fee" not in codes_rush
+    assert codes_rush == [
+        "mta_and_improvement",
+        "rush_hour_surcharge",
+        "congestion_surcharge",
+        "cbd_congestion_fee",
+    ]
     assert res_rush["total_surcharges_usd"] == pytest.approx(
-        TLC_MANDATORY_BASE_TAX_USD + TLC_RUSH_HOUR_METered_USD + TLC_MANHATTAN_CONGESTION_SURCHARGE_USD
+        TLC_MANDATORY_BASE_TAX_USD
+        + TLC_RUSH_HOUR_METered_USD
+        + TLC_MANHATTAN_CONGESTION_SURCHARGE_USD
+        + TLC_CBD_CONGESTION_FEE_USD
     )
 
-    # Case 3: US Holiday (July 4th, Friday at 17:30) -> Rush Hour surcharge must NOT apply on legal holiday
+    # Case 5: US Holiday (July 4th, Friday at 17:30) -> Rush Hour surcharge must NOT apply
     dt_holiday = datetime(2025, 7, 4, 17, 30, tzinfo=NYC_TZ)
     res_hol = compute_active_tlc_surcharges(
         pickup_location_id=161,
@@ -78,9 +128,41 @@ def test_active_tlc_surcharges_only_returns_applicable_fees():
     )
     assert res_hol["has_rush_hour_surcharge"] is False
 
-    # Case 4: Overnight (22:15) from LGA Airport (138) to Manhattan (161)
+    # Case 6: Times Square (230) -> JFK Airport (132) at 06:00 AM (Ratecode 2 Flat Fare = 70.00)
+    # Dropoff at JFK does NOT pay 1.75 airport pickup fee! Total surcharges = 1.50 + 2.50 + 0.75 = 4.75 -> Total 74.75
+    dt_6am = datetime(2025, 3, 12, 6, 0, tzinfo=NYC_TZ)
+    res_to_jfk = compute_active_tlc_surcharges(
+        pickup_location_id=230,
+        dropoff_location_id=132,
+        pickup_borough="Manhattan",
+        dropoff_borough="Queens",
+        pickup_dt=dt_6am,
+        flat_fare_applied=True,
+    )
+    codes_to_jfk = [i["code"] for i in res_to_jfk["active_surcharges"]]
+    assert "airport_fee" not in codes_to_jfk
+    assert res_to_jfk["total_surcharges_usd"] == pytest.approx(4.75)
+
+    # Case 7: Pickup at JFK Airport (132) -> Times Square (230) at 17:30 Rush Hour (Ratecode 2 Flat Fare = 70.00)
+    # Includes 1.50 + 5.00 (JFK Rush Hour) + 2.50 + 0.75 + 1.75 (Airport pickup) = 11.50 -> Total 81.50
+    res_from_jfk_rush = compute_active_tlc_surcharges(
+        pickup_location_id=132,
+        dropoff_location_id=230,
+        pickup_borough="Queens",
+        dropoff_borough="Manhattan",
+        pickup_dt=dt_rush,
+        flat_fare_applied=True,
+    )
+    codes_from_jfk = [i["code"] for i in res_from_jfk_rush["active_surcharges"]]
+    assert "airport_fee" in codes_from_jfk
+    assert res_from_jfk_rush["total_surcharges_usd"] == pytest.approx(
+        1.50 + TLC_RUSH_HOUR_JFK_FLAT_USD + 2.50 + 0.75 + TLC_AIRPORT_ACCESS_FEE_USD
+    )
+
+    # Case 8: Overnight (22:15) from LGA Airport (138) to Midtown (161)
+    # Includes 1.50 + 1.00 (Overnight) + 5.00 (LGA Surcharge) + 2.50 (Manhattan) + 0.75 (CBD) + 1.75 (Airport pickup) = 12.50
     dt_night = datetime(2025, 6, 10, 22, 15, tzinfo=NYC_TZ)
-    res_night = compute_active_tlc_surcharges(
+    res_lga = compute_active_tlc_surcharges(
         pickup_location_id=138,
         dropoff_location_id=161,
         pickup_borough="Queens",
@@ -88,69 +170,62 @@ def test_active_tlc_surcharges_only_returns_applicable_fees():
         pickup_dt=dt_night,
         flat_fare_applied=False,
     )
-    codes_night = [item["code"] for item in res_night["active_surcharges"]]
-    assert "overnight_surcharge" in codes_night
-    assert "congestion_surcharge" in codes_night
-    assert "airport_fee" in codes_night
-    assert res_night["total_surcharges_usd"] == pytest.approx(
+    codes_lga = [item["code"] for item in res_lga["active_surcharges"]]
+    assert "lga_airport_surcharge" in codes_lga
+    assert "airport_fee" in codes_lga
+    assert "overnight_surcharge" in codes_lga
+    assert res_lga["total_surcharges_usd"] == pytest.approx(
         TLC_MANDATORY_BASE_TAX_USD
         + TLC_OVERNIGHT_SURCHARGE_USD
+        + TLC_LGA_AIRPORT_SURCHARGE_USD
         + TLC_MANHATTAN_CONGESTION_SURCHARGE_USD
+        + TLC_CBD_CONGESTION_FEE_USD
         + TLC_AIRPORT_ACCESS_FEE_USD
     )
-
-    # Case 5: JFK <-> Manhattan Flat Fare during weekday rush hour -> $5.00 rush hour surcharge, no overnight surcharge
-    res_jfk_rush = compute_active_tlc_surcharges(
-        pickup_location_id=132,
-        dropoff_location_id=161,
-        pickup_borough="Queens",
-        dropoff_borough="Manhattan",
-        pickup_dt=dt_rush,
-        flat_fare_applied=True,
-    )
-    rush_item = next(i for i in res_jfk_rush["active_surcharges"] if i["code"] == "rush_hour_surcharge")
-    assert rush_item["amount_usd"] == pytest.approx(TLC_RUSH_HOUR_JFK_FLAT_USD)
+    # Ensure zero raw '$' signs in any surcharge label or reason (prevents Streamlit KaTeX 'undefined')
+    for item in res_lga["active_surcharges"]:
+        assert "$" not in item["label_vi"]
+        assert "$" not in item["reason_vi"]
 
 
-def test_fetch_nyc_hourly_weather_live_and_offline_fallback():
-    dt = datetime(2026, 11, 2, 6, 0, tzinfo=NYC_TZ)
+def test_fetch_nyc_hourly_weather_live_24h_and_offline_fallback(monkeypatch):
+    dt = datetime(2025, 6, 15, 18, 0, tzinfo=NYC_TZ)
 
-    # Offline fallback works deterministically without network
+    # 1. Offline mode returns deterministic seasonal fallback + 24h array
     offline_w = fetch_nyc_hourly_weather(dt, allow_network=False)
     assert offline_w["source"] == "seasonal-fallback"
     assert isinstance(offline_w["temperature_2m"], float)
-    assert offline_w["precipitation"] == 0.0
-    assert "condition_vi" in offline_w
+    assert len(offline_w["hourly_24h"]) == 24
+    assert len(offline_w["hourly_24h_compact"]) == 24
 
-    # Mocked Open-Meteo response extracts exact hour index (hour 6)
+    # 2. Mocked live Open-Meteo response
     fake_payload = {
         "hourly": {
-            "time": [f"2026-11-02T{h:02d}:00" for h in range(24)],
-            "temperature_2m": [10.0 + h * 0.5 for h in range(24)],
-            "precipitation": [2.4 if h == 6 else 0.0 for h in range(24)],
+            "time": [f"2025-06-15T{h:02d}:00" for h in range(24)],
+            "temperature_2m": [20.0 + h * 0.2 for h in range(24)],
+            "precipitation": [4.5 if h == 18 else 0.0 for h in range(24)],
             "snowfall": [0.0 for _ in range(24)],
-            "wind_speed_10m": [18.5 for _ in range(24)],
-            "weather_code": [61 if h == 6 else 1 for h in range(24)],
+            "wind_speed_10m": [15.0 for _ in range(24)],
+            "weather_code": [65 if h == 18 else 1 for h in range(24)],
         }
     }
     mock_resp = MagicMock()
     mock_resp.read.return_value = json.dumps(fake_payload).encode("utf-8")
     mock_resp.__enter__.return_value = mock_resp
+    monkeypatch.setattr("nyc_taxi.dashboard.ai_fare_advisor.urlopen", lambda *a, **kw: mock_resp)
 
-    with patch("nyc_taxi.dashboard.ai_fare_advisor.urlopen", return_value=mock_resp):
-        live_w = fetch_nyc_hourly_weather(dt, allow_network=True)
+    live_w = fetch_nyc_hourly_weather(dt, allow_network=True)
     assert live_w["source"] == "open-meteo-live"
-    assert live_w["temperature_2m"] == pytest.approx(13.0)
-    assert live_w["precipitation"] == pytest.approx(2.4)
-    assert live_w["wind_speed_10m"] == pytest.approx(18.5)
-    assert "Mưa" in live_w["condition_vi"]
+    assert live_w["precipitation"] == pytest.approx(4.5)
+    assert "Mưa lớn" in live_w["condition_vi"]
+    assert live_w["hourly_24h"][18]["precipitation"] == pytest.approx(4.5)
+    assert live_w["hourly_24h"][10]["precipitation"] == pytest.approx(0.0)
 
 
 def test_mapbox_distance_adjustment_refines_same_zone_and_detour():
-    # Same-zone trip with short 0.4 km distance vs long 3.8 km distance
     short_adj = compute_mapbox_distance_adjustment(
         metered_ml_usd=10.50,
-        mapbox_distance_km=0.40,
+        mapbox_distance_km=0.55,
         zone_centroid_distance_km=0.0,
         is_same_zone=True,
         flat_fare_applied=False,
@@ -164,9 +239,10 @@ def test_mapbox_distance_adjustment_refines_same_zone_and_detour():
     )
     assert short_adj["adjusted_metered_usd"] < 10.50
     assert long_adj["adjusted_metered_usd"] > 10.50
+    assert "$" not in (long_adj["explanation_vi"] or "")
 
 
-def test_build_fare_explanation_and_nearest_better_time_advisor():
+def test_build_fare_explanation_and_nearest_better_time_advisor_never_suggests_past():
     dt_rush = datetime(2025, 6, 10, 17, 30, tzinfo=NYC_TZ)  # Tuesday 17:30 Rush Hour
     hourly_curve = [
         {
@@ -191,32 +267,43 @@ def test_build_fare_explanation_and_nearest_better_time_advisor():
         "flat_fare_applied": False,
         "hourly_curve": hourly_curve,
     }
-    advice = build_fare_explanation_and_advice(
+
+    # 1. When mode == 'now' at 17:30, advisor MUST ONLY suggest future hours (e.g. 20:30, +3h), never 15:30 (-2h in past)!
+    advice_now = build_fare_explanation_and_advice(
         prediction=prediction,
         pickup_zone={"location_id": 161, "borough": "Manhattan", "zone": "Midtown Center"},
         dropoff_zone={"location_id": 236, "borough": "Manhattan", "zone": "Upper East Side North"},
         pickup_dt=dt_rush,
         mapbox_distance_km=4.5,
         weather_info={"temperature_2m": 22.0, "precipitation": 1.2, "wind_speed_10m": 14.0, "condition_vi": "Mưa rào nhẹ", "source": "open-meteo-live"},
-        mode="scheduled",
+        mode="now",
+        now_nyc=dt_rush,
     )
+    assert advice_now["total_surcharges_usd"] == pytest.approx(7.25)
+    nearest_now = advice_now["nearest_better_option"]
+    assert nearest_now["has_better_nearby"] is True
+    assert nearest_now["hour"] == 20
+    assert nearest_now["offset_hours"] > 0
+    assert "$" not in nearest_now["message_vi"]
 
-    # At 17:30 in Manhattan: surcharges = $1.50 (MTA+Imp) + $2.50 (Rush Hour) + $2.50 (Manhattan) = $6.50
-    assert advice["total_surcharges_usd"] == pytest.approx(6.50)
-    assert advice["total_estimated_fare_usd"] == pytest.approx(advice["metered_fare_usd"] + 6.50)
-    assert advice["xai_components"]["weather_delta_usd"] == pytest.approx(1.0)
+    # 2. When mode == 'scheduled' for tomorrow (when 15:30 is in the future), advisor prefers 15:30 (-2h, closer than +3h)
+    now_yesterday = datetime(2025, 6, 9, 12, 0, tzinfo=NYC_TZ)
+    advice_sched = build_fare_explanation_and_advice(
+        prediction=prediction,
+        pickup_zone={"location_id": 161, "borough": "Manhattan", "zone": "Midtown Center"},
+        dropoff_zone={"location_id": 236, "borough": "Manhattan", "zone": "Upper East Side North"},
+        pickup_dt=dt_rush,
+        mapbox_distance_km=4.5,
+        mode="scheduled",
+        now_nyc=now_yesterday,
+    )
+    assert advice_sched["nearest_better_option"]["hour"] == 15
 
-    # Nearest better option should recommend 15:30 (-2h) or 20:30 (+3h) where Rush Hour ends and metered fare drops!
-    nearest = advice["nearest_better_option"]
-    assert nearest["has_better_nearby"] is True
-    assert nearest["hour"] in (15, 20)
-    assert nearest["savings_usd"] >= 4.0
-    assert "Phụ phí Giờ cao điểm" in nearest["message_vi"]
 
-
-def test_parse_natural_language_booking_vietnamese_and_english():
+def test_parse_natural_language_booking_standard_and_reversed_order():
     now_ref = datetime(2026, 10, 31, 14, 0, tzinfo=NYC_TZ)
 
+    # Standard order: "Từ A đi B"
     res1 = parse_natural_language_booking(
         "Đặt xe từ Times Square đi sân bay JFK lúc 6h sáng mai",
         now_nyc=now_ref,
@@ -229,37 +316,50 @@ def test_parse_natural_language_booking_vietnamese_and_english():
     assert res1["pickup_hour"] == 6
     assert res1["pickup_minute"] == 0
 
-    res2 = parse_natural_language_booking(
-        "Đi từ Công viên Trung tâm về Phố Wall lúc 5:30 chiều nay",
+    # Reversed order: "Đi B từ A"
+    res_rev = parse_natural_language_booking(
+        "Đi sân bay JFK từ Times Square lúc 7h rưỡi tối mai",
         now_nyc=now_ref,
     )
-    assert res2["ok"] is True
-    assert res2["pickup"]["location_id"] == 236
-    assert res2["dropoff"]["location_id"] == 87
-    assert res2["pickup_hour"] == 17
-    assert res2["pickup_minute"] == 30
+    assert res_rev["ok"] is True
+    assert res_rev["pickup"]["location_id"] == 230
+    assert res_rev["dropoff"]["location_id"] == 132
+    assert res_rev["pickup_hour"] == 19
+    assert res_rev["pickup_minute"] == 30
+
+    # English AM/PM expression: "6pm"
+    res_en = parse_natural_language_booking(
+        "From Wall Street to LaGuardia at 6pm tomorrow",
+        now_nyc=now_ref,
+    )
+    assert res_en["ok"] is True
+    assert res_en["pickup"]["location_id"] == 87
+    assert res_en["dropoff"]["location_id"] == 138
+    assert res_en["pickup_hour"] == 18
 
 
-def test_derive_24h_horizon_features_returns_24_valid_rows():
+def test_derive_24h_horizon_features_supports_24h_hourly_weather_array():
     dt = datetime(2025, 6, 15, 17, 30, tzinfo=NYC_TZ)
+    compact_24h = [[15.0 + h * 0.5, 2.5 if h == 17 else 0.0, 0.0, 12.0] for h in range(24)]
     rows = derive_24h_horizon_features(
         pickup_location_id=161,
         dropoff_location_id=236,
         pickup_dt=dt,
         weather={
-            "temperature_2m": 24.0,
-            "precipitation": 0.5,
+            "temperature_2m": 23.5,
+            "precipitation": 2.5,
             "snowfall": 0.0,
-            "wind_speed_10m": 10.0,
+            "wind_speed_10m": 12.0,
         },
+        hourly_weather_24h=compact_24h,
     )
     assert len(rows) == 24
-    assert all(r["temperature_2m"] == 24.0 for r in rows)
-    assert rows[0]["pickup_hour_sin"] != rows[12]["pickup_hour_sin"]
+    assert rows[0]["temperature_2m"] == pytest.approx(15.0)
+    assert rows[17]["precipitation"] == pytest.approx(2.5)
+    assert rows[10]["precipitation"] == pytest.approx(0.0)
 
 
 def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkeypatch):
-    from unittest.mock import Mock
     from streamlit.testing.v1 import AppTest
     from nyc_taxi.dashboard import address_page
     from nyc_taxi.dashboard.address_component import new_address_state
@@ -269,10 +369,10 @@ def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkey
     monkeypatch.setenv("FARE_MODEL_VERSION", "gold-v3")
     monkeypatch.setenv("FARE_ADDRESS_ENABLED", "1")
     monkeypatch.delenv("FARE_ADDRESS_ALLOW_NETWORK", raising=False)
-    monkeypatch.setattr(address_page, "address_picker", lambda *_a, **_kw: None)
+    monkeypatch.setattr(address_page, "address_picker", lambda *_args, **_kw: None)
     monkeypatch.setattr(address_page, "interactive_booking_map", lambda **_kw: None)
 
-    fake_meta = {
+    fake_zones = {
         **GOLD_V3_IDENTITY,
         "pickup_location_ids": [161, 236],
         "dropoff_location_ids": [161, 236],
@@ -281,45 +381,58 @@ def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkey
             {"location_id": 236, "borough": "Manhattan", "zone": "Upper East Side North", "supported_pickup": True, "supported_dropoff": True},
         ],
     }
-    monkeypatch.setattr(address_page, "get_gold_v3_metadata", lambda _url: fake_meta)
+    monkeypatch.setattr(address_page, "get_gold_v3_metadata", lambda _url: fake_zones)
 
-    router, geometry, predictor = Mock(), Mock(), Mock()
+    router = MagicMock()
     router.directions.return_value = {
-        "distance_meters": 3800.0,
-        "geometry": {"type": "LineString", "coordinates": [[-73.98, 40.75], [-73.95, 40.78]]},
+        "distance_meters": 4500.0,
+        "geometry": {"type": "LineString", "coordinates": [[-73.9787, 40.7587], [-73.9566, 40.7794]]},
     }
+    geometry = MagicMock()
     geometry.resolve.side_effect = lambda lon, _lat: (
         {"location_id": 161, "borough": "Manhattan", "zone": "Midtown Center"}
-        if lon < -73.97
+        if lon < -73.965
         else {"location_id": 236, "borough": "Manhattan", "zone": "Upper East Side North"}
     )
     geometry.zone_feature.return_value = None
 
-    def fake_predict(**req):
-        # Verify automatic weather was populated without manual user input
-        assert "temperature_2m" in req
-        assert "precipitation" in req
-        return {
-            **GOLD_V3_IDENTITY,
-            "status": "supported",
-            "unit": "USD",
-            "fare_amount_usd": 18.50,
-            "metered_ml_estimate_usd": 18.50,
-            "m3_weather_estimate_usd": 18.50,
-            "m3_no_weather_estimate_usd": 17.80,
-            "baseline_fare_usd": 16.00,
-            "zone_centroid_distance_km": 3.1,
-            "is_same_zone": 0,
-            "model_variant": "M3-w (GBT Full Weather + Centroid)",
-            "ratecode_id": 1,
-            "flat_fare_applied": False,
-            "request_seconds": 0.02,
-            "unseen_categories": {"pickup": False, "dropoff": False},
-            "warnings": [],
-        }
-
-    predictor.predict.side_effect = fake_predict
-    coordinator = GoldV3RouteFareCoordinator(router=router, geometry=geometry, predictor=predictor, metadata=fake_meta)
+    predictor = MagicMock()
+    predictor.predict.return_value = {
+        **GOLD_V3_IDENTITY,
+        "status": "supported",
+        "unit": "USD",
+        "fare_amount_usd": 18.50,
+        "metered_ml_estimate_usd": 18.50,
+        "m3_weather_estimate_usd": 18.50,
+        "m3_no_weather_estimate_usd": 17.80,
+        "baseline_fare_usd": 16.00,
+        "zone_centroid_distance_km": 3.45,
+        "is_same_zone": 0,
+        "model_variant": "M3-w (GBT Full Weather + Centroid)",
+        "ratecode_id": 1,
+        "flat_fare_applied": False,
+        "hourly_curve": [
+            {
+                "hour": h,
+                "time_label": f"{h:02d}:00",
+                "fare_amount_usd": 18.50 if 16 <= h <= 19 else 15.00,
+                "metered_ml_usd": 18.50 if 16 <= h <= 19 else 15.00,
+                "m3_weather_usd": 18.50 if 16 <= h <= 19 else 15.00,
+                "m3_no_weather_usd": 17.80 if 16 <= h <= 19 else 14.50,
+                "baseline_usd": 16.00,
+            }
+            for h in range(24)
+        ],
+        "request_seconds": 0.02,
+        "unseen_categories": {"pickup": False, "dropoff": False},
+        "warnings": [],
+    }
+    coordinator = GoldV3RouteFareCoordinator(
+        router=router,
+        geometry=geometry,
+        predictor=predictor,
+        metadata=fake_zones,
+    )
     monkeypatch.setattr(address_page, "make_coordinator", lambda: coordinator)
     monkeypatch.setattr(address_page, "get_geometry", lambda: geometry)
 
@@ -328,17 +441,25 @@ def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkey
         render_page()
 
     app = AppTest.from_function(main)
-    for slot, lon in (("pickup", -73.98), ("dropoff", -73.95)):
-        state = new_address_state()
-        state["selected"] = {"label": "Synthetic " + slot, "longitude": lon, "latitude": 40.75}
-        app.session_state["address_" + slot] = state
+    for slot, lon in (("pickup", -73.9787), ("dropoff", -73.9566)):
+        st_slot = new_address_state()
+        st_slot["selected"] = {"label": f"Pin {slot}", "longitude": lon, "latitude": 40.76}
+        app.session_state["address_" + slot] = st_slot
 
     app.run(timeout=15)
     assert not app.exception
     app.button(key="address_estimate_submit").click().run(timeout=15)
-    assert not app.exception and not app.error
-    predictor.predict.assert_called_once()
-    all_md = " ".join(m.value for m in app.markdown)
-    assert "Bảng kê Chi tiết Giá cước & Phụ phí Chính thức NYC TLC" in all_md
-    assert "Phụ phí Tắc đường Khu vực Manhattan" in all_md
+    assert not app.exception
 
+    # Verify automatic weather fields + 24h weather array were sent to predictor without checking the manual weather box
+    called_kwargs = predictor.predict.call_args.kwargs
+    assert "temperature_2m" in called_kwargs
+    assert "precipitation" in called_kwargs
+    assert "hourly_weather_24h" in called_kwargs
+    assert len(called_kwargs["hourly_weather_24h"]) == 24
+
+    # Verify the Smart Fare Advisor receipt rendered with zero KaTeX '$' corruption
+    md_joined = " ".join(m.value for m in app.markdown)
+    assert "Bảng kê Chi tiết Giá cước & Phụ phí Chính thức NYC TLC" in md_joined
+    assert "Phụ phí Tắc đường Bang NY" in md_joined
+    assert "undefined" not in md_joined

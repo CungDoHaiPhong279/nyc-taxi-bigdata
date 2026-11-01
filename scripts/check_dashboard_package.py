@@ -33,11 +33,18 @@ def check_pretrip_package(project_root: Path) -> None:
             raise PackagingError("A pinned V2 public contract asset is missing.") from None
         if actual != expected:
             raise PackagingError("V2 public contract/helper SHA256 mismatch.")
-    for relative in ("src/nyc_taxi/ml/__init__.py", "src/nyc_taxi/ml/pretrip_serving_contract.py",
-                     "src/nyc_taxi/dashboard/pretrip_prediction.py"):
+    for relative in (
+        "src/nyc_taxi/ml/__init__.py",
+        "src/nyc_taxi/ml/pretrip_serving_contract.py",
+        "src/nyc_taxi/ml/pretrip_v23_features.py",
+        "src/nyc_taxi/dashboard/pretrip_prediction.py",
+        "src/nyc_taxi/dashboard/ai_fare_advisor.py",
+        "config/pretrip_v23_contract.json",
+        "config/gold_ml_v3_contract.json",
+    ):
         path = project_root / relative
         if not path.is_file() or not path.stat().st_size:
-            raise PackagingError("A V2 web contract/client module is missing.")
+            raise PackagingError("A V2/V3 web contract/client module is missing.")
 
 
 def check_package(project_root: Path = PROJECT_ROOT) -> None:
@@ -64,6 +71,7 @@ def check_package(project_root: Path = PROJECT_ROOT) -> None:
         dashboard / "route_map_frontend" / "index.html",
         dashboard / "interactive_map.py",
         dashboard / "interactive_map_frontend" / "index.html",
+        dashboard / "ai_fare_advisor.py",
     )
     for path in required:
         if not path.is_file() or not path.stat().st_size:

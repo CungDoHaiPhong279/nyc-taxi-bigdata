@@ -1,8 +1,8 @@
 """Streamlit Page for Gold V3 (`FARE_MODEL_VERSION=gold-v3`).
 
 Redesigned into 3 clean, self-explanatory tabs:
-1. Tab 1 (`🚕 Ước tính cước chuyến đi`): Mapbox Address Autocomplete + Route Map UI
-   (`address_page.render_page`) backed by the frozen Gold V3 Spark GBT model (`M3-nw`, optional `M3-w` weather toggle, & JFK 70 USD Rule).
+1. Tab 1 (`🚕 Ước tính cước chuyến đi`): Mapbox Address Autocomplete + Interactive Route Map UI
+   (`address_page.render_page`) backed by the frozen Gold V3 Spark GBT model (`M3-w` with automatic NYC Open-Meteo weather, `M3-nw`, & JFK 70 USD Rule + Official NYC TLC Surcharges).
 2. Tab 2 (`📊 Độ chính xác & So sánh Mô hình`): Clear visual comparison of all 5 models (`B0`, `M1`, `M2`, `M3-w`, `M3-nw`),
    24-hour actual vs predicted fare tracking, and 2026 Out-of-Time Drift verification (`721.513` trips across June–August 2026).
 3. Tab 3 (`🩺 Giám sát Hệ thống & Dữ liệu`): Medallion Data Pipeline Flow Diagram + 5 Pipeline Monitoring Metrics
@@ -44,8 +44,8 @@ MODEL_DISPLAY_LABELS: dict[str, str] = {
     "B0_route_hour_median": "2. Thống kê theo Tuyến & Giờ (Baseline B0)",
     "M1_linear_regression": "3. Hồi quy Tuyến tính (Linear Regression - M1)",
     "M2_random_forest": "4. Rừng Ngẫu nhiên (Random Forest - M2)",
-    "M3_gbt_full_weather": "5. GBT + Thời tiết ERA5 (M3-w)",
-    "M3_nw_gbt_no_weather": "6. GBT Tối ưu Không cần Thời tiết (M3-nw - Đang dùng)",
+    "M3_gbt_full_weather": "5. GBT + Thời tiết ERA5 (M3-w - Tích hợp tự động)",
+    "M3_nw_gbt_no_weather": "6. GBT Tối ưu Không cần Thời tiết (M3-nw - Cốt lõi)",
 }
 
 SPLIT_DISPLAY_LABELS: dict[str, str] = {
@@ -288,7 +288,12 @@ def render_zone_weather_simulator(base_url: str) -> None:
                 "source": "manual-override",
             }
         else:
-            weather_info_used = fetch_nyc_hourly_weather(target_dt, allow_network=True)
+            auto_w = fetch_nyc_hourly_weather(target_dt, allow_network=True)
+            if isinstance(auto_w.get("hourly_24h_compact"), list):
+                req_payload["hourly_weather_24h"] = auto_w["hourly_24h_compact"]
+            weather_info_used = {
+                k: v for k, v in auto_w.items() if k not in ("hourly_24h", "hourly_24h_compact")
+            }
         for w_k in ("temperature_2m", "precipitation", "snowfall", "wind_speed_10m"):
             req_payload[w_k] = float(weather_info_used[w_k])
 
@@ -304,16 +309,24 @@ def render_zone_weather_simulator(base_url: str) -> None:
                 weather_info=weather_info_used,
                 mode="scheduled",
             )
+            is_flat_jfk = bool(res.get("flat_fare_applied"))
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Tổng giá cước dự kiến", f"${advice['total_estimated_fare_usd']:.2f} USD")
-            m2.metric("Cước đồng hồ ML (M3-w)", f"${res['fare_amount_usd']:.2f} USD")
+            m1.metric(
+                "Tổng thanh toán gồm phí TLC" if is_flat_jfk else "Tổng giá cước dự kiến",
+                f"${advice['total_estimated_fare_usd']:.2f} USD",
+            )
+            m2.metric(
+                "Cước cố định JFK (Ratecode 2)" if is_flat_jfk else "Cước đồng hồ ML (M3-w)",
+                f"${res['fare_amount_usd']:.2f} USD",
+            )
             m3.metric("Khoảng cách tâm vùng (Haversine)", f"{res.get('zone_centroid_distance_km', 0.0):.2f} km")
-            m4.metric("Biến thể phục vụ", "Ratecode 2 (70 USD)" if res.get("flat_fare_applied") else "M3-w (Weather)")
+            m4.metric("Biến thể phục vụ", "Ratecode 2 (70 USD)" if is_flat_jfk else "M3-w (Weather)")
 
             render_smart_fare_advisor_panel(advice)
 
             for w in res.get("warnings", []):
-                st.info(str(w).replace("$", ""))
+                if "Ratecode 2" not in str(w):
+                    st.info(str(w).replace("$", ""))
 
             with st.expander("Chi tiết kỹ thuật & hợp đồng mô hình (Model Lineage)", expanded=False):
                 st.json(res)
@@ -356,7 +369,7 @@ def render_model_evaluation_and_drift() -> None:
         st.markdown("#### Sơ đồ 1: So sánh Sai số Trung bình (MAE — USD) giữa các Mô hình (Thấp hơn = Chính xác hơn)")
         st.caption(
             "Đánh giá trên tập Kiểm thử độc lập (Tháng 06/2025 — 80.770 chuyến chưa từng xuất hiện khi học). "
-            "Cột màu xanh đậm là mô hình **GBT Tối ưu (Gold V3)** đang chạy chính thức với sai số thấp nhất (**2.92 USD/chuyến**)."
+            "Cột màu xanh đậm là họ mô hình **GBT (Gold V3 — M3-w & M3-nw)** đang chạy chính thức với sai số thấp nhất (**2.92 USD/chuyến**)."
         )
 
         test_only = [r for r in metrics_rows if r["split"] == "test"]
@@ -366,7 +379,7 @@ def render_model_evaluation_and_drift() -> None:
                 m_key = str(r["model_key"])
                 mae_val = float(r["mae_usd"])
                 r2_pct = round(float(r["r2"]) * 100, 1)
-                is_best = m_key == "M3_nw_gbt_no_weather"
+                is_best = m_key in ("M3_nw_gbt_no_weather", "M3_gbt_full_weather")
                 chart1_data.append(
                     {
                         "Mô hình": MODEL_DISPLAY_LABELS.get(m_key, str(r["model_name"])),
@@ -576,11 +589,11 @@ def render_model_evaluation_and_drift() -> None:
                 )
 
         st.info(
-            "**Tóm tắt dành cho người dùng:**\n"
-            "- **Vì sao chọn mô hình GBT (M3-nw) làm mặc định?** Vì hành khách đặt xe chỉ cần nhập **Điểm đón, Điểm đến và Thời gian** "
-            "(không bắt buộc nhập nhiệt độ/lượng mưa) mà vẫn đạt độ chính xác cao nhất (**sai số trung bình chỉ 2.92 USD/chuyến, R² = 86.9%**).\n"
-            "- **Khi nào mô hình có Thời tiết ERA5 (M3-w) phát huy tác dụng?** Trong các ngày mưa lớn (`>= 2mm/h`), biến thể có thời tiết (`M3-w`) "
-            "giúp giảm thêm sai số dự đoán. Bạn có thể bật tùy chọn thời tiết ngay ở **Bước 2** bên tab **Ước tính cước chuyến đi** để trải nghiệm."
+            "**Tóm tắt kiến trúc AI Smart Fare Advisor đang vận hành:**\n"
+            "- **Tự động hóa Thời tiết Thực tế (`M3-w` + `M3-nw`):** Hệ thống tự động truy xuất dự báo thời tiết 24h tại New York (Open-Meteo ERA5) "
+            "theo đúng ngày và giờ đón của khách để kích hoạt mô hình `M3-w` mà không bắt người dùng tự nhập thời tiết (**MAE = 2.92 USD/chuyến, R² = 86.9%**).\n"
+            "- **Tích hợp Phụ phí Chính thức NYC TLC & Gợi ý Giờ đi:** Kết hợp cước đồng hồ ML với bảng kê các khoản phụ phí thực tế phát sinh "
+            "(đối soát khớp 100% với `analytics.fact_trip`) và chủ động đề xuất khung giờ lân cận có tổng giá cước thấp hơn."
         )
 
         with st.expander("📋 Xem bảng số liệu chi tiết của tất cả các Mô hình & Hành trình Liên Quận", expanded=False):

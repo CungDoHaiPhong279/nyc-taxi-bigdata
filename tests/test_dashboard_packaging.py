@@ -14,8 +14,15 @@ def packaged(tmp_path, monkeypatch):
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((smoke.PROJECT_ROOT / relative).read_bytes())
-    for relative in ("src/nyc_taxi/ml/__init__.py", "src/nyc_taxi/ml/pretrip_serving_contract.py",
-                     "src/nyc_taxi/dashboard/pretrip_prediction.py"):
+    for relative in (
+        "src/nyc_taxi/ml/__init__.py",
+        "src/nyc_taxi/ml/pretrip_serving_contract.py",
+        "src/nyc_taxi/ml/pretrip_v23_features.py",
+        "src/nyc_taxi/dashboard/pretrip_prediction.py",
+        "src/nyc_taxi/dashboard/ai_fare_advisor.py",
+        "config/pretrip_v23_contract.json",
+        "config/gold_ml_v3_contract.json",
+    ):
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("# synthetic stdlib module\n", encoding="utf-8")
@@ -33,7 +40,8 @@ def packaged(tmp_path, monkeypatch):
     monkeypatch.setattr(smoke, "load_geometry_bundle", load)
     dashboard = tmp_path / "src" / "nyc_taxi" / "dashboard"
     for relative in ("address_component.py", "address_frontend/index.html", "route_map.py",
-                     "interactive_map.py", "interactive_map_frontend/index.html"):
+                     "interactive_map.py", "interactive_map_frontend/index.html",
+                     "ai_fare_advisor.py"):
         path = dashboard / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("synthetic asset", encoding="utf-8")

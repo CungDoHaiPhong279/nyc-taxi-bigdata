@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import date, datetime, time, timezone
+import logging
 import os
 from uuid import uuid4
 
@@ -327,11 +328,38 @@ def clear_slot(slot: str) -> None:
     state.pop("_zone_support", None)
 
 
+def _apply_parsed_nl_booking(parsed: dict) -> None:
+    """Apply parsed natural language booking to session state and trigger 1-click auto-estimate."""
+    pu = parsed["pickup"]
+    do = parsed["dropoff"]
+    apply_direct_selection(
+        "pickup",
+        longitude=pu["longitude"],
+        latitude=pu["latitude"],
+        custom_label=pu["label"],
+    )
+    apply_direct_selection(
+        "dropoff",
+        longitude=do["longitude"],
+        latitude=do["latitude"],
+        custom_label=do["label"],
+    )
+    st.session_state["_pending_schedule_override"] = {
+        "mode": parsed["mode"],
+        "date": parsed["pickup_date"],
+        "hour": int(parsed["pickup_hour"]),
+        "minute": int(parsed["pickup_minute"]),
+    }
+    st.session_state["_auto_trigger_estimate"] = True
+    st.session_state["_ai_quick_book_notice"] = parsed["summary_vi"]
+
+
 def _render_gold_v3_ai_quick_book(zones: list[dict] | None = None) -> None:
     """Render Natural Language Ride Booking bar (AI Quick-Book) for Gold V3."""
-    with st.expander("✨ Đặt xe nhanh bằng Ngôn ngữ Tự nhiên (AI Quick-Book — Tự động ghim bản đồ & giờ đi)", expanded=False):
+    with st.expander("✨ Đặt xe nhanh bằng Ngôn ngữ Tự nhiên (AI Quick-Book — Tự động ghim bản đồ & tính cước 1-Click)", expanded=False):
         st.caption(
-            "Nhập câu lệnh tự nhiên bằng tiếng Việt hoặc tiếng Anh (không cần nhập thời tiết — hệ thống sẽ tự động lấy dự báo thời tiết NYC theo giờ đón)."
+            "Nhập câu lệnh tự nhiên bằng tiếng Việt hoặc tiếng Anh (hỗ trợ cả 'Từ A đi B' hoặc 'Đi B từ A'). "
+            "Không cần nhập thời tiết — hệ thống tự động lấy dự báo thời tiết NYC chính xác theo giờ đón!"
         )
         q_col1, q_col2 = st.columns([4, 1])
         nl_prompt = q_col1.text_input(
@@ -341,36 +369,23 @@ def _render_gold_v3_ai_quick_book(zones: list[dict] | None = None) -> None:
             key="gold_v3_ai_quick_book_input",
         )
         apply_nl = q_col2.button("✨ Điền tự động", use_container_width=True, key="gold_v3_ai_quick_book_btn")
-        if apply_nl:
-            parsed = parse_natural_language_booking(nl_prompt, zones=zones)
+
+        sample_prompts = (
+            ("🌆 Times Square → ✈️ JFK 6h sáng mai", "Đặt xe từ Times Square đi sân bay JFK lúc 6h sáng mai"),
+            ("🏦 Phố Wall → 🛫 LaGuardia 17h30 chiều mai", "Đi sân bay LaGuardia từ Phố Wall lúc 17h30 chiều mai"),
+            ("🏛️ Công viên Trung tâm → 🌆 Midtown đi ngay", "Từ Công viên Trung tâm đi Midtown bây giờ"),
+        )
+        s_cols = st.columns(3)
+        chosen_sample = None
+        for idx, (btn_label, sample_text) in enumerate(sample_prompts):
+            if s_cols[idx].button(btn_label, key=f"gold_v3_nl_sample_{idx}", use_container_width=True):
+                chosen_sample = sample_text
+
+        target_prompt = chosen_sample if chosen_sample is not None else (nl_prompt if apply_nl else None)
+        if target_prompt is not None:
+            parsed = parse_natural_language_booking(target_prompt, zones=zones)
             if parsed.get("ok"):
-                pu = parsed["pickup"]
-                do = parsed["dropoff"]
-                apply_direct_selection(
-                    "pickup",
-                    longitude=pu["longitude"],
-                    latitude=pu["latitude"],
-                    custom_label=pu["label"],
-                )
-                apply_direct_selection(
-                    "dropoff",
-                    longitude=do["longitude"],
-                    latitude=do["latitude"],
-                    custom_label=do["label"],
-                )
-                if parsed["mode"] == "scheduled":
-                    st.session_state["address_pretrip_mode"] = "Hẹn giờ"
-                    st.session_state["address_pickup_date"] = parsed["pickup_date"]
-                    st.session_state["address_pickup_hour"] = int(parsed["pickup_hour"])
-                    st.session_state["address_pickup_minute"] = int(parsed["pickup_minute"])
-                    st.session_state["_pretrip_default_schedule"] = (
-                        parsed["pickup_date"],
-                        int(parsed["pickup_hour"]),
-                        int(parsed["pickup_minute"]),
-                    )
-                else:
-                    st.session_state["address_pretrip_mode"] = "Đi ngay"
-                st.session_state["_ai_quick_book_notice"] = parsed["summary_vi"]
+                _apply_parsed_nl_booking(parsed)
                 st.rerun()
             else:
                 st.warning(parsed.get("error", "Không thể phân tích câu lệnh đặt xe."))
@@ -435,8 +450,8 @@ def render_page() -> None:
     st.title("Ước tính cước từ địa chỉ")
     if is_gold_v3:
         st.markdown(
-            "**Cước cơ bản tiêu chuẩn · USD · chưa gồm tiền tip, phí cầu đường (tolls) và phụ phí "
-            "(riêng tuyến Sân bay JFK ↔ Manhattan tự động áp dụng mức cước cố định 70.00 USD).**"
+            "**Dự báo Tổng giá cước NYC Yellow Taxi · USD · Gồm Cước đồng hồ ML (`M3-w`) + Phụ phí bắt buộc theo luật NYC TLC "
+            "(riêng tuyến Sân bay JFK ↔ Manhattan khóa mức cước xe cố định 70.00 USD theo Ratecode 2, cộng thuế/phí luật định).**"
         )
         st.write(
             "Bạn có thể **click trực tiếp lên bản đồ New York**, **kéo thả ghim A / B**, **bấm chọn điểm nóng** "
@@ -557,11 +572,6 @@ def render_page() -> None:
         do_poly = geom.zone_feature(do_zone["location_id"]) if (geom and do_zone and hasattr(geom, "zone_feature")) else None
 
         stored_for_map = st.session_state.get("address_fare_result")
-        current_draft_for_check = {
-            "pickup": pu_selected,
-            "dropoff": do_selected,
-            "standard_rate": True,
-        }
         same_points_as_submitted = (
             isinstance(stored_for_map, dict)
             and stored_for_map.get("model_version") == "gold-v3"
@@ -627,7 +637,10 @@ def render_page() -> None:
         do_z = support_by_slot["dropoff"]["zone"]
         if is_gold_v3:
             if (pu_z["location_id"] == 132 and do_z["borough"] == "Manhattan") or (do_z["location_id"] == 132 and pu_z["borough"] == "Manhattan"):
-                st.info("✈️ Tuyến Sân bay JFK (Zone 132) ↔ Manhattan: Hệ thống tự động áp dụng quy tắc cước cố định 70.00 USD (Ratecode 2) theo quy định NYC TLC.")
+                st.info(
+                    "✈️ **Tuyến Sân bay JFK (Zone 132) ↔ Manhattan**: Áp dụng mức **cước xe cố định 70.00 USD (Ratecode 2)** "
+                    "thay cho đồng hồ tính theo km/kẹt xe, cộng các khoản thuế/phí bắt buộc theo quy định NYC TLC."
+                )
         else:
             try:
                 validate_standard_route(pu_z, do_z)
@@ -642,6 +655,23 @@ def render_page() -> None:
     st.subheader("2. Chọn thời gian đón")
     st.write("Giờ địa phương America/New_York · hỗ trợ đi ngay hoặc hẹn giờ trước tối đa 7 ngày."
              if pretrip else "Giờ địa phương New York · định dạng 24 giờ · chỉ tháng 1–6/2025.")
+
+    # Apply any staged schedule override BEFORE instantiating time widgets to avoid Streamlit state mutation errors
+    pending_sched = st.session_state.pop("_pending_schedule_override", None)
+    if isinstance(pending_sched, dict) and pretrip:
+        if pending_sched.get("mode") == "scheduled":
+            st.session_state["address_pretrip_mode"] = "Hẹn giờ"
+            st.session_state["address_pickup_date"] = pending_sched["date"]
+            st.session_state["address_pickup_hour"] = int(pending_sched["hour"])
+            st.session_state["address_pickup_minute"] = int(pending_sched["minute"])
+            st.session_state["_pretrip_default_schedule"] = (
+                pending_sched["date"],
+                int(pending_sched["hour"]),
+                int(pending_sched["minute"]),
+            )
+        else:
+            st.session_state["address_pretrip_mode"] = "Đi ngay"
+
     weather_override = None
     with st.container(border=True):
         mode = "now" if pretrip else "historical"
@@ -680,7 +710,7 @@ def render_page() -> None:
         if is_gold_v3:
             st.caption(
                 "🌦️ **Thời tiết tự động (`M3-w`)**: Hệ thống tự động lấy Dự báo Thời tiết chính xác tại New York (Open-Meteo ERA5) "
-                "theo đúng ngày & giờ đón bạn chọn để dự báo giá cước."
+                "theo đúng ngày & từng khung giờ trong 24h để dự báo giá cước."
             )
             use_weather = st.checkbox(
                 "🌦️ Tùy chỉnh thủ công thông số thời tiết (Mặc định: Tự động lấy dự báo thời tiết NYC thực tế theo giờ đón)",
@@ -707,6 +737,8 @@ def render_page() -> None:
         )
         standard = st.checkbox(checkbox_text, value=True if is_gold_v3 else False)
         submitted = st.button("Ước tính", type="primary", disabled=not can_submit, key="address_estimate_submit")
+
+    auto_trigger = bool(st.session_state.pop("_auto_trigger_estimate", False))
     payload = {"pickup": st.session_state.address_pickup["selected"],
                "dropoff": st.session_state.address_dropoff["selected"],
                "standard_rate": standard}
@@ -718,7 +750,8 @@ def render_page() -> None:
                                      "fold": fold}
     else:
         payload["pickup_datetime"] = datetime.combine(pickup_date, time(hour, minute)).isoformat()
-    if submitted and not pending_events:
+
+    if (submitted or auto_trigger) and not pending_events:
         st.session_state.pop("address_fare_result", None)
         st.session_state.pop("address_fare_error", None)
         if payload["pickup"] is None or payload["dropoff"] is None:
@@ -748,7 +781,11 @@ def render_page() -> None:
                         )
                         for w_k in ("temperature_2m", "precipitation", "snowfall", "wind_speed_10m"):
                             req_obj[w_k] = float(auto_w[w_k])
-                        weather_info_used = auto_w
+                        if isinstance(auto_w.get("hourly_24h_compact"), list):
+                            req_obj["hourly_weather_24h"] = auto_w["hourly_24h_compact"]
+                        weather_info_used = {
+                            k: v for k, v in auto_w.items() if k not in ("hourly_24h", "hourly_24h_compact")
+                        }
                     payload["pretrip_request"] = req_obj
                 with st.spinner("Đang tính tuyến, đồng bộ thời tiết NYC và ước tính tổng cước…"):
                     outcome = execute_submission(st.session_state, submission_id, payload, make_coordinator())
@@ -775,6 +812,7 @@ def render_page() -> None:
             except ValueError as error:
                 st.session_state.address_fare_error = format_pretrip_time_error(error, payload.get("time_selection"))
             except Exception:
+                logging.getLogger(__name__).exception("Address fare estimate failed")
                 st.session_state.address_fare_error = "Không thể ước tính cước. Không có giá thay thế."
 
     if st.session_state.get("address_fare_error"):
@@ -796,17 +834,26 @@ def render_page() -> None:
                 weather_info=stored.get("weather_info"),
                 mode=(stored.get("time_selection") or {}).get("mode", "now"),
             )
+            is_flat_jfk = bool(prediction.get("flat_fare_applied"))
             m1, m2, m3, m4 = st.columns(4)
             m1.metric(
-                "Tổng giá cước dự kiến (USD)",
+                "Tổng thanh toán gồm phí TLC" if is_flat_jfk else "Tổng giá cước dự kiến (USD)",
                 f"${advice['total_estimated_fare_usd']:,.2f}",
-                delta=f"Gồm phụ phí TLC: +${advice['total_surcharges_usd']:,.2f}",
+                delta=(
+                    f"Cước 70.00 + Phụ phí +{advice['total_surcharges_usd']:,.2f} USD"
+                    if is_flat_jfk
+                    else f"Gồm phụ phí TLC: +${advice['total_surcharges_usd']:,.2f}"
+                ),
                 delta_color="off",
             )
             m2.metric(
-                "Cước đồng hồ ML (M3-w)",
+                "Cước cố định JFK (Ratecode 2)" if is_flat_jfk else "Cước đồng hồ ML (M3-w)",
                 f"${advice['metered_fare_usd']:,.2f}",
-                delta="Cước cố định JFK (Ratecode 2)" if prediction.get("flat_fare_applied") else f"Trung vị lịch sử: ${prediction.get('baseline_fare_usd', 0.0):,.2f}",
+                delta=(
+                    f"Đồng hồ ML tham chiếu: ${prediction.get('metered_ml_estimate_usd', 70.0):,.2f}"
+                    if is_flat_jfk
+                    else f"Trung vị lịch sử: ${prediction.get('baseline_fare_usd', 0.0):,.2f}"
+                ),
                 delta_color="off",
             )
             m3.metric(
@@ -828,15 +875,13 @@ def render_page() -> None:
             )
 
             def _apply_suggested_hour(new_hour: int) -> None:
-                st.session_state["address_pretrip_mode"] = "Hẹn giờ"
-                st.session_state["address_pickup_date"] = submitted_at.date()
-                st.session_state["address_pickup_hour"] = int(new_hour)
-                st.session_state["address_pickup_minute"] = int(submitted_at.minute)
-                st.session_state["_pretrip_default_schedule"] = (
-                    submitted_at.date(),
-                    int(new_hour),
-                    int(submitted_at.minute),
-                )
+                st.session_state["_pending_schedule_override"] = {
+                    "mode": "scheduled",
+                    "date": submitted_at.date(),
+                    "hour": int(new_hour),
+                    "minute": int(submitted_at.minute),
+                }
+                st.session_state["_auto_trigger_estimate"] = True
                 st.rerun()
 
             render_smart_fare_advisor_panel(advice, on_apply_suggested_hour=_apply_suggested_hour)
@@ -850,7 +895,12 @@ def render_page() -> None:
                 access_token=os.environ.get("MAPBOX_ACCESS_TOKEN", "") if online else "",
                 online=online, key="address_submitted_route_map",
             )
-        case_warnings = [warning for warning in stored["warnings"] if warning not in _GENERAL_NOTICES]
+        case_warnings = [
+            warning
+            for warning in stored["warnings"]
+            if warning not in _GENERAL_NOTICES
+            and not (stored.get("model_version") == "gold-v3" and "Ratecode 2" in warning)
+        ]
         for warning in dict.fromkeys(case_warnings):
             st.warning(warning)
         unseen = any(prediction.get("unseen_categories", {}).values())
@@ -870,8 +920,8 @@ def render_page() -> None:
             if stored.get("model_version") == "gold-v3":
                 st.write(
                     "Mô hình Gold V3 (Spark ML GBTRegressor) huấn luyện trên tầng Medallion Gold 2025 (23,88 triệu chuyến). "
-                    "Đầu vào gồm vùng đón/trả (263 Taxi Zones), khoảng cách tâm vùng Haversine Centroid, chu kỳ giờ/thứ và lịch nghỉ lễ OPM. "
-                    "Tuyến JFK (Zone 132) ↔ Manhattan áp dụng quy tắc cước cố định 70.00 USD (Ratecode 2)."
+                    "Đầu vào gồm vùng đón/trả (263 Taxi Zones), khoảng cách tâm vùng Haversine Centroid, chu kỳ giờ/thứ, lịch nghỉ lễ OPM và thời tiết ERA5. "
+                    "Tuyến JFK (Zone 132) ↔ Manhattan áp dụng quy tắc cước xe cố định 70.00 USD (Ratecode 2) cộng thuế/phí TLC."
                 )
                 st.write({
                     "pickup_zone": stored["pickup"]["location_id"],
