@@ -252,3 +252,53 @@ def test_interactive_map_bridge_and_direct_pin_selection():
     assert "map.jumpTo(savedCamera)" in frontend_html
     assert 'projection: "mercator"' in frontend_html
     assert "World_Imagery/MapServer/tile" in frontend_html
+
+
+def test_gold_v3_validate_weather_rejects_bool_string_and_nan():
+    import pytest
+    from nyc_taxi.ml.gold_v3_inference import _validate_weather_dict
+    from nyc_taxi.ml.inference import InputError
+
+    with pytest.raises(InputError):
+        _validate_weather_dict(
+            {"temperature_2m": True, "precipitation": 0.0, "snowfall": 0.0, "wind_speed_10m": 5.0}
+        )
+    with pytest.raises(InputError):
+        _validate_weather_dict(
+            {"temperature_2m": "rain", "precipitation": 0.0, "snowfall": 0.0, "wind_speed_10m": 5.0}
+        )
+    with pytest.raises(InputError):
+        _validate_weather_dict(
+            {"temperature_2m": float("nan"), "precipitation": 0.0, "snowfall": 0.0, "wind_speed_10m": 5.0}
+        )
+
+
+def test_gold_v3_inference_server_returns_gold_v3_error_message_on_400():
+    import io
+    from nyc_taxi.ml.gold_v3_inference import gold_v3_identity
+    from nyc_taxi.ml.inference import InputError
+    from nyc_taxi.ml.inference_server import handler_for
+
+    class DummyGoldV3Predictor:
+        ready = True
+        identity = staticmethod(gold_v3_identity)
+
+        def predict(self, payload):
+            raise InputError("bad weather")
+
+    handler_cls = handler_for(DummyGoldV3Predictor())
+    handler = object.__new__(handler_cls)
+    body = b'{"pickup_location_id": 161}'
+    handler.path = "/predict"
+    handler.headers = {"Content-Type": "application/json", "Content-Length": str(len(body))}
+    handler.rfile = io.BytesIO(body)
+    captured = {}
+
+    def fake_reply(status, payload):
+        captured["status"] = status
+        captured["payload"] = payload
+
+    handler.reply = fake_reply
+    handler.do_POST()
+    assert captured["status"] == 400
+    assert "Gold-V3" in captured["payload"]["message"]

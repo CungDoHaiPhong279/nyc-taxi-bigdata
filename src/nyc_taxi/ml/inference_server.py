@@ -72,9 +72,19 @@ def handler_for(predictor):
                 result = predictor.predict(payload)
                 self.reply(200, result)
             except (InputError, ValueError, UnicodeError):
-                message = ("Inputs không hợp lệ theo contract V2 và thời gian America/New_York."
-                           if selected_identity().get("model_version") == "v2.2" else
-                           "Inputs không hợp lệ; dùng distance hữu hạn [0,200], local datetime năm 2025 và zone IDs 1–263.")
+                model_ver = selected_identity().get("model_version")
+                if model_ver == "v2.2":
+                    message = "Inputs kh?ng h?p l? theo contract V2 v? th?i gian America/New_York."
+                elif model_ver == "gold-v3":
+                    message = (
+                        "Inputs kh?ng h?p l? theo contract Gold-V3 "
+                        "(zone IDs 1?263, ISO datetime h?p l? v? th?ng s? th?i ti?t h?u h?n)."
+                    )
+                else:
+                    message = (
+                        "Inputs kh?ng h?p l?; d?ng distance h?u h?n [0,200], "
+                        "local datetime n?m 2025 v? zone IDs 1?263."
+                    )
                 self.reply(400, {"error": "invalid_inputs", "message": message, **selected_identity()})
             except InferenceError as error:
                 self.reply(error.status, {"error": error.code, **getattr(error, "public_payload", {}), **selected_identity()})

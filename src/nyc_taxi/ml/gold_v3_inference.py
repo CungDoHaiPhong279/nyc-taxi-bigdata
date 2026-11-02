@@ -10,9 +10,10 @@ from datetime import datetime
 import json
 import math
 from pathlib import Path
+import tempfile
 import threading
 import time
-from typing import Any
+from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from nyc_taxi.ml.gold_v3_data import (
@@ -32,7 +33,35 @@ from nyc_taxi.ml.pretrip_v23_features import load_calendar, load_zone_centroids
 JFK_LOCATION_ID = 132
 EWR_LOCATION_ID = 1
 JFK_MANHATTAN_FLAT_FARE_USD = 70.0
+MIN_FARE_FLOOR_USD = 3.0
 NYC_TZ = ZoneInfo("America/New_York")
+
+
+def _validate_weather_dict(raw: Mapping[str, Any]) -> dict[str, float]:
+    if not isinstance(raw, Mapping):
+        raise InputError("Weather payload must be a mapping")
+    parsed: dict[str, float] = {}
+    for w_col in WEATHER_NUMERIC_FEATURES:
+        if w_col not in raw:
+            raise InputError(f"Missing weather feature: {w_col}")
+        v = raw[w_col]
+        if isinstance(v, bool) or v is None:
+            raise InputError(f"Boolean or null weather value not allowed for {w_col}")
+        try:
+            val = float(v)
+        except (TypeError, ValueError) as exc:
+            raise InputError(f"Invalid numeric weather value for {w_col}") from exc
+        if not math.isfinite(val):
+            raise InputError(f"Non-finite weather value for {w_col}")
+        parsed[w_col] = val
+    return parsed
+
+
+def _clamp_prediction(raw_pred: Any) -> float:
+    val = float(raw_pred)
+    if not math.isfinite(val):
+        raise InferenceError("prediction_failed")
+    return max(MIN_FARE_FLOOR_USD, val)
 
 
 def _read_cgroup_memory() -> dict[str, Any]:
@@ -98,10 +127,8 @@ def derive_single_trip_features(
         "dropoff_zone": str(int(dropoff_location_id)),
     }
     if weather is not None:
-        for w_col in WEATHER_NUMERIC_FEATURES:
-            val = float(weather[w_col])
-            if not math.isfinite(val):
-                raise InputError(f"Non-finite weather feature: {w_col}")
+        validated_weather = _validate_weather_dict(weather)
+        for w_col, val in validated_weather.items():
             row[w_col] = val
     return row
 
@@ -111,14 +138,16 @@ def _coerce_hour_weather(
     fallback_weather: dict[str, float] | None,
 ) -> dict[str, float] | None:
     if isinstance(item, dict) and all(k in item and item[k] is not None for k in WEATHER_NUMERIC_FEATURES):
-        return {k: float(item[k]) for k in WEATHER_NUMERIC_FEATURES}
+        return _validate_weather_dict(item)
     if isinstance(item, (list, tuple)) and len(item) == 4:
-        return {
-            "temperature_2m": float(item[0]),
-            "precipitation": float(item[1]),
-            "snowfall": float(item[2]),
-            "wind_speed_10m": float(item[3]),
-        }
+        return _validate_weather_dict(
+            {
+                "temperature_2m": item[0],
+                "precipitation": item[1],
+                "snowfall": item[2],
+                "wind_speed_10m": item[3],
+            }
+        )
     return fallback_weather
 
 
@@ -218,7 +247,10 @@ class FrozenGoldV3Predictor:
                 .config("spark.sql.session.timeZone", "America/New_York")
                 .config("spark.sql.shuffle.partitions", "2")
                 .config("spark.default.parallelism", "2")
-                .config("spark.sql.warehouse.dir", "file:///tmp/gold-v3-warehouse")
+                .config(
+                    "spark.sql.warehouse.dir",
+                    (Path(tempfile.gettempdir()).resolve() / "gold-v3-warehouse").as_uri(),
+                )
                 .getOrCreate()
             )
             self.spark.sparkContext.setLogLevel("ERROR")
@@ -290,6 +322,10 @@ class FrozenGoldV3Predictor:
         from pyspark.sql.types import DoubleType, StringType, StructField, StructType
 
         try:
+            self.spark.sparkContext.setJobGroup(
+                "gold-v3-predict",
+                "Gold V3 single-trip + 24h horizon",
+            )
             all_rows = [derived, *(horizon_rows or [])]
             schema_nw = StructType(
                 [
@@ -302,7 +338,7 @@ class FrozenGoldV3Predictor:
                 schema_nw,
             )
             preds_nw = [
-                float(row["prediction"])
+                _clamp_prediction(row["prediction"])
                 for row in self.model_no_weather.transform(df_nw).select("prediction").collect()
             ]
             pred_nw = preds_nw[0]
@@ -322,7 +358,7 @@ class FrozenGoldV3Predictor:
                     schema_w,
                 )
                 preds_w = [
-                    float(row["prediction"])
+                    _clamp_prediction(row["prediction"])
                     for row in self.model_weather.transform(df_w).select("prediction").collect()
                 ]
                 pred_w = preds_w[0]
@@ -357,7 +393,7 @@ class FrozenGoldV3Predictor:
 
         weather_dict = None
         if all(k in payload and payload[k] is not None for k in WEATHER_NUMERIC_FEATURES):
-            weather_dict = {k: float(payload[k]) for k in WEATHER_NUMERIC_FEATURES}
+            weather_dict = _validate_weather_dict(payload)
         raw_hourly_w = payload.get("hourly_weather_24h")
         hourly_w_24 = raw_hourly_w if (isinstance(raw_hourly_w, list) and len(raw_hourly_w) == 24) else None
 
@@ -411,6 +447,13 @@ class FrozenGoldV3Predictor:
             )
             preds = future.result(timeout=timeout)
         except FutureTimeout:
+            if self.spark is not None:
+                try:
+                    self.spark.sparkContext.cancelJobGroup("gold-v3-predict")
+                except Exception:
+                    pass
+            self.ready = False
+            self.status = "failed:prediction_timeout"
             raise InferenceError("prediction_timeout", 504) from None
         except Exception:
             raise InferenceError("prediction_failed") from None
