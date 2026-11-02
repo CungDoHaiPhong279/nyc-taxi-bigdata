@@ -230,3 +230,17 @@ def test_postgres_readonly_weighted_aggregates_against_row_reference():
                         assert {row[field]: row["trips"] for row in actual[name]} == expected_bins
     finally:
         engine.dispose()
+
+
+
+def test_multisource_query_uses_calendar_date_id_and_reduces_fact_first():
+    query, params = queries.build_multisource_query(
+        queries.DashboardFilters.from_selection(["2025-01"], ["Manhattan"])
+    )
+    sql = query.text
+    assert "COALESCE(f.calendar_date_id, f.pickup_date)" in sql
+    assert "f.pickup_date_id" not in sql
+    assert "WITH buckets AS" in sql
+    assert params["year_0"] == 2025
+    assert params["month_0"] == 1
+    assert params["boroughs"] == ("Manhattan",)

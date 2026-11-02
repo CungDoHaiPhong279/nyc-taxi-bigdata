@@ -122,7 +122,7 @@ nyc-taxi-bigdata/
 ├── assets/taxi_zones/             # Bản đồ ranh giới 263 vùng NYC TLC (GeoJSON & Manifest)
 ├── config/                        # Cấu hình hệ thống, hợp đồng đặc trưng ML & 5 Metrics
 ├── dashboard/app.py               # Entrypoint ứng dụng Web Streamlit
-├── distribution/models/gold-v3/   # Gói mô hình Spark GBT Gold V3 đóng băng (79 file kèm SHA-256)
+├── distribution/models/gold-v3/   # Gói mô hình Spark GBT Gold V3 đóng băng (24 file kèm SHA-256)
 ├── k8s/                           # Bản kê khai Kubernetes (Deployment, Service, HPA, Probes)
 ├── reports/
 │   ├── FINAL_REPORT_OUTLINE.md    # Nội dung chi tiết 6 Chương Báo cáo Cuối kỳ

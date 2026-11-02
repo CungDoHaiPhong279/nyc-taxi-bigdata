@@ -198,17 +198,35 @@ def build_multisource_query(filters: DashboardFilters) -> tuple[TextClause, dict
             parameters[f"year_{index}"] = int(month[:4])
             parameters[f"month_{index}"] = int(month[5:])
         predicates.append("(" + " OR ".join(month_predicates) + ")")
+    month_where = "WHERE " + " AND ".join(predicates) if predicates else ""
+    borough_where = ""
     if filters.boroughs:
-        predicates.append("pu.borough IN :boroughs")
+        borough_where = "WHERE pu.borough IN :boroughs"
         parameters["boroughs"] = filters.boroughs
-    where_clause = "WHERE " + " AND ".join(predicates) if predicates else ""
 
     query = text(
         f"""
-        WITH filtered AS (
+        WITH buckets AS (
             SELECT
-                f.fare_amount,
-                f.trip_distance * 1.60934 AS distance_km,
+                f.pickup_location_id,
+                COALESCE(f.calendar_date_id, f.pickup_date) AS calendar_date_id,
+                f.weather_id,
+                COUNT(*) AS trip_count,
+                SUM(f.fare_amount) AS fare_sum,
+                COUNT(f.fare_amount) AS fare_count,
+                SUM(f.trip_distance) * 1.60934 AS distance_km_sum,
+                COUNT(f.trip_distance) AS distance_count
+            FROM analytics.fact_trip AS f
+            {month_where}
+            GROUP BY f.pickup_location_id, COALESCE(f.calendar_date_id, f.pickup_date), f.weather_id
+        ),
+        classified AS (
+            SELECT
+                b.trip_count,
+                b.fare_sum,
+                b.fare_count,
+                b.distance_km_sum,
+                b.distance_count,
                 CASE
                     WHEN COALESCE(w.precipitation, 0) >= 2.0 OR COALESCE(w.snowfall, 0) > 0
                         THEN '3. Mưa lớn / Có tuyết (>= 2 mm/h)'
@@ -223,11 +241,11 @@ def build_multisource_query(filters: DashboardFilters) -> tuple[TextClause, dict
                         THEN '2. Cuối tuần (Thứ 7 & Chủ Nhật)'
                     ELSE '1. Ngày làm việc (Thứ 2 – Thứ 6)'
                 END AS calendar_bucket
-            FROM analytics.fact_trip AS f
-            JOIN analytics.dim_location AS pu ON pu.location_id = f.pickup_location_id
-            LEFT JOIN analytics.dim_weather AS w ON w.weather_id = f.weather_id
-            LEFT JOIN analytics.dim_calendar AS c ON c.date_id = f.pickup_date_id
-            {where_clause}
+            FROM buckets AS b
+            JOIN analytics.dim_location AS pu ON pu.location_id = b.pickup_location_id
+            LEFT JOIN analytics.dim_weather AS w ON w.weather_id = b.weather_id
+            LEFT JOIN analytics.dim_calendar AS c ON c.date_id = b.calendar_date_id
+            {borough_where}
         )
         SELECT
             CASE GROUPING(weather_bucket, calendar_bucket)
@@ -235,10 +253,10 @@ def build_multisource_query(filters: DashboardFilters) -> tuple[TextClause, dict
                 WHEN 2 THEN 'calendar'
             END AS section_kind,
             COALESCE(weather_bucket, calendar_bucket) AS bucket_label,
-            COUNT(*) AS trip_count,
-            AVG(fare_amount)::double precision AS avg_fare_usd,
-            AVG(distance_km)::double precision AS avg_distance_km
-        FROM filtered
+            COALESCE(SUM(trip_count), 0) AS trip_count,
+            SUM(fare_sum) / NULLIF(SUM(fare_count), 0)::double precision AS avg_fare_usd,
+            SUM(distance_km_sum) / NULLIF(SUM(distance_count), 0)::double precision AS avg_distance_km
+        FROM classified
         GROUP BY GROUPING SETS ((weather_bucket), (calendar_bucket))
         ORDER BY section_kind, bucket_label
         """
