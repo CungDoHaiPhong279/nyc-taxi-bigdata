@@ -7,21 +7,7 @@ name = "nyc-taxi-bigdata"
 version = "0.1.0"
 description = "NYC taxi, weather, and calendar big-data project bootstrap"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
-dependencies = [
-    "pandas>=2.2,<3.0",
-    "pyarrow>=18",
-    "numpy>=1.26",
-    "sqlalchemy>=2.0",
-    "psycopg[binary]>=3.1",
-    "python-dotenv>=1.0",
-    "pyyaml>=6.0",
-]
-
-[project.optional-dependencies]
-dashboard = ["streamlit>=1.40,<2.0"]
-spark = ["pyspark==4.2.0", "mlflow==3.5.1"]
-dev = ["pytest>=8.0"]
+requires-python = ">=3.11,<3.12"
 
 [tool.setuptools.packages.find]
 where = ["src"]

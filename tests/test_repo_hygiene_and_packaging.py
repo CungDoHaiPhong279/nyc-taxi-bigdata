@@ -28,8 +28,17 @@ def test_dockerfile_python_tests_copies_all_configs_and_assets():
     assert "COPY assets ./assets" in dockerfile
 
 
-def test_windows_safe_import_pilot_and_profile_ml_data():
-    pilot = importlib.import_module("nyc_taxi.ml.pilot")
-    assert isinstance(pilot.max_rss_mb(), float)
+def test_windows_safe_import_profile_ml_data_and_frozen_v1_hashes():
     profile_mod = importlib.import_module("scripts.profile_ml_data")
     assert isinstance(profile_mod._max_rss_mb(), float)
+
+    import hashlib
+    import json
+    import zipfile
+
+    zip_path = ROOT / "distribution" / "models" / "ml-p4-v1" / "nyc-taxi-model-ml-p4-v1.zip"
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        lock = json.loads(zf.read("models/ml-p3/20261023-june01/candidate_lock.json").decode("utf-8"))
+    for rel_path, expected_sha in lock["core_file_sha256"].items():
+        actual_sha = hashlib.sha256((ROOT / rel_path).read_bytes()).hexdigest()
+        assert actual_sha == expected_sha, f"Frozen V1 hash mismatch for {rel_path}"

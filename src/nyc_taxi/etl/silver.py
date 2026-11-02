@@ -653,6 +653,13 @@ def build_silver_dataset(
             moved_old_output = True
         try:
             staging.rename(target)
+            validate_silver_output(
+                spark, dataset, target, int(quality["output_rows"]),
+                expected_schema=validated["schema"],
+                expected_silver_batch_id=batch_id,
+                expected_bronze_batch_id=bronze_entry["ingestion_batch_id"],
+                expected_source_file=bronze_entry["source_raw_path"],
+            )
         except Exception:
             if target.exists():
                 shutil.rmtree(target)

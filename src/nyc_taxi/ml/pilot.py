@@ -10,10 +10,7 @@ import json
 import math
 import os
 from pathlib import Path
-try:
-    import resource
-except ModuleNotFoundError:
-    resource = None  # type: ignore[assignment]
+import resource
 import signal
 import sys
 import time
@@ -34,14 +31,8 @@ def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def max_rss_mb() -> float:
-    if resource is None:
-        return 0.0
-    return float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) / 1024.0
-
-
 def memory_snapshot(spark=None):
-    result = {"python_peak_rss_mib": max_rss_mb()}
+    result = {"python_peak_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024}
     for key, name in (("container_current_bytes", "memory.current"), ("container_peak_bytes", "memory.peak"), ("container_limit_bytes", "memory.max")):
         path = Path("/sys/fs/cgroup") / name
         if path.is_file():
@@ -284,7 +275,7 @@ def run_training(args) -> int:
             client.log_param(run_id, key, str(value))
         spark = start_spark(output, diagnostics=args.preparation_mode == "sample-first")
         report["spark_settings"] = {key: spark.sparkContext.getConf().get(key, "unset") for key in ("spark.master", "spark.driver.memory", "spark.local.dir", "spark.sql.shuffle.partitions", "spark.default.parallelism", "spark.eventLog.enabled", "spark.eventLog.dir")}
-        report["versions"] = {name: importlib.metadata.version(name) for name in ("pyspark", "mlflow", "numpy", "pyarrow")}
+        report["versions"] = {name: importlib.metadata.version(name) for name in ("pyspark", "mlflow", "numpy", "pyarrow", "scikit-learn")}
         report["versions"]["python"] = sys.version.split()[0]
         report["versions"]["java"] = spark._jvm.java.lang.System.getProperty("java.version")
         if args.preparation_mode == "sample-first":
