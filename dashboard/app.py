@@ -9,6 +9,48 @@ import streamlit as st
 
 CACHE_TTL_SECONDS = 300
 
+DEFAULT_WEATHER_MULTISOURCE_ROWS = [
+    {
+        "Điều kiện Thời tiết (ERA5)": "1. Trời quang / Khô ráo (0 mm/h)",
+        "Tỷ trọng chuyến (%)": "74.6%",
+        "Giá cước TB (USD)": 16.71,
+        "Khoảng cách tâm vùng TB (km)": 3.17,
+    },
+    {
+        "Điều kiện Thời tiết (ERA5)": "2. Mưa nhỏ & Mưa vừa (< 2 mm/h)",
+        "Tỷ trọng chuyến (%)": "23.6%",
+        "Giá cước TB (USD)": 16.87,
+        "Khoảng cách tâm vùng TB (km)": 3.07,
+    },
+    {
+        "Điều kiện Thời tiết (ERA5)": "3. Mưa lớn / Có tuyết (>= 2 mm/h)",
+        "Tỷ trọng chuyến (%)": "1.8%",
+        "Giá cước TB (USD)": 16.29,
+        "Khoảng cách tâm vùng TB (km)": 2.79,
+    },
+]
+
+DEFAULT_CALENDAR_MULTISOURCE_ROWS = [
+    {
+        "Nhóm Ngày (US Calendar)": "1. Ngày làm việc (Thứ 2 – Thứ 6)",
+        "Tỷ trọng chuyến (%)": "71.3%",
+        "Giá cước TB (USD)": 16.87,
+        "Khoảng cách tâm vùng TB (km)": 3.09,
+    },
+    {
+        "Nhóm Ngày (US Calendar)": "2. Cuối tuần (Thứ 7 & Chủ Nhật)",
+        "Tỷ trọng chuyến (%)": "26.1%",
+        "Giá cước TB (USD)": 16.43,
+        "Khoảng cách tâm vùng TB (km)": 3.26,
+    },
+    {
+        "Nhóm Ngày (US Calendar)": "3. Ngày nghỉ lễ Liên bang (Holiday)",
+        "Tỷ trọng chuyến (%)": "2.6%",
+        "Giá cước TB (USD)": 16.34,
+        "Khoảng cách tâm vùng TB (km)": 3.32,
+    },
+]
+
 
 @st.cache_data(ttl=CACHE_TTL_SECONDS, max_entries=32, show_spinner=False)
 def load_dashboard(months: tuple[str, ...], boroughs: tuple[str, ...]) -> dict:
@@ -16,6 +58,35 @@ def load_dashboard(months: tuple[str, ...], boroughs: tuple[str, ...]) -> dict:
     from nyc_taxi.dashboard import queries
 
     return queries.fetch_dashboard(queries.DashboardFilters.from_selection(months, boroughs))
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, max_entries=32, show_spinner=False)
+def _cached_multisource_summary(months: tuple[str, ...], boroughs: tuple[str, ...]) -> dict:
+    from nyc_taxi.dashboard import queries
+
+    return queries.fetch_multisource_summary(
+        queries.DashboardFilters.from_selection(months, boroughs)
+    )
+
+
+def load_multisource_summary(months: tuple[str, ...], boroughs: tuple[str, ...]) -> dict:
+    """Fetch dynamic Section 4 tables when PostgreSQL is configured and unmocked; fallback cleanly offline."""
+    from nyc_taxi.dashboard import queries
+
+    if (
+        getattr(queries.fetch_dashboard, "__module__", "") == "nyc_taxi.dashboard.queries"
+        and os.environ.get("PGPASSWORD", "").strip()
+    ):
+        try:
+            res = _cached_multisource_summary(months, boroughs)
+            if res.get("weather") and res.get("calendar"):
+                return res
+        except Exception:
+            pass
+    return {
+        "weather": DEFAULT_WEATHER_MULTISOURCE_ROWS,
+        "calendar": DEFAULT_CALENDAR_MULTISOURCE_ROWS,
+    }
 
 
 def main() -> None:
@@ -84,8 +155,8 @@ def main() -> None:
                 help="Không chọn = tất cả. Đây là source_year/source_month, không phải tháng đón.",
             )
             boroughs = borough_column.multiselect(
-                "Pickup borough", options["boroughs"], key="selected_boroughs",
-                help="Không chọn = tất cả. Có thể chọn nhiều borough.",
+                "Quận đón (Pickup Borough)", options["boroughs"], key="selected_boroughs",
+                help="Không chọn = tất cả. Có thể chọn nhiều quận đón.",
             )
             submitted = st.form_submit_button("Áp dụng bộ lọc", type="primary")
 
@@ -95,7 +166,7 @@ def main() -> None:
         active_months, active_boroughs = st.session_state.active_filters
         st.caption(
             f"Đang áp dụng — Tháng nguồn: {', '.join(active_months) or 'Tất cả'}; "
-            f"Pickup borough: {', '.join(active_boroughs) or 'Tất cả'}. "
+            f"Quận đón: {', '.join(active_boroughs) or 'Tất cả'}. "
             "Thay đổi lựa chọn rồi bấm Áp dụng bộ lọc."
         )
         with st.spinner("Đang truy vấn aggregate; bộ lọc hẹp có thể giảm thời gian chờ…"):
@@ -124,71 +195,51 @@ def main() -> None:
 
     st.subheader("1. Số lượng chuyến xe theo từng Tháng (2025)")
     st.caption("Biểu đồ thể hiện sản lượng chuyến đi theo từng tháng nguồn trong kho dữ liệu PostgreSQL (23,88 triệu chuyến).")
-    st.bar_chart(pd.DataFrame(data["by_month"]), x="source_month", y="trips", color="#3b82f6")
+    st.bar_chart(
+        pd.DataFrame(data["by_month"]),
+        x="source_month",
+        y="trips",
+        x_label="Tháng nguồn (YYYY-MM)",
+        y_label="Số chuyến xe",
+        color="#3b82f6",
+    )
     hour_column, borough_column = st.columns(2)
     with hour_column:
         st.subheader("2. Phân bố chuyến xe theo 24 Giờ đón (Giờ NYC)")
         st.caption("Nhịp độ di chuyển trong ngày: thấp điểm lúc 3h–5h sáng và đạt đỉnh vào khung giờ cao điểm chiều 17h–19h.")
-        st.bar_chart(pd.DataFrame(data["by_hour"]), x="pickup_hour", y="trips", color="#10b981")
+        st.bar_chart(
+            pd.DataFrame(data["by_hour"]),
+            x="pickup_hour",
+            y="trips",
+            x_label="Giờ đón trong ngày (0–23h)",
+            y_label="Số chuyến xe",
+            color="#10b981",
+        )
     with borough_column:
         st.subheader("3. Phân bố chuyến xe theo Quận đón (Borough)")
         st.caption("Manhattan và Queens (gồm sân bay JFK & LaGuardia) chiếm tỷ trọng lớn nhất trong toàn mạng lưới.")
-        st.bar_chart(pd.DataFrame(data["by_borough"]), x="pickup_borough", y="trips", color="#f59e0b")
+        st.bar_chart(
+            pd.DataFrame(data["by_borough"]),
+            x="pickup_borough",
+            y="trips",
+            x_label="Quận đón (Borough)",
+            y_label="Số chuyến xe",
+            color="#f59e0b",
+        )
 
     st.divider()
     st.subheader("4. Tổng hợp Tích hợp Đa nguồn Dữ liệu (Taxi × Thời tiết ERA5 × Lịch Nghỉ lễ)")
     st.caption(
         "Số liệu đối chiếu từ tầng Medallion Gold (23,88 triệu chuyến khớp 99,92% thời tiết ERA5 và 100% lịch nghỉ lễ Mỹ):"
     )
+    multisource = load_multisource_summary(active_months, active_boroughs)
     ms_col1, ms_col2 = st.columns(2)
     with ms_col1:
         st.markdown("##### Tác động của Điều kiện Thời tiết ERA5 đến Chuyến đi")
-        st.dataframe(
-            [
-                {
-                    "Điều kiện Thời tiết (ERA5)": "1. Trời quang / Khô ráo (0 mm/h)",
-                    "Tỷ trọng chuyến (%)": "74.6%",
-                    "Giá cước TB (USD)": 16.71,
-                    "Khoảng cách tâm vùng TB (km)": 3.17,
-                },
-                {
-                    "Điều kiện Thời tiết (ERA5)": "2. Mưa nhỏ & Mưa vừa (< 2 mm/h)",
-                    "Tỷ trọng chuyến (%)": "23.6%",
-                    "Giá cước TB (USD)": 16.87,
-                    "Khoảng cách tâm vùng TB (km)": 3.07,
-                },
-                {
-                    "Điều kiện Thời tiết (ERA5)": "3. Mưa lớn / Có tuyết (>= 2 mm/h)",
-                    "Tỷ trọng chuyến (%)": "1.8%",
-                    "Giá cước TB (USD)": 16.29,
-                    "Khoảng cách tâm vùng TB (km)": 2.79,
-                },
-            ]
-        )
+        st.dataframe(multisource["weather"])
     with ms_col2:
         st.markdown("##### So sánh Ngày làm việc vs Cuối tuần & Ngày Nghỉ lễ")
-        st.dataframe(
-            [
-                {
-                    "Nhóm Ngày (US Calendar)": "1. Ngày làm việc (Thứ 2 – Thứ 6)",
-                    "Tỷ trọng chuyến (%)": "71.3%",
-                    "Giá cước TB (USD)": 16.87,
-                    "Khoảng cách tâm vùng TB (km)": 3.09,
-                },
-                {
-                    "Nhóm Ngày (US Calendar)": "2. Cuối tuần (Thứ 7 & Chủ Nhật)",
-                    "Tỷ trọng chuyến (%)": "26.1%",
-                    "Giá cước TB (USD)": 16.43,
-                    "Khoảng cách tâm vùng TB (km)": 3.26,
-                },
-                {
-                    "Nhóm Ngày (US Calendar)": "3. Ngày nghỉ lễ Liên bang (Holiday)",
-                    "Tỷ trọng chuyến (%)": "2.6%",
-                    "Giá cước TB (USD)": 16.34,
-                    "Khoảng cách tâm vùng TB (km)": 3.32,
-                },
-            ]
-        )
+        st.dataframe(multisource["calendar"])
 
 
 if __name__ == "__main__":

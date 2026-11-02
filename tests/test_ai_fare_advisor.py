@@ -499,3 +499,39 @@ def test_parse_natural_language_booking_matches_real_tlc_zone_names_without_cras
     assert partial["pickup"] is None
     assert partial["dropoff"]["zone"] == "Greenpoint"
     assert "Điểm đến" in partial["error"] and "$" not in partial["error"]
+
+
+def test_nlp_vietnamese_toi_pronoun_or_preposition_does_not_force_pm():
+    now_ref = datetime(2026, 11, 2, 10, 0, tzinfo=NYC_TZ)
+    res = parse_natural_language_booking(
+        "Đặt xe cho tôi từ Times Square tới JFK lúc 6h sáng mai",
+        now_nyc=now_ref,
+    )
+    assert res["ok"] is True
+    assert res["pickup_hour"] == 6, f"Expected 6 AM, got {res['pickup_hour']}"
+
+
+def test_nlp_prefix_zone_names_do_not_double_match_single_mention():
+    now_ref = datetime(2026, 11, 2, 10, 0, tzinfo=NYC_TZ)
+    zones = [
+        {"location_id": 12, "zone": "Battery Park", "borough": "Manhattan"},
+        {"location_id": 13, "zone": "Battery Park City", "borough": "Manhattan"},
+        {"location_id": 132, "zone": "JFK Airport", "borough": "Queens"},
+    ]
+    res = parse_natural_language_booking(
+        "Từ Battery Park City đi JFK lúc 9h sáng mai",
+        now_nyc=now_ref,
+        zones=zones,
+    )
+    assert res["ok"] is True
+    assert res["pickup"]["location_id"] == 13
+    assert res["dropoff"]["location_id"] == 132
+
+
+def test_readme_b0_global_metrics_and_cli_flags_are_accurate():
+    from pathlib import Path
+
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    assert "python scripts/build_bronze.py --all" in readme
+    assert "python scripts/load_postgres.py --execute" in readme
+    assert "| **1. Trung vị toàn cục (`B0_global`)** | Thống kê cơ sở đơn giản | Không | `7,90` | `13,33` | `-13,22%` | `4,20` |" in readme

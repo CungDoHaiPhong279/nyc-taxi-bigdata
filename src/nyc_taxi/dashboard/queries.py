@@ -182,3 +182,122 @@ def fetch_dashboard(
     finally:
         if engine is not None:
             engine.dispose()
+
+
+
+def build_multisource_query(filters: DashboardFilters) -> tuple[TextClause, dict[str, Any]]:
+    """Build a bounded aggregate query joining fact_trip with dim_weather and dim_calendar."""
+    predicates: list[str] = []
+    parameters: dict[str, Any] = {}
+    if filters.months:
+        month_predicates = []
+        for index, month in enumerate(filters.months):
+            month_predicates.append(
+                f"(f.source_year = :year_{index} AND f.source_month = :month_{index})"
+            )
+            parameters[f"year_{index}"] = int(month[:4])
+            parameters[f"month_{index}"] = int(month[5:])
+        predicates.append("(" + " OR ".join(month_predicates) + ")")
+    if filters.boroughs:
+        predicates.append("pu.borough IN :boroughs")
+        parameters["boroughs"] = filters.boroughs
+    where_clause = "WHERE " + " AND ".join(predicates) if predicates else ""
+
+    query = text(
+        f"""
+        WITH filtered AS (
+            SELECT
+                f.fare_amount,
+                f.trip_distance * 1.60934 AS distance_km,
+                CASE
+                    WHEN COALESCE(w.precipitation, 0) >= 2.0 OR COALESCE(w.snowfall, 0) > 0
+                        THEN '3. Mưa lớn / Có tuyết (>= 2 mm/h)'
+                    WHEN COALESCE(w.precipitation, 0) > 0
+                        THEN '2. Mưa nhỏ & Mưa vừa (< 2 mm/h)'
+                    ELSE '1. Trời quang / Khô ráo (0 mm/h)'
+                END AS weather_bucket,
+                CASE
+                    WHEN COALESCE(c.is_holiday, false)
+                        THEN '3. Ngày nghỉ lễ Liên bang (Holiday)'
+                    WHEN COALESCE(c.is_weekend, false)
+                        THEN '2. Cuối tuần (Thứ 7 & Chủ Nhật)'
+                    ELSE '1. Ngày làm việc (Thứ 2 – Thứ 6)'
+                END AS calendar_bucket
+            FROM analytics.fact_trip AS f
+            JOIN analytics.dim_location AS pu ON pu.location_id = f.pickup_location_id
+            LEFT JOIN analytics.dim_weather AS w ON w.weather_id = f.weather_id
+            LEFT JOIN analytics.dim_calendar AS c ON c.date_id = f.pickup_date_id
+            {where_clause}
+        )
+        SELECT
+            CASE GROUPING(weather_bucket, calendar_bucket)
+                WHEN 1 THEN 'weather'
+                WHEN 2 THEN 'calendar'
+            END AS section_kind,
+            COALESCE(weather_bucket, calendar_bucket) AS bucket_label,
+            COUNT(*) AS trip_count,
+            AVG(fare_amount)::double precision AS avg_fare_usd,
+            AVG(distance_km)::double precision AS avg_distance_km
+        FROM filtered
+        GROUP BY GROUPING SETS ((weather_bucket), (calendar_bucket))
+        ORDER BY section_kind, bucket_label
+        """
+    )
+    if filters.boroughs:
+        query = query.bindparams(bindparam("boroughs", expanding=True))
+    return query, parameters
+
+
+def fetch_multisource_summary(
+    filters: DashboardFilters, *, config: dict[str, Any] | None = None
+) -> dict[str, list[dict[str, Any]]]:
+    """Query dynamic Weather & Calendar breakdown for Section 4 of the historical dashboard."""
+    query, parameters = build_multisource_query(filters)
+    engine = None
+    try:
+        engine = get_engine(config, connect_timeout_seconds=CONNECT_TIMEOUT_SECONDS)
+        with engine.connect() as connection:
+            with connection.begin():
+                connection.exec_driver_sql(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                )
+                connection.execute(
+                    text("SELECT set_config('statement_timeout', :timeout, true)"),
+                    {"timeout": str(STATEMENT_TIMEOUT_MS)},
+                )
+                connection.execute(
+                    text("SELECT set_config('lock_timeout', :timeout, true)"),
+                    {"timeout": str(LOCK_TIMEOUT_MS)},
+                )
+                rows = connection.execute(query, parameters).mappings().all()
+
+        weather_rows = [r for r in rows if r["section_kind"] == "weather"]
+        calendar_rows = [r for r in rows if r["section_kind"] == "calendar"]
+        w_total = sum(int(r["trip_count"]) for r in weather_rows) or 1
+        c_total = sum(int(r["trip_count"]) for r in calendar_rows) or 1
+
+        return {
+            "weather": [
+                {
+                    "Điều kiện Thời tiết (ERA5)": str(r["bucket_label"]),
+                    "Tỷ trọng chuyến (%)": f"{100.0 * int(r['trip_count']) / w_total:.1f}%",
+                    "Giá cước TB (USD)": round(float(r["avg_fare_usd"] or 0.0), 2),
+                    "Khoảng cách TB (km)": round(float(r["avg_distance_km"] or 0.0), 2),
+                }
+                for r in weather_rows
+            ],
+            "calendar": [
+                {
+                    "Nhóm Ngày (US Calendar)": str(r["bucket_label"]),
+                    "Tỷ trọng chuyến (%)": f"{100.0 * int(r['trip_count']) / c_total:.1f}%",
+                    "Giá cước TB (USD)": round(float(r["avg_fare_usd"] or 0.0), 2),
+                    "Khoảng cách TB (km)": round(float(r["avg_distance_km"] or 0.0), 2),
+                }
+                for r in calendar_rows
+            ],
+        }
+    except (SQLAlchemyError, OSError, ValueError, KeyError) as exc:
+        raise DashboardQueryError("Không thể đọc bảng đa nguồn từ PostgreSQL.") from exc
+    finally:
+        if engine is not None:
+            engine.dispose()

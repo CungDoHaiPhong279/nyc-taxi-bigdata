@@ -13,7 +13,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 | **2. Thách thức lớn nhất** | **Tuyệt đối tránh rò rỉ dữ liệu (*Zero Data Leakage*)**: Không dùng quãng đường hay thời gian di chuyển thực tế trên đồng hồ. Dự báo hoàn toàn dựa trên: khoảng cách tâm vùng Taxi Zones (*Haversine*), chu kỳ giờ/thứ/ngày lễ và thời tiết khí tượng ERA5. |
 | **3. Xử lý Dữ liệu Lớn** | Pipeline **PySpark Batch ELT** xử lý **24,08M** dòng thô qua 4 tầng Medallion (`Raw -> Bronze -> Silver -> Gold`), lọc sạch `0,82%` dữ liệu bẩn, lưu trữ **23,88M** dòng sạch (khớp 100% bản đồ, 99,92% thời tiết ERA5). |
 | **4. Kho Dữ liệu Phục vụ** | **PostgreSQL 16 Star Schema** (`analytics.fact_trip`: 23,88M dòng, Zero-Loss), tối ưu Deferred Indexing giúp Dashboard truy vấn phân tích chỉ trong ~1–2 giây. |
-| **5. Mô hình Học máy (AI)** | **`GBTRegressor` (Chuỗi cây tăng cường độ dốc) trên Spark MLlib** kết hợp **Quy tắc cước cố định JFK $70** (`Ratecode 2`). Vượt trội 4 mô hình đối chứng (Baseline B0, LR, RF, GBT-w) với **`MAE = 2,92 USD`** và **`R² = 86,85%`**. |
+| **5. Mô hình Học máy (AI)** | **`GBTRegressor` (Chuỗi cây tăng cường độ dốc) trên Spark MLlib** kết hợp **Quy tắc cước cố định JFK 70 USD** (`Ratecode 2`). Vượt trội 4 mô hình đối chứng (Baseline B0, LR, RF, GBT-w) với **`MAE = 2,92 USD`** và **`R² = 86,85%`**. |
 | **6. Triển khai & Giao diện** | Microservice suy luận đóng băng (`fare-inference:8000`, chấm điểm đồng thời đường cong 24h trong ~150ms) + Giao diện Streamlit Bản đồ tương tác Mapbox 2 chiều + **Trợ lý Đặt xe AI (`ai_fare_advisor.py`)**: Đặt xe bằng ngôn ngữ tự nhiên, tự động lấy Dự báo Thời tiết NYC (`M3-w`), công khai Phụ phí chính thức NYC TLC và chủ động đề xuất khung giờ gần nhất có giá tốt hơn. |
 
 ---
@@ -105,7 +105,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 ### 4.2. So sánh 5 Mô hình Học máy (Holdout Test 06/2025 — `80.770` chuyến) & Kiểm chứng Năm 2026 (`721.513` chuyến)
 | Mô hình | Thuật toán Cốt lõi | Dùng Thời tiết | MAE 2025 (USD) ↓ | RMSE 2025 (USD) ↓ | R² 2025 (%) ↑ | P50 2025 (USD) ↓ | MAE Năm 2026 (USD) ↓ |
 | :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: |
-| **1. Trung vị toàn cục (`B0_global`)** | Thống kê cơ sở đơn giản | Không | `7,90` | `11,76` | `11,76%` | `5,60` | `8,54` |
+| **1. Trung vị toàn cục (`B0_global`)** | Thống kê cơ sở đơn giản | Không | `7,90` | `13,33` | `-13,22%` | `4,20` | `8,54` |
 | **2. Thống kê Tuyến & Giờ (`Baseline B0`)** | Nhóm theo Tuyến và Khung giờ | Không | `3,35` | `6,51` | `72,94%` | `2,10` | `3,53` |
 | **3. Hồi quy Tuyến tính (`M1 - LR`)** | Spark MLlib `LinearRegression` | Có | `3,21` | `4,81` | `85,21%` | `2,33` | — |
 | **4. Rừng Ngẫu nhiên (`M2 - RF`)** | Spark MLlib `RandomForestRegressor` | Có | `3,12` | `4,67` | `86,09%` | `2,24` | — |
@@ -176,17 +176,17 @@ docker compose -f docker-compose.yml -f docker-compose.inference.yml -f docker-c
 Nếu muốn tự chạy lại từng bước xử lý dữ liệu lớn và huấn luyện mô hình:
 ```powershell
 # Bước 1: Tải dữ liệu thô & chạy pipeline Medallion (Raw -> Bronze -> Silver -> Gold -> PostgreSQL)
-python scripts/download_raw_data.py
-python scripts/build_bronze.py
-python scripts/build_silver.py
-python scripts/build_gold.py
-python scripts/load_postgres.py
+python scripts/download_raw_data.py --all
+python scripts/build_bronze.py --all
+python scripts/build_silver.py --all
+python scripts/build_gold.py --all
+python scripts/load_postgres.py --execute
 
 # Bước 2: Trích xuất mẫu phân tầng (bảo toàn 100% vùng hiếm), huấn luyện 5 mô hình & lưu vào PostgreSQL
-python scripts/prepare_gold_v3.py
-python scripts/train_gold_v3.py
-python scripts/write_gold_v3_predictions.py
-python scripts/package_gold_v3_bundle.py
+python scripts/prepare_gold_v3.py --execute
+python scripts/train_gold_v3.py --execute
+python scripts/write_gold_v3_predictions.py --execute
+python scripts/package_gold_v3_bundle.py --execute
 ```
 
 ### 6.3. Sao lưu Cơ sở Dữ liệu & Chạy Kiểm thử Tự động (CI/CD)

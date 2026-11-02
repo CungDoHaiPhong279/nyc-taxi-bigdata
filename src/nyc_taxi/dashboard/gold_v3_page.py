@@ -16,7 +16,6 @@ from decimal import Decimal
 import json
 import os
 from typing import Any
-import urllib.error
 import urllib.request
 from zoneinfo import ZoneInfo
 
@@ -89,9 +88,9 @@ def _predict_gold_v3(base_url: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def _query_model_metrics() -> list[dict[str, Any]]:
+def _cached_model_metrics() -> list[dict[str, Any]]:
+    eng = get_engine()
     try:
-        eng = get_engine()
         with eng.connect() as conn:
             rows = conn.execute(
                 text(
@@ -124,14 +123,21 @@ def _query_model_metrics() -> list[dict[str, Any]]:
                 )
             ).mappings().all()
             return [_clean_row(r) for r in rows]
+    finally:
+        eng.dispose()
+
+
+def _query_model_metrics() -> list[dict[str, Any]]:
+    try:
+        return _cached_model_metrics()
     except Exception:
         return []
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def _query_prediction_summary() -> dict[str, Any]:
+def _cached_prediction_summary() -> dict[str, Any]:
+    eng = get_engine()
     try:
-        eng = get_engine()
         with eng.connect() as conn:
             by_hour = conn.execute(
                 text(
@@ -171,30 +177,19 @@ def _query_prediction_summary() -> dict[str, Any]:
                 )
             ).mappings().all()
 
-            by_weather = conn.execute(
-                text(
-                    """
-                    SELECT
-                        weather_condition,
-                        COUNT(*)::int AS trips,
-                        ROUND(AVG(actual_fare_usd)::numeric, 2)::double precision AS avg_actual_fare,
-                        ROUND(AVG(abs_error_m3_weather_usd)::numeric, 3)::double precision AS mae_m3_weather,
-                        ROUND(AVG(abs_error_m3_nw_usd)::numeric, 3)::double precision AS mae_m3_no_weather
-                    FROM analytics.vw_fare_prediction_enriched
-                    WHERE split = 'validation'
-                    GROUP BY weather_condition
-                    ORDER BY trips DESC
-                    """
-                )
-            ).mappings().all()
-
             return {
                 "by_hour": [_clean_row(r) for r in by_hour],
                 "by_borough": [_clean_row(r) for r in by_borough],
-                "by_weather": [_clean_row(r) for r in by_weather],
             }
+    finally:
+        eng.dispose()
+
+
+def _query_prediction_summary() -> dict[str, Any]:
+    try:
+        return _cached_prediction_summary()
     except Exception:
-        return {"by_hour": [], "by_borough": [], "by_weather": []}
+        return {"by_hour": [], "by_borough": []}
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -313,11 +308,11 @@ def render_zone_weather_simulator(base_url: str) -> None:
             m1, m2, m3, m4 = st.columns(4)
             m1.metric(
                 "Tổng thanh toán gồm phí TLC" if is_flat_jfk else "Tổng giá cước dự kiến",
-                f"${advice['total_estimated_fare_usd']:.2f} USD",
+                f"{advice['total_estimated_fare_usd']:.2f} USD",
             )
             m2.metric(
                 "Cước cố định JFK (Ratecode 2)" if is_flat_jfk else "Cước đồng hồ ML (M3-w)",
-                f"${res['fare_amount_usd']:.2f} USD",
+                f"{res['fare_amount_usd']:.2f} USD",
             )
             m3.metric("Khoảng cách tâm vùng (Haversine)", f"{res.get('zone_centroid_distance_km', 0.0):.2f} km")
             m4.metric("Biến thể phục vụ", "Ratecode 2 (70 USD)" if is_flat_jfk else "M3-w (Weather)")
@@ -535,9 +530,9 @@ def render_model_evaluation_and_drift() -> None:
             if drift_rows:
                 drift_chart_data = []
                 month_labels = {
-                    "drift_2026-06": "Tháng 06/2026 (249.687 chuyến)",
-                    "drift_2026-07": "Tháng 07/2026 (238.120 chuyến)",
-                    "drift_2026-08": "Tháng 08/2026 (233.706 chuyến)",
+                    "drift_2026-06": "Tháng 06/2026 (268.539 chuyến)",
+                    "drift_2026-07": "Tháng 07/2026 (235.025 chuyến)",
+                    "drift_2026-08": "Tháng 08/2026 (217.949 chuyến)",
                 }
                 for r in drift_rows:
                     is_gbt = r["model_key"] == "M3_nw_gbt_no_weather"
@@ -590,8 +585,8 @@ def render_model_evaluation_and_drift() -> None:
 
         st.info(
             "**Tóm tắt kiến trúc AI Smart Fare Advisor đang vận hành:**\n"
-            "- **Tự động hóa Thời tiết Thực tế (`M3-w` + `M3-nw`):** Hệ thống tự động truy xuất dự báo thời tiết 24h tại New York (Open-Meteo ERA5) "
-            "theo đúng ngày và giờ đón của khách để kích hoạt mô hình `M3-w` mà không bắt người dùng tự nhập thời tiết (**MAE = 2.92 USD/chuyến, R² = 86.9%**).\n"
+            "- **Tự động hóa Thời tiết Thực tế (`M3-w` + `M3-nw`):** Hệ thống đóng gói song song `M3-nw` (**MAE = 2.92 USD/chuyến, R² = 86.85%**) và `M3-w` (**MAE = 2.99 USD/chuyến, R² = 86.52%**), tự động truy xuất dự báo thời tiết 24h tại New York (Open-Meteo ERA5) "
+            "theo đúng ngày và giờ đón của khách mà không bắt người dùng tự nhập thời tiết.\n"
             "- **Tích hợp Phụ phí Chính thức NYC TLC & Gợi ý Giờ đi:** Kết hợp cước đồng hồ ML với bảng kê các khoản phụ phí thực tế phát sinh "
             "(đối soát khớp 100% với `analytics.fact_trip`) và chủ động đề xuất khung giờ lân cận có tổng giá cước thấp hơn."
         )
@@ -662,7 +657,7 @@ def render_pipeline_monitoring(base_url: str) -> None:
             st.warning(
                 "**Bước 2: Tầng Sạch (Silver)**\n\n"
                 "🧹 **Loại bỏ 197.119 dòng lỗi (0.82%)**\n\n"
-                "Lọc chuyến có giá âm, quãng đường <= 0, thời gian lỗi hoặc thiếu vùng đón/trả."
+                "Lọc các chuyến có thời gian lỗi (dropoff <= pickup), thiếu vùng đón/trả hoặc trùng lặp."
             )
         with f3:
             st.success(
@@ -794,7 +789,7 @@ def render_pipeline_monitoring(base_url: str) -> None:
             f"**Hiệu năng Huấn luyện & Phục vụ AI:**\n"
             f"- **Huấn luyện Spark ML:** Trích xuất mẫu phân tầng từ 23,88 triệu dòng mất **28.3 giây**; huấn luyện cả 5 mô hình mất **100.2 giây**.\n"
             f"- **Tài nguyên Container hiện tại:** Máy chủ suy luận `fare-inference` dùng **{inf_mem or 'N/A'} / {inf_lim or 3072} MB RAM** "
-            f"(đóng băng mô hình `fit_calls = {m5_srv.get('fit_calls', 0)}`, khởi động **{m5_srv.get('startup_seconds', 38.0):.1f}s**); "
+            f"(đóng băng mô hình `fit_calls = {m5_srv.get('fit_calls', 0)}`, khởi động **{float(m5_srv.get('startup_seconds') or 38.0):.1f}s**); "
             f"Giao diện `dashboard` dùng **{dash_mem or 'N/A'} / {dash_lim or 1024} MB RAM**."
         )
 

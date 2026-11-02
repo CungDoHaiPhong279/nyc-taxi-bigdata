@@ -94,7 +94,7 @@
 
 | Thứ tự | Mã Mô hình | Tên Mô hình & Cấu hình | Dùng Thời tiết ERA5 | MAE (USD) ↓ | RMSE (USD) ↓ | Độ chính xác R² ↑ | Sai số Trung vị P50 (USD) ↓ |
 | :---: | :--- | :--- | :--- | :---: | ---: | ---: | ---: | ---: |
-| 1 | `B0_global_median` | Trung vị toàn cục (Mốc cơ sở đơn giản) | Không | `7,90 USD` | `11,76 USD` | `11,76%` | `5,60 USD` |
+| 1 | `B0_global_median` | Trung vị toàn cục (Mốc cơ sở đơn giản) | Không | `7,90 USD` | `13,33 USD` | `-13,22%` | `4,20 USD` |
 | 2 | `B0_route_hour_median` | Thống kê theo Tuyến & Giờ (Baseline B0) | Không | `3,35 USD` | `6,51 USD` | `72,94%` | `2,10 USD` |
 | 3 | `M1_linear_regression` | Hồi quy Tuyến tính (`LinearRegression` — ElasticNet) | Có | `3,21 USD` | `4,81 USD` | `85,21%` | `2,33 USD` |
 | 4 | `M2_random_forest` | Rừng Ngẫu nhiên (`RandomForestRegressor` — 80 cây) | Có | `3,12 USD` | `4,67 USD` | `86,09%` | `2,24 USD` |
@@ -105,10 +105,10 @@
 
 | Giai đoạn Kiểm chứng Năm 2026 | Số lượng Chuyến | MAE — Thống kê B0 (USD) | MAE — Mô hình AI Gold V3 (USD) | RMSE — Gold V3 (USD) | Độ chính xác R² — Gold V3 | P50 — Gold V3 (USD) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| **Tháng 06/2026** (`drift_2026-06`) | `249.687` | `3,71 USD` | **`3,28 USD`** | `5,83 USD` | `79,37%` | `2,20 USD` |
-| **Tháng 07/2026** (`drift_2026-07`) | `238.120` | `3,48 USD` | **`3,02 USD`** | `5,45 USD` | `82,53%` | `2,07 USD` |
-| **Tháng 08/2026** (`drift_2026-08`) | `233.706` | `3,38 USD` | **`2,90 USD`** | `4,78 USD` | **`87,10%`** | **`2,02 USD`** |
-| **Tổng hợp 3 tháng Năm 2026** | **`721.513`** | `3,53 USD` | **`3,08 USD`** | `5,39 USD` | **`82,97%`** | **`2,10 USD`** |
+| **Tháng 06/2026** (`drift_2026-06`) | `268.539` | `3,97 USD` | **`3,28 USD`** | `6,31 USD` | `78,69%` | `2,16 USD` |
+| **Tháng 07/2026** (`drift_2026-07`) | `235.025` | `3,48 USD` | **`3,02 USD`** | `4,78 USD` | `84,97%` | `2,10 USD` |
+| **Tháng 08/2026** (`drift_2026-08`) | `217.949` | `3,36 USD` | **`2,90 USD`** | `4,52 USD` | **`87,10%`** | **`2,04 USD`** |
+| **Tổng hợp 3 tháng Năm 2026** | **`721.513`** | `3,62 USD` | **`3,08 USD`** | `5,33 USD` | **`82,97%`** | **`2,11 USD`** |
 
 ---
 

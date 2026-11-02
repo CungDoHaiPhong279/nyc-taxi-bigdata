@@ -344,8 +344,8 @@ def compute_active_tlc_surcharges(
     *,
     pickup_location_id: int,
     dropoff_location_id: int,
-    pickup_borough: str,
-    dropoff_borough: str,
+    pickup_borough: str = "",
+    dropoff_borough: str = "",
     pickup_dt: datetime,
     flat_fare_applied: bool = False,
     include_cbd_fee: bool = True,
@@ -819,27 +819,42 @@ def parse_natural_language_booking(
     # 1. Extract all location matches ordered by their first character position in the sentence
     matched_locs: list[tuple[int, dict[str, Any], str | None]] = []
     used_ids: set[str] = set()
+    used_spans: list[tuple[int, int]] = []
+
+    def _find_non_overlapping_span(phrase: str) -> tuple[int, int] | None:
+        for m in re.finditer(rf"\b{re.escape(phrase)}\b", clean):
+            s, e = m.start(), m.end()
+            if all(e <= us or s >= ue for us, ue in used_spans):
+                return s, e
+        return None
 
     for aliases, preset in _LOCATION_ALIASES:
-        best_pos = None
-        for alias in aliases:
-            pos = clean.find(alias)
-            if pos != -1 and (best_pos is None or pos < best_pos):
-                best_pos = pos
-        if best_pos is not None and preset["id"] not in used_ids:
+        best_span: tuple[int, int] | None = None
+        for alias in sorted(aliases, key=len, reverse=True):
+            span = _find_non_overlapping_span(alias)
+            if span is not None and (best_span is None or span[0] < best_span[0]):
+                best_span = span
+        if best_span is not None and preset["id"] not in used_ids:
             used_ids.add(preset["id"])
-            role = _detect_location_role(clean, best_pos)
-            matched_locs.append((best_pos, dict(preset), role))
+            used_spans.append(best_span)
+            role = _detect_location_role(clean, best_span[0])
+            matched_locs.append((best_span[0], dict(preset), role))
 
     # Also match against the 263 TLC zones if fewer than 2 hubs matched
     if len(matched_locs) < 2 and zones:
         centroids = load_zone_centroids()
-        for z in zones:
-            z_name_clean = _strip_accents(str(z.get("zone", "")))
+        sorted_zones = sorted(
+            zones,
+            key=lambda z_item: len(_strip_accents(str(z_item.get("zone", "")))),
+            reverse=True,
+        )
+        for z in sorted_zones:
+            z_name_clean = _strip_accents(str(z.get("zone", ""))).strip()
             if len(z_name_clean) < 4:
                 continue
-            pos = clean.find(z_name_clean)
-            if pos != -1:
+            span = _find_non_overlapping_span(z_name_clean)
+            if span is not None:
+                pos = span[0]
                 lid = int(z["location_id"])
                 try:
                     # ZoneCentroidLookup stores WGS84 (longitude, latitude) tuples.
@@ -849,6 +864,7 @@ def parse_natural_language_booking(
                 key_id = f"zone_{lid}"
                 if key_id not in used_ids:
                     used_ids.add(key_id)
+                    used_spans.append(span)
                     role = _detect_location_role(clean, pos)
                     matched_locs.append(
                         (
@@ -906,13 +922,13 @@ def parse_natural_language_booking(
 
     # Match explicit time patterns: "18h30", "6h", "6:30", "17 giờ 15", "7h rưỡi", "6pm", "6:30 pm", "7 am"
     time_match = re.search(
-        r"\b(\d{1,2})\s*(?:(?:h|gio|:)\s*(\d{1,2}|ruoi)?|(am|pm))\b",
+        r"\b(\d{1,2})\s*(?:(?:h|gio|:)\s*(\d{1,2}|ruoi)?\s*(sang|trua|chieu|toi|dem|khuya|am|pm)?|(am|pm))\b",
         clean,
     )
     if time_match:
         h_val = int(time_match.group(1))
         min_token = time_match.group(2)
-        ampm_token = time_match.group(3)
+        period_token = time_match.group(3) or time_match.group(4) or ""
         if min_token == "ruoi" or "ruoi" in clean[time_match.start() : min(len(clean), time_match.end() + 8)]:
             m_val = 30
         elif min_token and min_token.isdigit():
@@ -920,8 +936,14 @@ def parse_natural_language_booking(
         else:
             m_val = 0
 
-        is_pm = ampm_token == "pm" or any(pm_w in clean for pm_w in ("chieu", "toi", "pm"))
-        is_am = ampm_token == "am" or any(am_w in clean for am_w in ("dem", "khuya", "am"))
+        if not period_token:
+            after_time = clean[time_match.end() : min(len(clean), time_match.end() + 14)]
+            m_period = re.match(r"^\s*(?:ruoi\s*)?(sang|trua|chieu|toi|dem|khuya|am|pm)\b", after_time)
+            if m_period:
+                period_token = m_period.group(1)
+
+        is_pm = period_token in ("pm", "chieu", "toi") or (period_token == "trua" and 1 <= h_val <= 4)
+        is_am = period_token in ("am", "sang", "dem", "khuya")
         if h_val < 12 and is_pm:
             h_val += 12
         elif h_val == 12 and is_am:
