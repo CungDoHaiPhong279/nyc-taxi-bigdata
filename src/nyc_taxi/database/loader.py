@@ -98,6 +98,32 @@ def serialize_copy_row(values: Sequence[object]) -> str:
     return "\t".join(fields) + "\n"
 
 
+def write_gold_batch_tsv(batch: Any, column_names: Sequence[str]) -> bytes:
+    """Vectorized Arrow RecordBatch-to-PostgreSQL COPY TEXT (TSV) serializer."""
+    import pyarrow as pa
+    import pyarrow.compute as pc
+    import pyarrow.csv as pacsv
+
+    arrays: list[pa.Array] = []
+    for col in column_names:
+        arr = batch.column(col)
+        if pa.types.is_boolean(arr.type):
+            arr = pc.if_else(arr, pa.scalar("t"), pa.scalar("f"))
+        else:
+            arr = pc.cast(arr, pa.string())
+        arr = pc.coalesce(arr, pa.scalar(r"\N"))
+        arrays.append(arr)
+    projected = pa.Table.from_arrays(arrays, names=list(column_names))
+    sink = pa.BufferOutputStream()
+    options = pacsv.WriteOptions(
+        include_header=False,
+        delimiter="\t",
+        quoting_style="none",
+    )
+    pacsv.write_csv(projected, sink, write_options=options)
+    return sink.getvalue().to_pybytes()
+
+
 def iter_parquet_rows(
     path: str | Path, columns: Sequence[str], batch_size: int = 10_000,
 ) -> Iterator[dict[str, Any]]:

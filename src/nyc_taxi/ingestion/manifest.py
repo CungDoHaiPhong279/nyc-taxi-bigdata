@@ -82,7 +82,7 @@ def save_manifest(path: str | Path, entries: list[dict[str, Any]]) -> None:
     temporary_path = Path(temp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as output:
-            json.dump(payload, output, indent=2, ensure_ascii=False)
+            json.dump(payload, output, indent=2, ensure_ascii=False, allow_nan=False)
             output.write("\n")
         os.replace(temporary_path, destination)
     finally:

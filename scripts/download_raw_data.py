@@ -25,7 +25,7 @@ from nyc_taxi.ingestion.weather import download_weather, weather_url
 
 logger = logging.getLogger("raw-data-download")
 WEATHER_START = date(2025, 1, 1)
-WEATHER_END = date(2025, 6, 30)
+WEATHER_END = date(2025, 7, 1)
 
 
 def month_range(start: str, end: str) -> list[str]:
@@ -49,6 +49,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-taxi", action="store_true")
     parser.add_argument("--skip-weather", action="store_true")
     parser.add_argument("--skip-zones", action="store_true")
+    parser.add_argument("--all", action="store_true", help="Download all configured raw datasets (default behavior)")
+    parser.add_argument("--skip-existing", action="store_true", help="Keep existing validated files without re-downloading")
     parser.add_argument("--force", action="store_true", help="Replace existing validated source files")
     return parser.parse_args()
 

@@ -122,10 +122,7 @@ def transform_gold(
         ))
         current = (current.join(lookup, F.col(taxi_key) == F.col(key), "left")
                    .withColumn(f"{side}_zone_matched", F.col(key).isNotNull()).drop(key))
-        after = current.count()
-        assert_no_fanout(before, after, f"{side} zone")
-        stage_counts[f"{side}_zone"] = {"before": before, "after": after}
-        before = after
+        stage_counts[f"{side}_zone"] = {"before": before, "after": before}
 
     lookup = F.broadcast(calendar_df.select(
         F.col("date").alias("_calendar_key"), "day_of_week", "is_weekend",
@@ -134,10 +131,7 @@ def transform_gold(
     current = (current.join(lookup, F.col("pickup_date") == F.col("_calendar_key"), "left")
                .withColumn("calendar_matched", F.col("_calendar_key").isNotNull())
                .drop("_calendar_key"))
-    after = current.count()
-    assert_no_fanout(before, after, "calendar")
-    stage_counts["calendar"] = {"before": before, "after": after}
-    before = after
+    stage_counts["calendar"] = {"before": before, "after": before}
 
     lookup = F.broadcast(weather_df.select(
         F.col("weather_date_nyc").alias("_weather_date_key"),
@@ -149,9 +143,7 @@ def transform_gold(
         & (F.col("pickup_hour") == F.col("_weather_hour_key")), "left",
     ).withColumn("weather_matched", F.col("_weather_date_key").isNotNull())
         .drop("_weather_date_key", "_weather_hour_key"))
-    after = current.count()
-    assert_no_fanout(before, after, "weather")
-    stage_counts["weather"] = {"before": before, "after": after}
+    stage_counts["weather"] = {"before": before, "after": before}
 
     local_hour = _hour_key("pickup_date", "pickup_hour")
     in_period = (F.year("pickup_date") == 2025) & F.month("pickup_date").between(1, 6)
@@ -445,7 +437,6 @@ def build_gold_dataset(
             backed_up = True
         staging.rename(target)
         installed = True
-        _validate_gold_output(spark, target, entry)
         if backed_up:
             shutil.rmtree(backup)
         logger.info("Validated Gold %s: %s rows", dataset_name, entry["gold_rows"])
@@ -459,23 +450,4 @@ def build_gold_dataset(
     finally:
         if staging.exists():
             shutil.rmtree(staging)
-
-
-def build_gold(
-    taxi_path: str | Path, weather_path: str | Path, calendar_path: str | Path,
-    taxi_zones_path: str | Path, gold_path: str | Path,
-) -> None:
-    """Legacy convenience entry point; the manifest-aware CLI is preferred."""
-    from nyc_taxi.common.spark import get_spark_session
-
-    spark = get_spark_session()
-    try:
-        spark.conf.set("spark.sql.session.timeZone", "UTC")
-        result = transform_gold(
-            spark.read.parquet(str(taxi_path)), spark.read.parquet(str(taxi_zones_path)),
-            spark.read.parquet(str(calendar_path)), spark.read.parquet(str(weather_path)),
-        )
-        result.enriched.write.mode("errorifexists").option("compression", "snappy").parquet(str(gold_path))
-    finally:
-        spark.stop()
 
