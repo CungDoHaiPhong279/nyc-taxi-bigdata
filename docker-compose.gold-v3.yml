@@ -41,3 +41,5 @@ services:
     environment:
       FARE_MODEL_VERSION: gold-v3
       FARE_INFERENCE_URL: http://fare-inference:8000
+      FARE_ADDRESS_ENABLED: "${FARE_ADDRESS_ENABLED:-1}"
+      FARE_ADDRESS_ALLOW_NETWORK: "${FARE_ADDRESS_ALLOW_NETWORK:-1}"

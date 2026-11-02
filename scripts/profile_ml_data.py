@@ -11,7 +11,10 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
-import resource
+try:
+    import resource
+except ModuleNotFoundError:
+    resource = None  # type: ignore[assignment]
 import time
 
 import numpy as np
@@ -30,6 +33,12 @@ STAGES = (
     "standard_rate_1", "distance_at_most_200_miles",
 )
 SPLITS = ("train_Jan_Apr", "validation_May", "test_June")
+
+
+def _max_rss_mb() -> float:
+    if resource is None:
+        return 0.0
+    return round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 2)
 
 
 def new_state():
@@ -213,7 +222,7 @@ def main():
         "method": "One projected Arrow streaming pass, 65536 rows/batch, no pandas; no sampling for counts",
         "columns": COLUMNS, "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
         "seconds": round(time.perf_counter() - started, 3),
-        "peak_rss_mib": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 2),
+        "peak_rss_mib": _max_rss_mb(),
         "total": total, "partitions": parts, "file_inventory": file_inventory,
     }
     print("ML_P1_RESULT " + json.dumps(result, allow_nan=False, sort_keys=True), flush=True)

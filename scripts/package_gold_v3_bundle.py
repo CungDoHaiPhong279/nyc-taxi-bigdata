@@ -9,7 +9,6 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
-import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -50,6 +49,9 @@ def package_gold_v3_bundle(
 
     entries = []
     for fpath in sorted(bundle_dir.rglob("*")):
+        if fpath.is_file() and (fpath.name.endswith(".crc") or fpath.name in ("_SUCCESS", "._SUCCESS")):
+            fpath.unlink()
+            continue
         if fpath.is_file() and fpath.name != "artifact_manifest.json":
             rel = fpath.relative_to(bundle_dir).as_posix()
             entries.append(

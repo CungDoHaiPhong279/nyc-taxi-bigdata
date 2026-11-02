@@ -17,12 +17,3 @@ def download_taxi_zones(raw_dir: str | Path, *, force: bool = False) -> Path:
     destination = Path(raw_dir) / "taxi_zone_lookup.csv"
     return download_file(TAXI_ZONE_URL, destination, validate_taxi_zones, force=force)
 
-
-def ingest_taxi_zones(input_path: str | Path, bronze_path: str | Path) -> None:
-    """Validate a taxi-zone lookup file before future ingestion."""
-    source = Path(input_path)
-    if not source.is_file():
-        raise FileNotFoundError(f"Taxi-zone lookup file does not exist: {source}")
-    logger.info("Validated taxi-zone input %s; target is %s", source, bronze_path)
-    raise NotImplementedError("Taxi-zone ingestion is planned for the next ETL step")
-

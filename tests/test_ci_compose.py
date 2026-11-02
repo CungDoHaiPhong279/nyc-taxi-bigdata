@@ -79,7 +79,7 @@ def test_validates_twenty_four_combinations_without_reading_secrets(project, mon
     monkeypatch.setattr(ci.subprocess, "run", run)
 
     assert ci.main(["--project-root", str(project)]) == 0
-    assert len(calls) == 25  # version + twenty-four quiet validations
+    assert len(calls) == 27  # version + twenty-six quiet validations
     expected_variants = (
         ("docker-compose.yml",),
         ("docker-compose.yml", "docker-compose.bootstrap-test.yml"),
@@ -93,6 +93,7 @@ def test_validates_twenty_four_combinations_without_reading_secrets(project, mon
         ("docker-compose.yml", "docker-compose.inference.yml", "docker-compose.pretrip-v22.yml"),
         ("docker-compose.pretrip-app.yml",),
         ("docker-compose.pretrip-app.yml",),
+        ("docker-compose.yml", "docker-compose.inference.yml", "docker-compose.gold-v3.yml"),
     )
     for index, (command, directory) in enumerate(calls[1:]):
         assert command[:2] == ["docker", "compose"]
@@ -113,7 +114,7 @@ def test_validates_twenty_four_combinations_without_reading_secrets(project, mon
             assert command[command.index("--profile") + 1] == "*"
     assert all(not directory.exists() for _, directory in calls)
     output = capsys.readouterr()
-    assert "24 checks" in output.out
+    assert "26 checks" in output.out
     assert "sentinel" not in output.out + output.err
 
 

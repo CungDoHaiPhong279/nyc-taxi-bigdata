@@ -22,7 +22,7 @@ database:
   port: 5432
   name: nyc_taxi
   user: nyc_taxi
-  password: change_me
+  password: ""
   schema: analytics
 
 mlflow:

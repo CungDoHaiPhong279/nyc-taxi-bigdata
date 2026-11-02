@@ -49,12 +49,3 @@ def download_weather(
         force=force,
     )
 
-
-def ingest_weather(input_path: str | Path, bronze_path: str | Path) -> None:
-    """Validate a weather source path before future ingestion."""
-    source = Path(input_path)
-    if not source.exists():
-        raise FileNotFoundError(f"Weather input path does not exist: {source}")
-    logger.info("Validated weather input path %s; target is %s", source, bronze_path)
-    raise NotImplementedError("Weather ingestion is planned for the next ETL step")
-

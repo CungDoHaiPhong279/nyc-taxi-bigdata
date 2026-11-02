@@ -1,7 +1,7 @@
 # Optional inference startup helpers; dot-sourcing performs no checks or actions.
 
 function Enable-InferenceStartupContext {
-    param($Context, [ValidateSet('v1', 'v2.2')][string]$ModelVersion = 'v1')
+    param($Context, [ValidateSet('v1', 'v2.2', 'gold-v3')][string]$ModelVersion = 'v1')
     if ($Context.Environment -ne 'current') { Stop-Startup '-WithInference is available only for the current environment, never bootstrap-test.' }
     $override = Join-Path $Context.Root 'docker-compose.inference.yml'
     if (-not (Test-Path -LiteralPath $override -PathType Leaf)) { Stop-Startup 'docker-compose.inference.yml is missing; inference startup is unavailable.' }
@@ -10,6 +10,10 @@ function Enable-InferenceStartupContext {
         $v22Override = Join-Path $Context.Root 'docker-compose.pretrip-v22.yml'
         if (-not (Test-Path -LiteralPath $v22Override -PathType Leaf)) { Stop-Startup 'The explicit V2.2 Compose override is missing.' }
         $Context.ComposeArguments += @('--file', $v22Override)
+    } elseif ($ModelVersion -eq 'gold-v3') {
+        $v3Override = Join-Path $Context.Root 'docker-compose.gold-v3.yml'
+        if (-not (Test-Path -LiteralPath $v3Override -PathType Leaf)) { Stop-Startup 'The explicit Gold V3 Compose override is missing.' }
+        $Context.ComposeArguments += @('--file', $v3Override)
     }
     $Context | Add-Member -MemberType NoteProperty -Name ModelVersion -Value $ModelVersion -Force
     $Context.ExpectedProject = 'nyc-taxi-bigdata'

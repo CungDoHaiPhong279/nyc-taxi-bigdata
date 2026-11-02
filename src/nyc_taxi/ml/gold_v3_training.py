@@ -12,30 +12,17 @@ from __future__ import annotations
 
 from collections import defaultdict
 import csv
-from datetime import datetime, timezone
-import hashlib
-import json
 import math
 from pathlib import Path
 import statistics
-import time
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import numpy as np
-import pyarrow as pa
-import pyarrow.parquet as pq
 
 from nyc_taxi.ml.gold_v3_data import (
-    BASE_NUMERIC_FEATURES,
-    BASE_ONLY_FEATURE_COLUMNS,
     CATEGORICAL_FEATURE_COLUMNS,
-    CONTRACT_VERSION,
     DEFAULT_ZONES_CSV,
-    FEATURE_COLUMNS,
     NUMERIC_FEATURE_COLUMNS,
-    ROOT,
-    SPLITS,
-    WEATHER_NUMERIC_FEATURES,
 )
 from nyc_taxi.ml.pretrip_training_model import metrics as compute_regression_metrics
 

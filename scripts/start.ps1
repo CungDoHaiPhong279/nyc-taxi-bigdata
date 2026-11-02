@@ -7,7 +7,7 @@ and explicit image/config updates are separate operations. No host Python needed
 param(
     [switch]$Build,
     [switch]$WithInference,
-    [ValidateSet('v1', 'v2.2')][string]$ModelVersion = 'v1',
+    [ValidateSet('v1', 'v2.2', 'gold-v3')][string]$ModelVersion = 'v1',
     [ValidateSet('current', 'bootstrap-test', 'package-test')][string]$Environment = 'current',
     [ValidateRange(1, 1800)][int]$HealthTimeoutSeconds = 120,
     [ValidateRange(1, 300)][int]$CommandTimeoutSeconds = 30,
@@ -216,7 +216,7 @@ function Invoke-ProjectStart {
         [string]$ProjectRoot = $script:StartupProjectRoot,
         [switch]$Build,
         [switch]$WithInference,
-        [ValidateSet('v1', 'v2.2')][string]$ModelVersion = 'v1',
+        [ValidateSet('v1', 'v2.2', 'gold-v3')][string]$ModelVersion = 'v1',
         [ValidateSet('current', 'bootstrap-test', 'package-test')][string]$Environment = 'current',
         [int]$HealthTimeoutSeconds = 120,
         [int]$CommandTimeoutSeconds = 30,

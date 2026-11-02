@@ -28,6 +28,7 @@ COMPOSE_FILES = (
     "docker-compose.package-test.yml",
     "docker-compose.pretrip-v22.yml",
     "docker-compose.pretrip-app.yml",
+    "docker-compose.gold-v3.yml",
 )
 COMPOSE_VARIANTS = (
     ("base", COMPOSE_FILES[:1]),
@@ -43,6 +44,7 @@ COMPOSE_VARIANTS = (
     ("pretrip-v22", (COMPOSE_FILES[0], COMPOSE_FILES[6], COMPOSE_FILES[9])),
     ("pretrip-app", (COMPOSE_FILES[10],)),
     ("pretrip-app-test", (COMPOSE_FILES[10],)),
+    ("gold-v3", (COMPOSE_FILES[0], COMPOSE_FILES[6], COMPOSE_FILES[11])),
 )
 MIN_COMPOSE_VERSION = (2, 24, 4)
 COMMAND_TIMEOUT_SECONDS = 60

@@ -26,12 +26,3 @@ def download_taxi_month(month: str, raw_dir: str | Path, *, force: bool = False)
     destination = Path(raw_dir) / f"yellow_tripdata_{month}.parquet"
     return download_file(url, destination, validate_taxi_parquet, force=force)
 
-
-def ingest_taxi(input_path: str | Path, bronze_path: str | Path) -> None:
-    """Validate a taxi source path before the future raw-to-bronze ingestion."""
-    source = Path(input_path)
-    if not source.exists():
-        raise FileNotFoundError(f"Taxi input path does not exist: {source}")
-    logger.info("Validated taxi input path %s; target is %s", source, bronze_path)
-    raise NotImplementedError("Taxi ingestion is planned for the next ETL step")
-

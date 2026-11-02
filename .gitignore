@@ -15,6 +15,12 @@ htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/
+*.crc
+._*
+_SUCCESS
+spark-warehouse/
+metastore_db/
+derby.log
 
 # Large or generated data (keep directory placeholders)
 data/raw/**
