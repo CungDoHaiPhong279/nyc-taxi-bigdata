@@ -53,6 +53,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Execute preparation instead of printing the plan",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Safely replace an existing non-empty output directory via atomic staging",
+    )
     args = parser.parse_args(argv)
 
     contract = load_gold_v3_contract()
@@ -67,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
             "min_train_zone_support": args.min_train_zone_support,
             "caps": dict(DEFAULT_CAPS),
             "output_dir": str(args.output_dir),
+            "overwrite": bool(args.overwrite),
             "months_discovered": {k: len(v) for k, v in files_by_month.items()},
         }
         print(json.dumps(plan, indent=2))
@@ -79,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         sampling_fraction=args.sampling_fraction,
         min_train_zone_support=args.min_train_zone_support,
         seed=int(contract["cohort_policy"]["seed"]),
+        overwrite=bool(args.overwrite),
     )
     summary = {
         "status": report["status"],

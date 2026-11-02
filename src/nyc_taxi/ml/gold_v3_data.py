@@ -244,10 +244,12 @@ def prepare_gold_v3_samples(
     caps: Mapping[str, int] = DEFAULT_CAPS,
     fare_max_inclusive: float = 500.0,
     batch_size: int = 262_144,
+    overwrite: bool = False,
 ) -> dict[str, Any]:
     """Execute Gold 2025 V3 sample preparation and write Parquet splits + report."""
+    import shutil
     started = time.monotonic()
-    contract = load_gold_v3_contract()
+    load_gold_v3_contract()
     calendar = load_calendar()
     centroids = load_zone_centroids()
     manhattan_ids = load_manhattan_zone_ids()
@@ -255,8 +257,13 @@ def prepare_gold_v3_samples(
     if files_by_month is None:
         files_by_month = discover_gold_2025_files(gold_root)
 
+    final_output_dir = output_dir
     if output_dir.exists() and any(output_dir.iterdir()):
-        raise FileExistsError(f"Output directory must be empty or new: {output_dir}")
+        if not overwrite:
+            raise FileExistsError(f"Output directory must be empty or new: {output_dir}")
+        output_dir = output_dir.with_name(output_dir.name + ".staging")
+        if output_dir.exists():
+            shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     holiday_ordinals = np.array(
@@ -827,4 +834,8 @@ def prepare_gold_v3_samples(
 
     report_path = output_dir / "preparation_report.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if output_dir != final_output_dir:
+        if final_output_dir.exists():
+            shutil.rmtree(final_output_dir)
+        output_dir.rename(final_output_dir)
     return report

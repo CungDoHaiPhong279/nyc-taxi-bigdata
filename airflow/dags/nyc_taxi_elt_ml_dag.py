@@ -8,6 +8,7 @@ Raw Ingestion -> Bronze (Parquet) -> Silver (Cleaned & Validated) -> Gold (Enric
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import os
 
 try:
     from airflow import DAG
@@ -34,6 +35,9 @@ def build_dag():
     if DAG is None or BashOperator is None:
         return None
 
+    app_dir = os.environ.get("NYC_TAXI_APP_DIR", "/app")
+    mlflow_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+
     with DAG(
         dag_id=DAG_ID,
         default_args=DEFAULT_ARGS,
@@ -46,42 +50,42 @@ def build_dag():
     ) as dag:
         acquire_raw = BashOperator(
             task_id="acquire_raw_data",
-            bash_command="python /app/scripts/download_raw_data.py --config /app/config/config.yaml",
+            bash_command=f"python {app_dir}/scripts/download_raw_data.py --all --skip-existing",
         )
 
         build_bronze = BashOperator(
             task_id="build_bronze_layer",
-            bash_command="python /app/scripts/build_bronze.py --config /app/config/config.yaml",
+            bash_command=f"python {app_dir}/scripts/build_bronze.py --all",
         )
 
         build_silver = BashOperator(
             task_id="build_silver_layer",
-            bash_command="python /app/scripts/build_silver.py --config /app/config/config.yaml",
+            bash_command=f"python {app_dir}/scripts/build_silver.py --all",
         )
 
         build_gold = BashOperator(
             task_id="build_gold_layer",
-            bash_command="python /app/scripts/build_gold.py --config /app/config/config.yaml",
+            bash_command=f"python {app_dir}/scripts/build_gold.py --all",
         )
 
         load_postgres_mart = BashOperator(
             task_id="load_postgres_serving_mart",
-            bash_command="python /app/scripts/load_postgres.py --all --create-indexes --validate",
+            bash_command=f"python {app_dir}/scripts/load_postgres.py --all --create-indexes --validate",
         )
 
         prepare_ml_gold_v3 = BashOperator(
             task_id="prepare_gold_v3_ml_splits",
-            bash_command="python /app/scripts/prepare_gold_v3.py --execute",
+            bash_command=f"python {app_dir}/scripts/prepare_gold_v3.py --execute --overwrite",
         )
 
         train_ml_gold_v3 = BashOperator(
-            task_id="train_spark_ml_gold_v3",
-            bash_command="python /app/scripts/train_gold_v3.py --tracking-uri http://mlflow:5000",
+            task_id="train_spark_ml_v3",
+            bash_command=f"python {app_dir}/scripts/train_gold_v3.py --tracking-uri {mlflow_uri}",
         )
 
         write_postgres_predictions = BashOperator(
             task_id="write_gold_v3_predictions_to_postgres",
-            bash_command="python /app/scripts/write_gold_v3_predictions.py",
+            bash_command=f"python {app_dir}/scripts/write_gold_v3_predictions.py",
         )
 
         (

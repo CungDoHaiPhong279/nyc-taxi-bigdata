@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
-import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -24,12 +23,10 @@ if str(PROJECT_ROOT / "src") not in sys.path:
 
 from nyc_taxi.ml.gold_v3_data import (
     BASE_NUMERIC_FEATURES,
-    CATEGORICAL_FEATURE_COLUMNS,
     CONTRACT_VERSION,
     FEATURE_COLUMNS,
     NUMERIC_FEATURE_COLUMNS,
     SPLITS,
-    WEATHER_NUMERIC_FEATURES,
     load_gold_v3_contract,
 )
 from nyc_taxi.ml.gold_v3_training import (
@@ -86,7 +83,7 @@ def _spark_join_split(spark, data_dir: Path, split_name: str):
 
 
 def _extract_ordered_predictions(model, df) -> list[float]:
-    rows = model.transform(df).select("row_id", "prediction").orderBy("row_id").collect()
+    rows = model.transform(df).select("row_id", "prediction").collect()
     return [float(r["prediction"]) for r in rows]
 
 
@@ -160,10 +157,11 @@ def _log_mlflow_runs(
 
 def run_training(args: argparse.Namespace) -> dict[str, Any]:
     started = time.monotonic()
-    contract = load_gold_v3_contract()
+    load_gold_v3_contract()
     borough_lookup = load_borough_lookup()
     data_dir = args.data_dir.resolve()
-    models_dir = args.models_dir.resolve()
+    final_models_dir = args.models_dir.resolve()
+    models_dir = final_models_dir.with_name(final_models_dir.name + ".staging")
     preds_dir = data_dir / "predictions"
 
     if models_dir.exists():
@@ -297,6 +295,13 @@ def run_training(args: argparse.Namespace) -> dict[str, Any]:
         (models_dir / "parity_reference.json").write_text(
             json.dumps(parity_reference, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+
+        for _df in spark_dfs.values():
+            try:
+                _df.unpersist()
+            except Exception:
+                pass
+        spark_dfs.clear()
 
         # Stage G2.5: Out-of-time 2026 Drift Check on .sandbox/pretrip-v2/pilot-2026-06-08-v23-01
         drift_2026: dict[str, Any] = {"status": "SKIPPED"}
@@ -473,6 +478,12 @@ def run_training(args: argparse.Namespace) -> dict[str, Any]:
     report_path = models_dir / "training_report.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+    if final_models_dir.exists():
+        shutil.rmtree(final_models_dir)
+    models_dir.rename(final_models_dir)
+    models_dir = final_models_dir
+    report_path = models_dir / "training_report.json"
+
     if args.tracking_uri:
         print(f"[G2] Logging 5 model runs to MLflow ({args.tracking_uri})...", flush=True)
         mlflow_info = _log_mlflow_runs(
@@ -508,7 +519,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--scratch-dir",
         type=Path,
-        default=Path("/tmp/gold-v3-spark"),
+        default=Path(__import__("tempfile").gettempdir()) / "gold-v3-spark",
     )
     parser.add_argument(
         "--tracking-uri",

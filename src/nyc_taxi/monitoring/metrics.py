@@ -11,15 +11,18 @@ Collects the 5 core operational metrics required by the course Big Data Pipeline
 from __future__ import annotations
 
 import json
+import logging
+import os
 from pathlib import Path
 from typing import Any
-import urllib.error
 import urllib.request
 
 from sqlalchemy import text
 
 from nyc_taxi.common.config import PROJECT_ROOT
 from nyc_taxi.database.postgres import get_engine
+
+logger = logging.getLogger(__name__)
 
 
 def _read_cgroup_memory() -> dict[str, Any]:
@@ -150,7 +153,11 @@ def fetch_quality_and_reject_metrics(
     total_rejected_rows = 0
 
     if silver_path.exists():
-        silver_doc = json.loads(silver_path.read_text(encoding="utf-8"))
+        try:
+            silver_doc = json.loads(silver_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            logger.warning("Failed to parse silver manifest at %s", silver_path, exc_info=True)
+            silver_doc = {}
         for entry in silver_doc.get("datasets", []):
             ds = str(entry.get("dataset", ""))
             ds_name = str(entry.get("dataset_name", ""))
@@ -174,7 +181,11 @@ def fetch_quality_and_reject_metrics(
 
     ml_quality: dict[str, Any] = {}
     if prep_path.exists():
-        prep_doc = json.loads(prep_path.read_text(encoding="utf-8"))
+        try:
+            prep_doc = json.loads(prep_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            logger.warning("Failed to parse ML prep report at %s", prep_path, exc_info=True)
+            prep_doc = {}
         counts = prep_doc.get("counts", {})
         cov = prep_doc.get("zone_coverage", {})
         ml_quality = {
@@ -229,11 +240,11 @@ def fetch_quality_and_reject_metrics(
 def fetch_model_and_serving_metrics(
     engine: Any = None,
     inference_url: str | None = None,
-    inference_base_url: str = "http://fare-inference:8000",
+    inference_base_url: str | None = None,
 ) -> dict[str, Any]:
     """Query `analytics.model_metrics` and ping `/ready` on the inference server for Metric 5."""
     eng = engine or get_engine()
-    target_url = inference_url or inference_base_url
+    target_url = inference_url or inference_base_url or os.environ.get("FARE_INFERENCE_URL", "http://fare-inference:8000")
     model_rows: list[dict[str, Any]] = []
     try:
         with eng.connect() as conn:
