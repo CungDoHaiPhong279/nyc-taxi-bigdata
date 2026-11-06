@@ -1,5 +1,7 @@
 # Checklist bàn giao — ML P6
 
+Trạng thái mô hình hiện hành (Gold V3) xem README và `FINAL_REPORT_OUTLINE.md`.
+
 Các mục ML P6 là mốc lịch sử; cập nhật PACKAGE P1/P2/P3 ở cuối file thay thế
 trạng thái package tương ứng và phân biệt initial setup với rerun E2E.
 

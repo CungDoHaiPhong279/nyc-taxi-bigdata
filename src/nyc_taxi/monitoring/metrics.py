@@ -192,11 +192,11 @@ def fetch_quality_and_reject_metrics(
             "gold_input_rows": counts.get("input_rows", 0),
             "eligible_standard_metered": counts.get("eligible_by_split", {}),
             "selected_sample_rows": counts.get("selected_rows", {}),
-            "train_active_pickup_zones": cov.get("train_active_pickup_zones", 258),
-            "train_active_dropoff_zones": cov.get("train_active_dropoff_zones", 259),
+            "train_active_pickup_zones": cov.get("train", {}).get("sample_unique_pickup_zones"),
+            "train_active_dropoff_zones": cov.get("train", {}).get("sample_unique_dropoff_zones"),
             "jfk_flat_fare_trips": counts.get("jfk_manhattan_ratecode2", {}).get("trip_count", 0),
             "rejected_by_reason": counts.get("rejected", {}),
-            "preparation_elapsed_seconds": prep_doc.get("elapsed_seconds", 28.27),
+            "preparation_elapsed_seconds": prep_doc.get("elapsed_seconds"),
         }
     elif fallback_doc.get("ml_gold_v3_cohort"):
         mc = fallback_doc["ml_gold_v3_cohort"]
@@ -204,23 +204,15 @@ def fetch_quality_and_reject_metrics(
             "gold_input_rows": mc.get("input_rows", 0),
             "eligible_standard_metered": mc.get("eligible_by_split", {}),
             "selected_sample_rows": mc.get("selected_rows", {}),
-            "train_active_pickup_zones": mc.get("train_active_pickup_zones", 258),
-            "train_active_dropoff_zones": mc.get("train_active_dropoff_zones", 259),
+            "train_active_pickup_zones": mc.get("train_active_pickup_zones"),
+            "train_active_dropoff_zones": mc.get("train_active_dropoff_zones"),
             "jfk_flat_fare_trips": mc.get("jfk_manhattan_ratecode2", {}).get("trip_count", 0),
             "rejected_by_reason": mc.get("rejected", {}),
-            "preparation_elapsed_seconds": mc.get("preparation_elapsed_seconds", 28.27),
-            "training_elapsed_seconds": mc.get("training_elapsed_seconds", 100.2),
+            "preparation_elapsed_seconds": mc.get("preparation_elapsed_seconds"),
+            "training_elapsed_seconds": mc.get("training_elapsed_seconds"),
         }
 
-    gold_enrichment = fallback_doc.get(
-        "gold_enrichment",
-        {
-            "gold_rows": 23886265,
-            "weather_matched": 23866019,
-            "weather_unmatched": 20246,
-            "weather_match_rate_pct": 99.92,
-        },
-    )
+    gold_enrichment = fallback_doc.get("gold_enrichment", {})
 
     return {
         "metric_4_quality_and_rejects": {

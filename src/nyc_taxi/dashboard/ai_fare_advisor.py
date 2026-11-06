@@ -6,7 +6,7 @@ Provides:
 2. Official NYC TLC Active Surcharge Engine (only surfaces surcharges that actually apply
    to the specific ride, verified against 23.88M trips in `analytics.fact_trip` & `nyc.gov`).
 3. Mapbox Real Driving Distance Refinement (smoothly adjusts intra-zone & detour routes).
-4. Counterfactual Explainable AI (XAI) & Proactive Nearest-Time-Window Savings Advisor.
+4. Model-based fare breakdown & Nearest-Time-Window Savings Advisor.
 """
 
 from __future__ import annotations
@@ -485,7 +485,7 @@ def build_fare_explanation_and_advice(
     mode: str = "now",
     now_nyc: datetime | None = None,
 ) -> dict[str, Any]:
-    """Build complete Total Fare receipt, Counterfactual XAI breakdown, and Nearest Better Time advice."""
+    """Build complete Total Fare receipt, model-based breakdown, and Nearest Better Time advice."""
     pu_id = int(pickup_zone["location_id"])
     do_id = int(dropoff_zone["location_id"])
     pu_borough = str(pickup_zone.get("borough", ""))
@@ -565,7 +565,7 @@ def build_fare_explanation_and_advice(
                 }
             )
     else:
-        # Fallback curve if predictor mock in unit tests didn't supply hourly_curve
+        # No model curve available: keep the fare flat rather than invent hourly differences.
         for h in range(24):
             dt_h = base_date_naive.replace(hour=h)
             s_h = compute_active_tlc_surcharges(
@@ -577,15 +577,7 @@ def build_fare_explanation_and_advice(
                 flat_fare_applied=flat_fare,
                 calendar=cal,
             )
-            traffic_mod = 0.0
-            if not flat_fare and h != int(pickup_dt.hour):
-                if 16 <= h <= 19:
-                    traffic_mod = 1.6
-                elif 7 <= h <= 9:
-                    traffic_mod = 1.0
-                elif 0 <= h <= 5:
-                    traffic_mod = -1.4
-            metered_h = 70.0 if flat_fare else round(max(3.70, adjusted_metered_usd + traffic_mod), 2)
+            metered_h = 70.0 if flat_fare else round(max(3.70, adjusted_metered_usd), 2)
             total_h = round(metered_h + s_h["total_surcharges_usd"], 2)
             hourly_total_curve.append(
                 {
@@ -697,7 +689,7 @@ def _find_nearest_better_hour(
                 rush_str = "5.00 USD" if flat_fare_applied else "2.50 USD"
                 reasons.append(f"né được Phụ phí Giờ cao điểm ({rush_str})")
             if pt["metered_fare_usd"] < by_hour[current_hour]["metered_fare_usd"] - 0.30:
-                reasons.append("lưu lượng giao thông thông thoáng hơn")
+                reasons.append("mô hình ước tính cước đồng hồ khung giờ này thấp hơn")
             reason_text = " và ".join(reasons) if reasons else "biểu phí khung giờ thấp hơn"
             shift_text = (
                 f"lùi {offset} tiếng" if offset > 0 else f"đi sớm hơn {abs(offset)} tiếng"
@@ -744,7 +736,7 @@ def _find_nearest_better_hour(
 
 
 def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_suggested_hour=None) -> None:
-    """Render the transparent TLC Total Fare breakdown, active surcharges, XAI, and Nearest Better Time advisor."""
+    """Render the transparent TLC Total Fare breakdown, active surcharges, model breakdown, and Nearest Better Time advisor."""
     import streamlit as st
 
     nearest = advice.get("nearest_better_option") or {}
@@ -756,6 +748,10 @@ def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_sugge
                 key="ai_advisor_apply_nearest_hour_btn",
             ):
                 on_apply_suggested_hour(int(nearest["hour"]))
+        st.caption(
+            "Đây là chênh lệch theo ước tính của mô hình (sai số trung bình khoảng 2,92 USD/chuyến đồng hồ chuẩn), "
+            "không bảo đảm giá thực tế."
+        )
     elif nearest.get("message_vi"):
         st.success(nearest["message_vi"])
 
@@ -763,7 +759,7 @@ def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_sugge
         st.markdown("#### 🧾 Bảng kê Chi tiết Giá cước & Phụ phí Chính thức NYC TLC")
         st.caption(
             "Chỉ hiển thị các khoản phụ phí thực tế phát sinh của chuyến xe này theo quy định chính thức của Ủy ban Taxi New York "
-            "([nyc.gov/taxi](https://www.nyc.gov/site/tlc/passengers/taxi-fare.page)) và đối soát trực tiếp với kho dữ liệu `analytics.fact_trip`."
+            "([nyc.gov/taxi](https://www.nyc.gov/site/tlc/passengers/taxi-fare.page)) (đối chiếu 60.000 chuyến 06/2025: khớp đến từng xu 94,1%, sai lệch trung bình 0,11 USD)."
         )
 
         w_info = advice.get("weather_info")
@@ -823,8 +819,8 @@ def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_sugge
             base_off = float(xai.get("base_route_offpeak_usd", advice["metered_fare_usd"]))
             w_sign = f"+{w_delta:.2f}" if w_delta >= 0 else f"-{abs(w_delta):.2f}"
             st.caption(
-                f"🧠 **Giải thích AI (Counterfactual XAI)**: Cước nền lúc đường thông thoáng `{base_off:.2f} USD` "
-                f"· Mật độ giao thông theo khung giờ `+{t_delta:.2f} USD` "
+                f"🧮 **Phân tách theo mô hình**: Cước thấp nhất trong ngày của tuyến `{base_off:.2f} USD` "
+                f"· Chênh lệch theo khung giờ `+{t_delta:.2f} USD` "
                 + (f"· Tác động thời tiết ERA5 `{w_sign} USD` " if advice.get("metered_model_label") == "M3-w" else "")
                 + f"· Tổng phụ phí luật TLC `+{advice['total_surcharges_usd']:.2f} USD`."
             )

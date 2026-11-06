@@ -363,6 +363,12 @@ def test_jfk_flat_fare_without_weather_stays_70():
     assert advice["metered_fare_usd"] == 70.0
 
 
+def test_missing_model_curve_keeps_fare_flat_instead_of_inventing_hourly_differences():
+    prediction = {k: v for k, v in _BASE_PREDICTION.items() if k != "hourly_curve"}
+    curve = _advice_for(prediction)["hourly_total_curve"]
+    assert len({pt["metered_fare_usd"] for pt in curve}) == 1
+
+
 def _gold_v3_app(monkeypatch):
     from streamlit.testing.v1 import AppTest
     from nyc_taxi.dashboard import address_page
