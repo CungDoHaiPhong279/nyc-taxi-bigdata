@@ -1,4 +1,4 @@
-"""AI Smart Fare Advisor for NYC Yellow Taxi Ride Booking.
+"""Fare receipt and departure-time advice for NYC Yellow Taxi trips.
 
 Provides:
 1. Automatic NYC 24-Hour Weather Lookup (Open-Meteo Live Forecast + Historical Archive
@@ -12,8 +12,11 @@ Provides:
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 import json
+import logging
 import math
+import os
 import time as _time
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -21,6 +24,8 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from nyc_taxi.ml.pretrip_v23_features import load_calendar
+
+logger = logging.getLogger(__name__)
 
 
 NYC_TZ = ZoneInfo("America/New_York")
@@ -474,6 +479,53 @@ def compute_active_tlc_surcharges(
     }
 
 
+# A route's hourly difference only counts when it clears 3 standard errors. Backtest on
+# June 2025 from Jan-May history: 88.8% of such suggestions were cheaper, against 79.9%
+# for the served model's own curve (scripts/eval_departure_advice.py).
+HISTORY_MIN_STANDARD_ERRORS = 3.0
+MIN_SAVING_TO_SUGGEST_USD = 0.40
+
+
+def load_route_hour_history(
+    pickup_location_id: int, dropoff_location_id: int, pickup_dt: datetime
+) -> dict[int, dict[str, float]] | None:
+    """Return the route's fare history, or None so advice falls back to surcharges only."""
+    if not os.environ.get("POSTGRES_PASSWORD", "").strip():
+        return None
+    from nyc_taxi.dashboard.queries import DashboardQueryError
+
+    try:
+        return _cached_route_hour_history(
+            int(pickup_location_id), int(dropoff_location_id), pickup_dt.weekday() >= 5
+        )
+    except DashboardQueryError:
+        logger.warning("Route history unavailable; departure advice uses surcharges only", exc_info=True)
+        return None
+
+
+@lru_cache(maxsize=512)
+def _cached_route_hour_history(pickup: int, dropoff: int, is_weekend: bool) -> dict[int, dict[str, float]]:
+    from nyc_taxi.dashboard.queries import fetch_route_hour_history
+
+    return fetch_route_hour_history(pickup, dropoff, is_weekend)
+
+
+def _historical_saving_usd(
+    history: Mapping[int, Mapping[str, float]] | None, from_hour: int, to_hour: int
+) -> float | None:
+    """Mean fare drop from `from_hour` to `to_hour`, or None when history cannot tell them apart."""
+    if not history:
+        return None
+    now, later = history.get(from_hour), history.get(to_hour)
+    if not now or not later:
+        return None
+    diff = now["mean_fare_usd"] - later["mean_fare_usd"]
+    standard_error = math.sqrt(
+        now["fare_variance"] / now["trip_count"] + later["fare_variance"] / later["trip_count"]
+    )
+    return diff if abs(diff) > HISTORY_MIN_STANDARD_ERRORS * standard_error else None
+
+
 def build_fare_explanation_and_advice(
     *,
     prediction: Mapping[str, Any],
@@ -484,6 +536,7 @@ def build_fare_explanation_and_advice(
     weather_info: Mapping[str, Any] | None = None,
     mode: str = "now",
     now_nyc: datetime | None = None,
+    route_hour_history: Mapping[int, Mapping[str, float]] | None = None,
 ) -> dict[str, Any]:
     """Build complete Total Fare receipt, model-based breakdown, and Nearest Better Time advice."""
     pu_id = int(pickup_zone["location_id"])
@@ -593,6 +646,7 @@ def build_fare_explanation_and_advice(
             )
 
     current_hour = int(pickup_dt.hour)
+    is_holiday = pickup_dt.date() in cal.holidays or pickup_dt.date().isoformat() in cal.holidays
     offpeak_metered_min = min(pt["metered_fare_usd"] for pt in hourly_total_curve)
     time_of_day_delta_usd = (
         0.0 if flat_fare else round(max(0.0, adjusted_metered_usd - weather_delta_usd - offpeak_metered_min), 2)
@@ -610,6 +664,8 @@ def build_fare_explanation_and_advice(
         mode=mode,
         pickup_dt=pickup_dt,
         now_nyc=now_nyc,
+        # History excludes holidays, and flat fares do not move with the hour.
+        route_hour_history=None if (flat_fare or is_holiday) else route_hour_history,
     )
 
     return {
@@ -647,8 +703,13 @@ def _find_nearest_better_hour(
     mode: str = "now",
     pickup_dt: datetime | None = None,
     now_nyc: datetime | None = None,
+    route_hour_history: Mapping[int, Mapping[str, float]] | None = None,
 ) -> dict[str, Any]:
     """Find the closest practical departure hour (±1 to ±4 hours) that saves meaningful money.
+
+    Savings come from TLC surcharges, which are certain, plus the route's own fare history.
+    The model's hourly curve is deliberately not used: it got the direction of adjacent
+    hours right only 56.5% of the time on June 2025.
 
     Never suggests a departure time in the past:
     - When `mode == 'now'`, only considers forward shifts (+1..+4 hours ahead).
@@ -681,16 +742,26 @@ def _find_nearest_better_hour(
                 continue
 
         pt = by_hour[h]
-        savings = round(current_total_usd - pt["total_fare_usd"], 2)
-        if savings >= 0.40:
+        surcharge_saving = round(by_hour[current_hour]["surcharges_usd"] - pt["surcharges_usd"], 2)
+        history_saving = _historical_saving_usd(route_hour_history, current_hour, h)
+        savings = round(surcharge_saving + (history_saving or 0.0), 2)
+        if savings >= MIN_SAVING_TO_SUGGEST_USD:
             score = savings / (abs(offset) * 0.75 + 0.5)
             reasons: list[str] = []
             if current_has_rush and not pt["has_rush_hour"]:
                 rush_str = "5.00 USD" if flat_fare_applied else "2.50 USD"
                 reasons.append(f"né được Phụ phí Giờ cao điểm ({rush_str})")
-            if pt["metered_fare_usd"] < by_hour[current_hour]["metered_fare_usd"] - 0.30:
-                reasons.append("mô hình ước tính cước đồng hồ khung giờ này thấp hơn")
-            reason_text = " và ".join(reasons) if reasons else "biểu phí khung giờ thấp hơn"
+            if by_hour[current_hour].get("has_overnight") and not pt.get("has_overnight"):
+                reasons.append("né được Phụ phí Ban đêm (1.00 USD)")
+            if history_saving is not None and history_saving > 0:
+                trips = int(route_hour_history[current_hour]["trip_count"] + route_hour_history[h]["trip_count"])
+                reasons.append(
+                    f"lịch sử tuyến này cho thấy cước đồng hồ thường thấp hơn khoảng {history_saving:.2f} USD "
+                    f"(dựa trên {trips:,} chuyến 01–05/2025)".replace(",", ".")
+                )
+            reason_text = " và ".join(reasons) if reasons else "tổng phụ phí khung giờ này thấp hơn"
+            if pt.get("has_overnight") and not by_hour[current_hour].get("has_overnight"):
+                reason_text += " (đã trừ Phụ phí Ban đêm 1.00 USD phải trả thêm)"
             shift_text = (
                 f"lùi {offset} tiếng" if offset > 0 else f"đi sớm hơn {abs(offset)} tiếng"
             )
@@ -700,10 +771,9 @@ def _find_nearest_better_hour(
                     "time_label": pt["time_label"],
                     "offset_hours": offset,
                     "shift_text_vi": shift_text,
-                    "new_total_fare_usd": pt["total_fare_usd"],
-                    "new_metered_fare_usd": pt["metered_fare_usd"],
-                    "new_surcharges_usd": pt["surcharges_usd"],
                     "savings_usd": savings,
+                    "surcharge_saving_usd": surcharge_saving,
+                    "history_saving_usd": history_saving,
                     "savings_pct": round((savings / current_total_usd) * 100.0, 1) if current_total_usd > 0 else 0.0,
                     "reason_vi": reason_text,
                     "score": score,
@@ -716,22 +786,18 @@ def _find_nearest_better_hour(
             "has_better_nearby": True,
             **best,
             "message_vi": (
-                f"💡 **Đề xuất giờ đi gần nhất tiết kiệm hơn**: Nếu bạn khởi hành lúc **{best['time_label']}** "
-                f"({best['shift_text_vi']}), tổng giá cước giảm từ **{current_total_usd:.2f} USD** xuống còn "
-                f"**{best['new_total_fare_usd']:.2f} USD** (tiết kiệm **{best['savings_usd']:.2f} USD / {best['savings_pct']:.1f}%** "
-                f"nhờ {best['reason_vi']})."
+                f"💡 **Gợi ý giờ đi**: Nếu khởi hành lúc **{best['time_label']}** ({best['shift_text_vi']}), "
+                f"tổng cước thường thấp hơn khoảng **{best['savings_usd']:.2f} USD**, vì {best['reason_vi']}."
             ),
         }
 
+    window = "4 giờ tới" if mode == "now" else "4 giờ trước và sau"
     return {
         "has_better_nearby": False,
         "hour": current_hour,
         "time_label": by_hour[current_hour]["time_label"],
         "savings_usd": 0.0,
-        "message_vi": (
-            f"✅ **Khung giờ tối ưu**: Thời điểm bạn chọn (**{by_hour[current_hour]['time_label']}**) "
-            "đang có mức tổng cước tốt nhất trong phạm vi các giờ lân cận."
-        ),
+        "message_vi": f"ℹ️ Chưa thấy giờ nào trong {window} rẻ hơn rõ rệt theo phụ phí TLC và lịch sử tuyến này.",
     }
 
 
@@ -744,16 +810,16 @@ def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_sugge
         st.info(nearest["message_vi"])
         if callable(on_apply_suggested_hour):
             if st.button(
-                f"⏰ Đổi sang giờ gợi ý & Tính lại ngay ({nearest['time_label']} — chỉ {nearest['new_total_fare_usd']:.2f} USD)",
+                f"⏰ Đổi sang giờ gợi ý & Tính lại ngay ({nearest['time_label']})",
                 key="ai_advisor_apply_nearest_hour_btn",
             ):
                 on_apply_suggested_hour(int(nearest["hour"]))
         st.caption(
-            "Đây là chênh lệch theo ước tính của mô hình (sai số trung bình khoảng 2,92 USD/chuyến đồng hồ chuẩn), "
-            "không bảo đảm giá thực tế."
+            "Phụ phí tính theo quy định TLC. Phần theo lịch sử là mức trung bình của tuyến, một chuyến cụ thể có thể khác. "
+            "Giá sau khi tính lại là ước tính của mô hình nên có thể chênh với mức gợi ý."
         )
     elif nearest.get("message_vi"):
-        st.success(nearest["message_vi"])
+        st.info(nearest["message_vi"])
 
     with st.container(border=True):
         st.markdown("#### 🧾 Bảng kê Chi tiết Giá cước & Phụ phí Chính thức NYC TLC")
@@ -827,7 +893,8 @@ def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_sugge
 
         curve = advice.get("hourly_total_curve") or []
         if len(curve) == 24:
-            with st.expander("📊 Xem Biểu đồ Biến động Tổng Giá Cước & Khung Giờ Tối Ưu Trong 24 Giờ", expanded=False):
+            with st.expander("📊 Xem Biểu đồ Tổng Giá Cước theo 24 Giờ (ước tính của mô hình)", expanded=False):
+                st.caption("Biểu đồ dùng mô hình, còn gợi ý giờ đi dùng phụ phí TLC và lịch sử tuyến, nên giờ gợi ý không nhất thiết là điểm thấp nhất trên biểu đồ.")
                 chart_rows = []
                 best_near_h = nearest.get("hour") if nearest.get("has_better_nearby") else None
                 rush_label = "3. Khung giờ cao điểm (+5.00 USD)" if advice.get("flat_fare_applied") else "3. Khung giờ cao điểm (+2.50 USD)"

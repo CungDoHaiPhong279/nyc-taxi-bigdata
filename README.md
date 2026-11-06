@@ -126,7 +126,23 @@ Bảng 4.2 chỉ tính chuyến `ratecode_id = 1`, đúng phạm vi huấn luy�
 
 Chuyến hợp lệ là chuyến có cước trong `(0; 500]` USD và vùng `1..263`; tháng 06/2025 có `4.254.377` chuyến, trong đó `277.468` chuyến cước không dương, `86` chuyến trên 500 USD và `32.145` chuyến vùng `264/265`. Tái lập bằng `scripts/eval_all_ratecodes_sample.py` và `scripts/eval_all_ratecodes_score.py`. Tập `721.513` chuyến năm 2026 lấy từ `.sandbox/pretrip-v2/pilot-2026-06-08-v23-01`, hiện không còn trên máy nên các số 2026 được giữ theo lần chạy gốc và chưa tái lập được.
 
-**Hạn chế cần lưu ý:** Con số `Cước đồng hồ ML` trên giao diện là dự đoán của mô hình cộng thêm một phần điều chỉnh theo quãng đường Mapbox; các chỉ số MAE ở trên chỉ đánh giá phần mô hình, chưa đánh giá phần điều chỉnh này. Gợi ý giờ đi dựa trên chênh lệch của mô hình, không dùng dữ liệu giao thông thời gian thực, và mức chênh có thể nhỏ hơn sai số trung bình. Airflow và Kubernetes mới dừng ở mức cấu hình, chưa triển khai thật.
+**Hạn chế cần lưu ý:** Con số `Cước đồng hồ ML` trên giao diện là dự đoán của mô hình cộng thêm một phần điều chỉnh theo quãng đường Mapbox; các chỉ số MAE ở trên chỉ đánh giá phần mô hình, chưa đánh giá phần điều chỉnh này. Airflow và Kubernetes mới dừng ở mức cấu hình, chưa triển khai thật.
+
+### 4.4. Kiểm chứng tính năng gợi ý giờ đi
+Gợi ý giờ đi dựa trên hai nguồn: phụ phí TLC theo giờ (chắc chắn) và chênh lệch cước lịch sử của chính tuyến đó trong 01–05/2025, lấy từ `analytics.mv_route_hour_fare`, chỉ tính khi vượt 3 lần sai số chuẩn và mỗi khung giờ có ít nhất 30 chuyến. Đường cong theo giờ của mô hình không còn được dùng để gợi ý vì chỉ đúng chiều tăng giảm giữa hai giờ liền kề `56,5%` số lần.
+
+Kiểm chứng ngược trên 300 tuyến đông nhất tháng 06/2025 (dữ liệu chưa dùng để dựng lịch sử), so với cước trung bình thực tế theo giờ:
+
+| Gợi ý không nhờ phụ phí | Mô hình (cách cũ) | Lịch sử tuyến (hiện tại) |
+| :--- | ---: | ---: |
+| Số gợi ý | `765` | `1.147` |
+| Thực sự rẻ hơn | `79,9%` | `88,8%` |
+| Rẻ hơn rõ ràng về thống kê | `33,3%` | `46,3%` |
+| Làm tốn thêm từ 0,40 USD | `9,3%` | `3,8%` |
+| Mức hứa → thực tế (USD) | `0,64 → 0,82` | `1,01 → 0,99` |
+| Tương quan hứa và thực tế | `0,21` | `0,57` |
+
+Gợi ý nhờ né phụ phí đúng `99,7%`. Kiểm tra độc lập trên mọi tuyến, với lịch sử 01–04/2025 và tháng 05/2025, cho `86,6%` rẻ hơn thực sự, nhưng mức hứa cao hơn thực tế (`1,26 → 1,04 USD`). Đây là mức trung bình theo tháng và chỉ kiểm chứng chế độ "Đi ngay", không bảo đảm cho một chuyến cụ thể. Tái lập bằng `scripts/eval_departure_advice.py`.
 
 ---
 
@@ -156,7 +172,7 @@ nyc-taxi-bigdata/
 │   ├── ml/                        # Chuẩn bị mẫu phân tầng, huấn luyện Spark ML & HTTP Server
 │   ├── monitoring/                # Bộ thu thập 5 chỉ số giám sát vận hành Pipeline
 │   └── dashboard/                 # Giao diện Streamlit (Bản đồ Mapbox 2 chiều, Gợi ý giờ khởi hành, Đánh giá ML, Giám sát)
-└── tests/                         # Bộ kiểm thử tự động (1.473 bài test Python + 30 bài test frontend Node.js)
+└── tests/                         # Bộ kiểm thử tự động (1.481 bài test Python + 30 bài test frontend Node.js)
 ```
 
 ---
@@ -211,7 +227,7 @@ python scripts/package_gold_v3_bundle.py
 # Sao lưu PostgreSQL (Schema + Metadata hoặc Full Dump ra thư mục backups/)
 .\scripts\backup.ps1
 
-# Chạy toàn bộ 1.473 bài kiểm thử Python theo đúng profile GitHub Actions CI
+# Chạy toàn bộ 1.481 bài kiểm thử Python theo đúng profile GitHub Actions CI
 python scripts/ci_python.py
 
 # Chạy bộ kiểm thử giao diện người dùng (30 bài test frontend Node.js)
