@@ -17,7 +17,6 @@ from nyc_taxi.dashboard.address_component import (
 from nyc_taxi.dashboard.ai_fare_advisor import (
     build_fare_explanation_and_advice,
     fetch_nyc_hourly_weather,
-    parse_natural_language_booking,
     render_smart_fare_advisor_panel,
 )
 from nyc_taxi.dashboard.interactive_map import NYC_POPULAR_PRESETS, interactive_booking_map
@@ -328,86 +327,6 @@ def clear_slot(slot: str) -> None:
     state.pop("_zone_support", None)
 
 
-def _apply_parsed_nl_booking(parsed: dict) -> None:
-    """Apply parsed natural language booking to session state and trigger 1-click auto-estimate."""
-    pu = parsed["pickup"]
-    do = parsed["dropoff"]
-    apply_direct_selection(
-        "pickup",
-        longitude=pu["longitude"],
-        latitude=pu["latitude"],
-        custom_label=pu["label"],
-    )
-    apply_direct_selection(
-        "dropoff",
-        longitude=do["longitude"],
-        latitude=do["latitude"],
-        custom_label=do["label"],
-    )
-    st.session_state["_pending_schedule_override"] = {
-        "mode": parsed["mode"],
-        "date": parsed["pickup_date"],
-        "hour": int(parsed["pickup_hour"]),
-        "minute": int(parsed["pickup_minute"]),
-    }
-    st.session_state["_auto_trigger_estimate"] = True
-    st.session_state["_ai_quick_book_notice"] = parsed["summary_vi"]
-
-
-def _render_gold_v3_ai_quick_book(zones: list[dict] | None = None) -> None:
-    """Render Natural Language Ride Booking bar (AI Quick-Book) for Gold V3."""
-    with st.expander("✨ Đặt xe nhanh bằng Ngôn ngữ Tự nhiên (AI Quick-Book — Tự động ghim bản đồ & tính cước 1-Click)", expanded=False):
-        st.caption(
-            "Nhập câu lệnh tự nhiên bằng tiếng Việt hoặc tiếng Anh (hỗ trợ cả 'Từ A đi B' hoặc 'Đi B từ A'). "
-            "Không cần nhập thời tiết — hệ thống tự động lấy dự báo thời tiết NYC chính xác theo giờ đón!"
-        )
-        q_col1, q_col2 = st.columns([4, 1])
-        nl_prompt = q_col1.text_input(
-            "Câu lệnh đặt xe nhanh",
-            placeholder="Ví dụ: Đặt xe từ Times Square đi sân bay JFK lúc 6h sáng mai",
-            label_visibility="collapsed",
-            key="gold_v3_ai_quick_book_input",
-        )
-        apply_nl = q_col2.button("✨ Điền tự động", use_container_width=True, key="gold_v3_ai_quick_book_btn")
-
-        sample_prompts = (
-            ("🌆 Times Square → ✈️ JFK 6h sáng mai", "Đặt xe từ Times Square đi sân bay JFK lúc 6h sáng mai"),
-            ("🏦 Phố Wall → 🛫 LaGuardia 17h30 chiều mai", "Đi sân bay LaGuardia từ Phố Wall lúc 17h30 chiều mai"),
-            ("🏛️ Công viên Trung tâm → 🌆 Midtown đi ngay", "Từ Công viên Trung tâm đi Midtown bây giờ"),
-        )
-        s_cols = st.columns(3)
-        chosen_sample = None
-        for idx, (btn_label, sample_text) in enumerate(sample_prompts):
-            if s_cols[idx].button(btn_label, key=f"gold_v3_nl_sample_{idx}", use_container_width=True):
-                chosen_sample = sample_text
-
-        target_prompt = chosen_sample if chosen_sample is not None else (nl_prompt if apply_nl else None)
-        if target_prompt is not None:
-            try:
-                parsed = parse_natural_language_booking(target_prompt, zones=zones)
-            except Exception:  # never crash the whole page on a parsing bug
-                logging.getLogger(__name__).exception("AI Quick-Book parsing failed")
-                parsed = {"ok": False, "error": "Không thể phân tích câu lệnh đặt xe. Hãy thử diễn đạt lại hoặc ghim trực tiếp trên bản đồ."}
-            if parsed.get("ok"):
-                _apply_parsed_nl_booking(parsed)
-                st.rerun()
-            else:
-                # Partial success: pin whichever endpoint was recognised so the user only picks the other one.
-                for slot in ("pickup", "dropoff"):
-                    loc = parsed.get(slot)
-                    if isinstance(loc, dict):
-                        apply_direct_selection(
-                            slot,
-                            longitude=loc["longitude"],
-                            latitude=loc["latitude"],
-                            custom_label=loc["label"],
-                        )
-                st.warning(parsed.get("error", "Không thể phân tích câu lệnh đặt xe."))
-
-        if st.session_state.get("_ai_quick_book_notice"):
-            st.success(st.session_state["_ai_quick_book_notice"])
-
-
 def _render_gold_v3_quick_presets() -> None:
     """Render 1-click NYC hub preset chips for Pickup (A) and Dropoff (B) like Uber/Grab."""
     with st.expander("⚡ Chọn nhanh các điểm nóng tại New York (Sân bay JFK, Times Square, LaGuardia, Phố Wall…)", expanded=False):
@@ -509,14 +428,10 @@ def render_page() -> None:
     st.subheader("1. Chọn điểm đón và điểm đến")
     if is_gold_v3:
         st.write(
-            "Chọn điểm bằng **1 trong 4 cách linh hoạt** (giống Uber/Grab): "
-            "**(1)** Nhập câu lệnh đặt xe tự nhiên bằng AI, "
-            "**(2)** Click / kéo thả ghim trực tiếp trên bản đồ NYC bên dưới, "
-            "**(3)** Gõ tìm địa chỉ vào 2 ô dưới đây, hoặc "
-            "**(4)** Mở bảng Chọn nhanh các điểm nóng NYC."
-        )
-        _render_gold_v3_ai_quick_book(
-            pretrip_metadata.get("zones") if isinstance(pretrip_metadata, dict) else None
+            "Chọn điểm bằng **1 trong 3 cách linh hoạt** (giống Uber/Grab): "
+            "**(1)** Click / kéo thả ghim trực tiếp trên bản đồ NYC bên dưới, "
+            "**(2)** Gõ tìm địa chỉ vào 2 ô dưới đây, hoặc "
+            "**(3)** Mở bảng Chọn nhanh các điểm nóng NYC."
         )
         _render_gold_v3_quick_presets()
     else:
