@@ -95,10 +95,10 @@
 | Thứ tự | Mã Mô hình | Tên Mô hình & Cấu hình | Dùng Thời tiết ERA5 | MAE (USD) ↓ | RMSE (USD) ↓ | Độ chính xác R² ↑ | Sai số Trung vị P50 (USD) ↓ |
 | :---: | :--- | :--- | :--- | :---: | ---: | ---: | ---: | ---: |
 | 1 | `B0_global_median` | Trung vị toàn cục (Mốc cơ sở đơn giản) | Không | `7,90 USD` | `13,33 USD` | `-13,22%` | `4,20 USD` |
-| 2 | `B0_route_hour_median` | Thống kê theo Tuyến & Giờ (Baseline B0) | Không | `3,35 USD` | `6,51 USD` | `72,94%` | `2,10 USD` |
+| 2 | `B0_hierarchical_median` | Thống kê theo Tuyến & Giờ (Baseline B0) | Không | `3,35 USD` | `6,51 USD` | `72,94%` | `2,10 USD` |
 | 3 | `M1_linear_regression` | Hồi quy Tuyến tính (`LinearRegression` — ElasticNet) | Có | `3,21 USD` | `4,81 USD` | `85,21%` | `2,33 USD` |
 | 4 | `M2_random_forest` | Rừng Ngẫu nhiên (`RandomForestRegressor` — 80 cây) | Có | `3,12 USD` | `4,67 USD` | `86,09%` | `2,24 USD` |
-| 5 | `M3_gbt_full_weather` | Gradient Boosted Trees + Thời tiết ERA5 (`M3-w`) | Có | `2,99 USD` | `4,60 USD` | `86,52%` | `2,11 USD` |
+| 5 | `M3_gbt_weather` | Gradient Boosted Trees + Thời tiết ERA5 (`M3-w`) | Có | `2,99 USD` | `4,60 USD` | `86,52%` | `2,11 USD` |
 | **6** | **`M3_nw_gbt_no_weather`** | **GBT Tối ưu Không cần Thời tiết (`M3-nw` — Đang dùng)** | **Không** | **`2,92 USD`** | **`4,54 USD`** | **`86,85%`** | **`2,05 USD`** |
 
 4.3. **Bảng Kiểm chứng Độ ổn định trên Dữ liệu Tương lai Năm 2026 (Out-of-Time Drift — `721.513` chuyến)**:

@@ -383,7 +383,7 @@ def render_page() -> None:
     st.title("Ước tính cước từ địa chỉ")
     if is_gold_v3:
         st.markdown(
-            "**Dự báo Tổng giá cước NYC Yellow Taxi · USD · Gồm Cước đồng hồ ML (`M3-nw`) + Phụ phí bắt buộc theo luật NYC TLC "
+            "**Dự báo Tổng giá cước NYC Yellow Taxi · USD · Gồm Cước đồng hồ ML (`M3-nw` (đổi sang mô hình thời tiết khi bạn tự nhập thời tiết)) + Phụ phí bắt buộc theo luật NYC TLC "
             "(riêng tuyến Sân bay JFK ↔ Manhattan khóa mức cước xe cố định 70.00 USD theo Ratecode 2, cộng thuế/phí luật định).**"
         )
         st.write(
@@ -660,7 +660,7 @@ def render_page() -> None:
                 }
 
         checkbox_text = (
-            "Tôi hiểu kết quả hiển thị đầy đủ Cước đồng hồ ML (M3-nw) và các khoản Phụ phí bắt buộc theo luật NYC TLC (chưa gồm tip tự nguyện và phí cầu đường)."
+            "Tôi hiểu kết quả hiển thị đầy đủ Cước đồng hồ ML (M3-nw, đổi sang mô hình thời tiết khi bạn tự nhập thời tiết) và các khoản Phụ phí bắt buộc theo luật NYC TLC (chưa gồm tip tự nguyện và phí cầu đường)."
             if is_gold_v3
             else "Tôi xác nhận đây là taxi vàng tính cước đồng hồ tiêu chuẩn, không phải cước cố định, thỏa thuận hoặc đi chung."
         )
