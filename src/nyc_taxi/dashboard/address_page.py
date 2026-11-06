@@ -383,7 +383,7 @@ def render_page() -> None:
     st.title("Ước tính cước từ địa chỉ")
     if is_gold_v3:
         st.markdown(
-            "**Dự báo Tổng giá cước NYC Yellow Taxi · USD · Gồm Cước đồng hồ ML (`M3-w`) + Phụ phí bắt buộc theo luật NYC TLC "
+            "**Dự báo Tổng giá cước NYC Yellow Taxi · USD · Gồm Cước đồng hồ ML (`M3-nw`) + Phụ phí bắt buộc theo luật NYC TLC "
             "(riêng tuyến Sân bay JFK ↔ Manhattan khóa mức cước xe cố định 70.00 USD theo Ratecode 2, cộng thuế/phí luật định).**"
         )
         st.write(
@@ -638,8 +638,8 @@ def render_page() -> None:
 
         if is_gold_v3:
             st.caption(
-                "🌦️ **Thời tiết tự động (`M3-w`)**: Hệ thống tự động lấy Dự báo Thời tiết chính xác tại New York (Open-Meteo ERA5) "
-                "theo đúng ngày & từng khung giờ trong 24h để dự báo giá cước."
+                "🌦️ **Thời tiết tại giờ đón**: Hệ thống tự lấy thời tiết New York (Open-Meteo) để bạn tham khảo; "
+                "thời tiết không được tính vào giá."
             )
             use_weather = st.checkbox(
                 "🌦️ Tùy chỉnh thủ công thông số thời tiết (Mặc định: Tự động lấy dự báo thời tiết NYC thực tế theo giờ đón)",
@@ -660,7 +660,7 @@ def render_page() -> None:
                 }
 
         checkbox_text = (
-            "Tôi hiểu kết quả hiển thị đầy đủ Cước đồng hồ ML (M3-w) và các khoản Phụ phí bắt buộc theo luật NYC TLC (chưa gồm tip tự nguyện và phí cầu đường)."
+            "Tôi hiểu kết quả hiển thị đầy đủ Cước đồng hồ ML (M3-nw) và các khoản Phụ phí bắt buộc theo luật NYC TLC (chưa gồm tip tự nguyện và phí cầu đường)."
             if is_gold_v3
             else "Tôi xác nhận đây là taxi vàng tính cước đồng hồ tiêu chuẩn, không phải cước cố định, thỏa thuận hoặc đi chung."
         )
@@ -708,15 +708,11 @@ def render_page() -> None:
                             datetime.fromisoformat(req_obj["pickup_datetime"]),
                             allow_network=online,
                         )
-                        for w_k in ("temperature_2m", "precipitation", "snowfall", "wind_speed_10m"):
-                            req_obj[w_k] = float(auto_w[w_k])
-                        if isinstance(auto_w.get("hourly_24h_compact"), list):
-                            req_obj["hourly_weather_24h"] = auto_w["hourly_24h_compact"]
                         weather_info_used = {
                             k: v for k, v in auto_w.items() if k not in ("hourly_24h", "hourly_24h_compact")
                         }
                     payload["pretrip_request"] = req_obj
-                with st.spinner("Đang tính tuyến, đồng bộ thời tiết NYC và ước tính tổng cước…"):
+                with st.spinner("Đang tính tuyến và ước tính tổng cước…"):
                     outcome = execute_submission(st.session_state, submission_id, payload, make_coordinator())
                 if outcome.success:
                     res_dict = outcome.estimate.to_dict()
@@ -776,7 +772,7 @@ def render_page() -> None:
                 delta_color="off",
             )
             m2.metric(
-                "Cước cố định JFK (Ratecode 2)" if is_flat_jfk else "Cước đồng hồ ML (M3-w)",
+                "Cước cố định JFK (Ratecode 2)" if is_flat_jfk else f"Cước đồng hồ ML ({advice['metered_model_label']})",
                 f"${advice['metered_fare_usd']:,.2f}",
                 delta=(
                     f"Đồng hồ ML tham chiếu: ${prediction.get('metered_ml_estimate_usd', 70.0):,.2f}"

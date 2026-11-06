@@ -2,7 +2,7 @@
 
 Redesigned into 3 clean, self-explanatory tabs:
 1. Tab 1 (`🚕 Ước tính cước chuyến đi`): Mapbox Address Autocomplete + Interactive Route Map UI
-   (`address_page.render_page`) backed by the frozen Gold V3 Spark GBT model (`M3-w` with automatic NYC Open-Meteo weather, `M3-nw`, & JFK 70 USD Rule + Official NYC TLC Surcharges).
+   (`address_page.render_page`) backed by the frozen Gold V3 Spark GBT model (`M3-nw` pricing without weather, `M3-w` only for manually entered weather, & JFK 70 USD Rule + Official NYC TLC Surcharges).
 2. Tab 2 (`📊 Độ chính xác & So sánh Mô hình`): Clear visual comparison of all 5 models (`B0`, `M1`, `M2`, `M3-w`, `M3-nw`),
    24-hour actual vs predicted fare tracking, and 2026 Out-of-Time Drift verification (`721.513` trips across June–August 2026).
 3. Tab 3 (`🩺 Giám sát Hệ thống & Dữ liệu`): Medallion Data Pipeline Flow Diagram + 5 Pipeline Monitoring Metrics
@@ -250,7 +250,7 @@ def render_zone_weather_simulator(base_url: str) -> None:
             )
 
         use_weather = st.checkbox(
-            "Tùy chỉnh thủ công thông số thời tiết ERA5 (Mặc định: Tự động lấy dự báo thời tiết NYC thực tế để chạy M3-w)",
+            "Tự nhập thông số thời tiết để mô phỏng bằng M3-w (mặc định giá dùng M3-nw, không cần thời tiết)",
             value=False,
         )
         wcol1, wcol2, wcol3, wcol4 = st.columns(4)
@@ -282,15 +282,14 @@ def render_zone_weather_simulator(base_url: str) -> None:
                 "condition_vi": "Thông số thời tiết giả lập thủ công",
                 "source": "manual-override",
             }
+            for w_k in ("temperature_2m", "precipitation", "snowfall", "wind_speed_10m"):
+                req_payload[w_k] = float(weather_info_used[w_k])
         else:
+            # Auto weather is display-only: it is never sent to /predict.
             auto_w = fetch_nyc_hourly_weather(target_dt, allow_network=True)
-            if isinstance(auto_w.get("hourly_24h_compact"), list):
-                req_payload["hourly_weather_24h"] = auto_w["hourly_24h_compact"]
             weather_info_used = {
                 k: v for k, v in auto_w.items() if k not in ("hourly_24h", "hourly_24h_compact")
             }
-        for w_k in ("temperature_2m", "precipitation", "snowfall", "wind_speed_10m"):
-            req_payload[w_k] = float(weather_info_used[w_k])
 
         zone_by_id = {int(z["location_id"]): z for z in zones}
         try:
@@ -311,11 +310,11 @@ def render_zone_weather_simulator(base_url: str) -> None:
                 f"{advice['total_estimated_fare_usd']:.2f} USD",
             )
             m2.metric(
-                "Cước cố định JFK (Ratecode 2)" if is_flat_jfk else "Cước đồng hồ ML (M3-w)",
+                "Cước cố định JFK (Ratecode 2)" if is_flat_jfk else f"Cước đồng hồ ML ({advice['metered_model_label']})",
                 f"{res['fare_amount_usd']:.2f} USD",
             )
             m3.metric("Khoảng cách tâm vùng (Haversine)", f"{res.get('zone_centroid_distance_km', 0.0):.2f} km")
-            m4.metric("Biến thể phục vụ", "Ratecode 2 (70 USD)" if is_flat_jfk else "M3-w (Weather)")
+            m4.metric("Biến thể phục vụ", "Ratecode 2 (70 USD)" if is_flat_jfk else advice["metered_model_label"])
 
             render_smart_fare_advisor_panel(advice)
 

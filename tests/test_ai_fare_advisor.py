@@ -319,6 +319,50 @@ def test_derive_24h_horizon_features_supports_24h_hourly_weather_array():
     assert rows[10]["precipitation"] == pytest.approx(0.0)
 
 
+_BASE_PREDICTION = {
+    "fare_amount_usd": 20.0,
+    "metered_ml_estimate_usd": 20.0,
+    "m3_weather_estimate_usd": None,
+    "m3_no_weather_estimate_usd": 20.0,
+    "baseline_fare_usd": 17.0,
+    "zone_centroid_distance_km": 3.5,
+    "is_same_zone": 0,
+    "flat_fare_applied": False,
+    "hourly_curve": None,
+}
+_ZONES = (
+    {"location_id": 161, "borough": "Manhattan", "zone": "Midtown Center"},
+    {"location_id": 236, "borough": "Manhattan", "zone": "Upper East Side North"},
+)
+
+
+def _advice_for(prediction):
+    return build_fare_explanation_and_advice(
+        prediction=prediction,
+        pickup_zone=_ZONES[0],
+        dropoff_zone=_ZONES[1],
+        pickup_dt=datetime(2025, 6, 10, 10, 0, tzinfo=NYC_TZ),
+        mapbox_distance_km=4.5,
+        mode="scheduled",
+        now_nyc=datetime(2025, 6, 9, 12, 0, tzinfo=NYC_TZ),
+    )
+
+
+@pytest.mark.parametrize("m3_w, expected", [(None, "M3-nw"), (18.5, "M3-w")])
+def test_advice_reports_the_model_that_produced_the_price(m3_w, expected):
+    advice = _advice_for({**_BASE_PREDICTION, "m3_weather_estimate_usd": m3_w})
+    assert advice["metered_model_label"] == expected
+    if m3_w is None:
+        assert advice["xai_components"]["weather_delta_usd"] == 0.0
+
+
+def test_jfk_flat_fare_without_weather_stays_70():
+    advice = _advice_for(
+        {**_BASE_PREDICTION, "flat_fare_applied": True, "fare_amount_usd": 70.0, "m3_weather_estimate_usd": None}
+    )
+    assert advice["metered_fare_usd"] == 70.0
+
+
 def _gold_v3_app(monkeypatch):
     from streamlit.testing.v1 import AppTest
     from nyc_taxi.dashboard import address_page
@@ -361,14 +405,14 @@ def _gold_v3_app(monkeypatch):
         **GOLD_V3_IDENTITY,
         "status": "supported",
         "unit": "USD",
-        "fare_amount_usd": 18.50,
-        "metered_ml_estimate_usd": 18.50,
-        "m3_weather_estimate_usd": 18.50,
+        "fare_amount_usd": 17.80,
+        "metered_ml_estimate_usd": 17.80,
+        "m3_weather_estimate_usd": None,
         "m3_no_weather_estimate_usd": 17.80,
         "baseline_fare_usd": 16.00,
         "zone_centroid_distance_km": 3.45,
         "is_same_zone": 0,
-        "model_variant": "M3-w (GBT Full Weather + Centroid)",
+        "model_variant": "M3-nw (GBT Pre-trip No-Weather + Centroid)",
         "ratecode_id": 1,
         "flat_fare_applied": False,
         "hourly_curve": [
@@ -377,7 +421,7 @@ def _gold_v3_app(monkeypatch):
                 "time_label": f"{h:02d}:00",
                 "fare_amount_usd": 18.50 if 16 <= h <= 19 else 15.00,
                 "metered_ml_usd": 18.50 if 16 <= h <= 19 else 15.00,
-                "m3_weather_usd": 18.50 if 16 <= h <= 19 else 15.00,
+                "m3_weather_usd": None,
                 "m3_no_weather_usd": 17.80 if 16 <= h <= 19 else 14.50,
                 "baseline_usd": 16.00,
             }
@@ -408,7 +452,7 @@ def _gold_v3_app(monkeypatch):
     return app, predictor
 
 
-def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkeypatch):
+def test_gold_v3_address_page_prices_with_m3_nw_and_shows_weather_for_reference(monkeypatch):
     app, predictor = _gold_v3_app(monkeypatch)
     app.run(timeout=15)
     assert not app.exception
@@ -418,18 +462,19 @@ def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkey
     app.button(key="address_estimate_submit").click().run(timeout=15)
     assert not app.exception
 
-    # Verify automatic weather fields + 24h weather array were sent to predictor without checking the manual weather box
+    # Auto weather is display-only: it must never reach the predictor.
     called_kwargs = predictor.predict.call_args.kwargs
-    assert "temperature_2m" in called_kwargs
-    assert "precipitation" in called_kwargs
-    assert "hourly_weather_24h" in called_kwargs
-    assert len(called_kwargs["hourly_weather_24h"]) == 24
+    for key in ("temperature_2m", "precipitation", "snowfall", "wind_speed_10m", "hourly_weather_24h"):
+        assert key not in called_kwargs
 
     # Verify the Smart Fare Advisor receipt rendered with zero KaTeX '$' corruption
     md_joined = " ".join(m.value for m in app.markdown)
     assert "Bảng kê Chi tiết Giá cước & Phụ phí Chính thức NYC TLC" in md_joined
     assert "Phụ phí Tắc đường Bang NY" in md_joined
     assert "undefined" not in md_joined
+    assert "`M3-nw`" in md_joined
+    assert "M3-w" not in md_joined
+    assert "chỉ tham khảo" in md_joined
 
 
 def test_auto_trigger_estimate_still_runs_after_quick_book_removal(monkeypatch):
