@@ -12,7 +12,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 | **1. Bài toán đặt ra** | **Dự báo cước trước chuyến đi (*Pre-trip Fare Estimation*)**: Ước tính cước cơ bản (`fare_amount`, USD) ngay khi khách chọn điểm đón/đến trên ứng dụng, trước khi xe lăn bánh. |
 | **2. Thách thức lớn nhất** | **Tuyệt đối tránh rò rỉ dữ liệu (*Zero Data Leakage*)**: Không dùng quãng đường hay thời gian di chuyển thực tế trên đồng hồ. Dự báo hoàn toàn dựa trên: khoảng cách tâm vùng Taxi Zones (*Haversine*), chu kỳ giờ/thứ/ngày lễ và thời tiết khí tượng ERA5. |
 | **3. Xử lý Dữ liệu Lớn** | Pipeline **PySpark Batch ELT** xử lý **24,08M** dòng thô qua 4 tầng Medallion (`Raw -> Bronze -> Silver -> Gold`), lọc sạch `0,82%` dữ liệu bẩn, lưu trữ **23,88M** dòng sạch (khớp 100% bản đồ, 99,92% thời tiết ERA5). |
-| **4. Kho Dữ liệu Phục vụ** | **PostgreSQL 16 Star Schema** (`analytics.fact_trip`: 23,88M dòng, Zero-Loss), tối ưu Deferred Indexing KPI Dashboard mất 1,2–4,7 giây khi đã có cache và 26–52 giây ở lần đầu; bảng đa nguồn chậm hơn nhiều (khoảng 1–2,7 phút khi lọc một tháng, vượt giới hạn 180 giây khi không lọc). |
+| **4. Kho Dữ liệu Phục vụ** | **PostgreSQL 16 Star Schema** (`analytics.fact_trip`: 23,88M dòng, Zero-Loss), tối ưu Deferred Indexing KPI Dashboard mất 1,2–4,7 giây khi đã có cache và 26–52 giây ở lần đầu; bảng đa nguồn đọc từ bảng tổng hợp sẵn `analytics.mv_multisource_summary` (`10.147` dòng) nên chỉ mất dưới 0,5 giây. |
 | **5. Mô hình Học máy (AI)** | **`GBTRegressor` (Chuỗi cây tăng cường độ dốc) trên Spark MLlib** kết hợp **Quy tắc cước cố định JFK 70 USD** (`Ratecode 2`). Vượt trội 4 mô hình đối chứng (Baseline B0, LR, RF, GBT-w) với **`MAE = 2,92 USD`** và **`R² = 86,85%`** trên chuyến đồng hồ chuẩn (`ratecode_id = 1`); trên mọi loại chuyến là **`MAE = 4,06 USD`**, **`R² = 75,3%`** (xem mục 4.3). |
 | **6. Triển khai & Giao diện** | Microservice suy luận đóng băng (`fare-inference:8000`, chấm điểm đồng thời đường cong 24h trong khoảng 0,3–0,5 giây/lượt) + Giao diện Streamlit Bản đồ tương tác Mapbox 2 chiều + **Bảng kê phụ phí và gợi ý giờ khởi hành (`ai_fare_advisor.py`)**: định giá bằng `M3-nw`, thời tiết tự động chỉ để tham khảo (`M3-w` chỉ chạy khi người dùng tự nhập thời tiết), công khai Phụ phí chính thức NYC TLC và chủ động đề xuất khung giờ gần nhất có giá tốt hơn. |
 
@@ -153,7 +153,7 @@ nyc-taxi-bigdata/
 │   ├── ml/                        # Chuẩn bị mẫu phân tầng, huấn luyện Spark ML & HTTP Server
 │   ├── monitoring/                # Bộ thu thập 5 chỉ số giám sát vận hành Pipeline
 │   └── dashboard/                 # Giao diện Streamlit (Bản đồ Mapbox 2 chiều, Gợi ý giờ khởi hành, Đánh giá ML, Giám sát)
-└── tests/                         # Bộ kiểm thử tự động (1.472 bài test Python + 30 bài test frontend Node.js)
+└── tests/                         # Bộ kiểm thử tự động (1.473 bài test Python + 30 bài test frontend Node.js)
 ```
 
 ---
@@ -208,7 +208,7 @@ python scripts/package_gold_v3_bundle.py
 # Sao lưu PostgreSQL (Schema + Metadata hoặc Full Dump ra thư mục backups/)
 .\scripts\backup.ps1
 
-# Chạy toàn bộ 1.472 bài kiểm thử Python theo đúng profile GitHub Actions CI
+# Chạy toàn bộ 1.473 bài kiểm thử Python theo đúng profile GitHub Actions CI
 python scripts/ci_python.py
 
 # Chạy bộ kiểm thử giao diện người dùng (30 bài test frontend Node.js)

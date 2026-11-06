@@ -45,7 +45,7 @@ DEFAULT_CALENDAR_MULTISOURCE_ROWS = [
     },
     {
         "Nhóm Ngày (US Calendar)": "3. Ngày nghỉ lễ Liên bang (Holiday)",
-        "Tỷ trọng chuyến (%)": "2.2%",
+        "Tỷ trọng chuyến (%)": "2.1%",
         "Giá cước TB (USD)": 20.37,
         "Khoảng cách TB (km)": 6.36,
     },
@@ -75,7 +75,7 @@ def load_multisource_summary(months: tuple[str, ...], boroughs: tuple[str, ...])
 
     if (
         getattr(queries.fetch_dashboard, "__module__", "") == "nyc_taxi.dashboard.queries"
-        and os.environ.get("PGPASSWORD", "").strip()
+        and os.environ.get("POSTGRES_PASSWORD", "").strip()
     ):
         try:
             res = _cached_multisource_summary(months, boroughs)
@@ -237,7 +237,7 @@ def main() -> None:
     multisource = load_multisource_summary(active_months, active_boroughs)
     if multisource.get("is_fallback"):
         st.warning(
-            "Không lấy được số trực tiếp từ PostgreSQL (truy vấn này có thể vượt giới hạn 180 giây khi không lọc). "
+            "Không đọc được bảng tổng hợp từ PostgreSQL; nếu chưa tạo, hãy chạy `load_postgres.py --create-indexes`. "
             "Bảng dưới là số tổng hợp cố định của toàn bộ 01–06/2025, không theo bộ lọc đang chọn."
         )
     ms_col1, ms_col2 = st.columns(2)

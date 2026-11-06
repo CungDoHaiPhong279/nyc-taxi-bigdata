@@ -19,6 +19,7 @@ STATEMENT_TIMEOUT_MS = 180_000
 LOCK_TIMEOUT_MS = 5_000
 # Averages skip refunds and meter glitches (fares down to negative, distances up to 386,088 mi).
 # Trip counts and total_fare keep every row so they still reconcile with the warehouse.
+# sql/postload/create_aggregates.sql applies the same two filters.
 VALID_FARE_SQL = "f.fare_amount > 0 AND f.fare_amount <= 500"
 VALID_DISTANCE_SQL = "f.trip_distance > 0 AND f.trip_distance <= 100"
 
@@ -191,7 +192,7 @@ def fetch_dashboard(
 
 
 def build_multisource_query(filters: DashboardFilters) -> tuple[TextClause, dict[str, Any]]:
-    """Build a bounded aggregate query joining fact_trip with dim_weather and dim_calendar."""
+    """Read the weather and calendar breakdown from the precomputed summary."""
     predicates: list[str] = []
     parameters: dict[str, Any] = {}
     if filters.months:
@@ -203,66 +204,26 @@ def build_multisource_query(filters: DashboardFilters) -> tuple[TextClause, dict
             parameters[f"year_{index}"] = int(month[:4])
             parameters[f"month_{index}"] = int(month[5:])
         predicates.append("(" + " OR ".join(month_predicates) + ")")
-    month_where = "WHERE " + " AND ".join(predicates) if predicates else ""
-    borough_where = ""
     if filters.boroughs:
-        borough_where = "WHERE pu.borough IN :boroughs"
+        predicates.append("pu.borough IN :boroughs")
         parameters["boroughs"] = filters.boroughs
+    where = "WHERE " + " AND ".join(predicates) if predicates else ""
 
     query = text(
         f"""
-        WITH buckets AS (
-            SELECT
-                f.pickup_location_id,
-                COALESCE(f.calendar_date_id, f.pickup_date) AS calendar_date_id,
-                f.weather_id,
-                COUNT(*) AS trip_count,
-                SUM(f.fare_amount) FILTER (WHERE {VALID_FARE_SQL}) AS fare_sum,
-                COUNT(*) FILTER (WHERE {VALID_FARE_SQL}) AS fare_count,
-                SUM(f.trip_distance) FILTER (WHERE {VALID_DISTANCE_SQL}) * 1.60934 AS distance_km_sum,
-                COUNT(*) FILTER (WHERE {VALID_DISTANCE_SQL}) AS distance_count
-            FROM analytics.fact_trip AS f
-            {month_where}
-            GROUP BY f.pickup_location_id, COALESCE(f.calendar_date_id, f.pickup_date), f.weather_id
-        ),
-        classified AS (
-            SELECT
-                b.trip_count,
-                b.fare_sum,
-                b.fare_count,
-                b.distance_km_sum,
-                b.distance_count,
-                CASE
-                    WHEN COALESCE(w.precipitation, 0) >= 2.0 OR COALESCE(w.snowfall, 0) > 0
-                        THEN '3. Mưa lớn / Có tuyết (>= 2 mm/h)'
-                    WHEN COALESCE(w.precipitation, 0) > 0
-                        THEN '2. Mưa nhỏ & Mưa vừa (< 2 mm/h)'
-                    ELSE '1. Trời quang / Khô ráo (0 mm/h)'
-                END AS weather_bucket,
-                CASE
-                    WHEN COALESCE(c.is_holiday, false)
-                        THEN '3. Ngày nghỉ lễ Liên bang (Holiday)'
-                    WHEN COALESCE(c.is_weekend, false)
-                        THEN '2. Cuối tuần (Thứ 7 & Chủ Nhật)'
-                    ELSE '1. Ngày làm việc (Thứ 2 – Thứ 6)'
-                END AS calendar_bucket
-            FROM buckets AS b
-            JOIN analytics.dim_location AS pu ON pu.location_id = b.pickup_location_id
-            LEFT JOIN analytics.dim_weather AS w ON w.weather_id = b.weather_id
-            LEFT JOIN analytics.dim_calendar AS c ON c.date_id = b.calendar_date_id
-            {borough_where}
-        )
         SELECT
-            CASE GROUPING(weather_bucket, calendar_bucket)
+            CASE GROUPING(f.weather_bucket, f.calendar_bucket)
                 WHEN 1 THEN 'weather'
                 WHEN 2 THEN 'calendar'
             END AS section_kind,
-            COALESCE(weather_bucket, calendar_bucket) AS bucket_label,
-            COALESCE(SUM(trip_count), 0) AS trip_count,
-            SUM(fare_sum) / NULLIF(SUM(fare_count), 0)::double precision AS avg_fare_usd,
-            SUM(distance_km_sum) / NULLIF(SUM(distance_count), 0)::double precision AS avg_distance_km
-        FROM classified
-        GROUP BY GROUPING SETS ((weather_bucket), (calendar_bucket))
+            COALESCE(f.weather_bucket, f.calendar_bucket) AS bucket_label,
+            COALESCE(SUM(f.trip_count), 0) AS trip_count,
+            SUM(f.fare_sum) / NULLIF(SUM(f.fare_count), 0)::double precision AS avg_fare_usd,
+            SUM(f.distance_km_sum) / NULLIF(SUM(f.distance_count), 0)::double precision AS avg_distance_km
+        FROM analytics.mv_multisource_summary AS f
+        JOIN analytics.dim_location AS pu ON pu.location_id = f.pickup_location_id
+        {where}
+        GROUP BY GROUPING SETS ((f.weather_bucket), (f.calendar_bucket))
         ORDER BY section_kind, bucket_label
         """
     )

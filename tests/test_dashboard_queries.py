@@ -2,6 +2,7 @@
 
 import math
 import os
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -239,11 +240,13 @@ def test_multisource_query_uses_calendar_date_id_and_reduces_fact_first():
         queries.DashboardFilters.from_selection(["2025-01"], ["Manhattan"])
     )
     sql = query.text
-    assert "COALESCE(f.calendar_date_id, f.pickup_date)" in sql
-    assert "f.pickup_date_id" not in sql
-    assert "WITH buckets AS" in sql
+    assert "FROM analytics.mv_multisource_summary AS f" in sql
+    assert "analytics.fact_trip" not in sql  # the full join took over 180 seconds
+    assert "f.source_month = :month_0" in sql and "pu.borough IN" in sql
     assert params["year_0"] == 2025
     assert params["month_0"] == 1
     assert params["boroughs"] == ("Manhattan",)
-    assert "SUM(f.fare_amount) FILTER (WHERE f.fare_amount > 0 AND f.fare_amount <= 500) AS fare_sum" in sql
-    assert "SUM(f.trip_distance) FILTER (WHERE f.trip_distance > 0 AND f.trip_distance <= 100)" in sql
+    summary = (Path(__file__).resolve().parents[1] / "sql" / "postload" / "create_aggregates.sql").read_text(encoding="utf-8")
+    assert f"FILTER (WHERE {queries.VALID_FARE_SQL}) AS fare_sum" in summary
+    assert f"FILTER (WHERE {queries.VALID_DISTANCE_SQL}) * 1.60934" in summary
+    assert "COALESCE(f.calendar_date_id, f.pickup_date)" in summary

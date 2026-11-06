@@ -146,6 +146,26 @@ def test_multisource_fallback_is_labeled_as_static_figures(reader):
     assert any("số tổng hợp cố định" in w.value for w in app.warning)
 
 
+def test_multisource_reads_postgres_with_the_password_variable_compose_sets(monkeypatch):
+    # The app once checked PGPASSWORD, which compose never sets, so it never queried.
+    def fetch_dashboard(filters):
+        return fixture_snapshot(filters)
+
+    fetch_dashboard.__module__ = "nyc_taxi.dashboard.queries"
+    monkeypatch.setattr(queries, "fetch_dashboard", fetch_dashboard)
+    live = Mock(return_value={
+        "weather": [{"Tỷ trọng chuyến (%)": "50.0%"}],
+        "calendar": [{"Tỷ trọng chuyến (%)": "50.0%"}],
+    })
+    monkeypatch.setattr(queries, "fetch_multisource_summary", live)
+    monkeypatch.delenv("PGPASSWORD", raising=False)
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test-only")
+    app = AppTest.from_file(str(APP)).run(timeout=10)
+    assert not app.exception
+    live.assert_called_once()
+    assert not any("số tổng hợp cố định" in w.value for w in app.warning)
+
+
 def test_database_error_is_visible_and_retry_recovers(monkeypatch):
     reader = Mock(side_effect=[
         queries.DashboardQueryError("Không thể đọc PostgreSQL. Hãy thử lại."),
