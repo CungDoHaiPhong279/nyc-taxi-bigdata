@@ -17,6 +17,10 @@ from nyc_taxi.database.postgres import get_engine
 CONNECT_TIMEOUT_SECONDS = 5
 STATEMENT_TIMEOUT_MS = 180_000
 LOCK_TIMEOUT_MS = 5_000
+# Averages skip refunds and meter glitches (fares down to negative, distances up to 386,088 mi).
+# Trip counts and total_fare keep every row so they still reconcile with the warehouse.
+VALID_FARE_SQL = "f.fare_amount > 0 AND f.fare_amount <= 500"
+VALID_DISTANCE_SQL = "f.trip_distance > 0 AND f.trip_distance <= 100"
 
 
 class DashboardQueryError(RuntimeError):
@@ -75,9 +79,10 @@ def build_aggregate_query(filters: DashboardFilters) -> tuple[TextClause, dict[s
                 f.source_year, f.source_month, f.pickup_hour, f.pickup_location_id,
                 COUNT(*) AS trip_count,
                 SUM(f.fare_amount) AS fare_sum,
-                COUNT(f.fare_amount) AS fare_count,
-                SUM(f.trip_distance) AS distance_sum,
-                COUNT(f.trip_distance) AS distance_count
+                SUM(f.fare_amount) FILTER (WHERE {VALID_FARE_SQL}) AS valid_fare_sum,
+                COUNT(*) FILTER (WHERE {VALID_FARE_SQL}) AS valid_fare_count,
+                SUM(f.trip_distance) FILTER (WHERE {VALID_DISTANCE_SQL}) AS valid_distance_sum,
+                COUNT(*) FILTER (WHERE {VALID_DISTANCE_SQL}) AS valid_distance_count
             FROM analytics.fact_trip AS f
             {month_where}
             GROUP BY f.source_year, f.source_month, f.pickup_hour, f.pickup_location_id
@@ -92,8 +97,8 @@ def build_aggregate_query(filters: DashboardFilters) -> tuple[TextClause, dict[s
             b.source_year, b.source_month, b.pickup_hour,
             pu.borough AS pickup_borough,
             COALESCE(SUM(b.trip_count), 0) AS total_trips,
-            SUM(b.fare_sum) / NULLIF(SUM(b.fare_count), 0)::double precision AS average_fare,
-            SUM(b.distance_sum) / NULLIF(SUM(b.distance_count), 0)::double precision AS average_distance,
+            SUM(b.valid_fare_sum) / NULLIF(SUM(b.valid_fare_count), 0)::double precision AS average_fare,
+            SUM(b.valid_distance_sum) / NULLIF(SUM(b.valid_distance_count), 0)::double precision AS average_distance,
             COALESCE(SUM(b.fare_sum), 0) AS total_fare
         FROM buckets AS b
         JOIN analytics.dim_location AS pu ON pu.location_id = b.pickup_location_id
@@ -212,10 +217,10 @@ def build_multisource_query(filters: DashboardFilters) -> tuple[TextClause, dict
                 COALESCE(f.calendar_date_id, f.pickup_date) AS calendar_date_id,
                 f.weather_id,
                 COUNT(*) AS trip_count,
-                SUM(f.fare_amount) AS fare_sum,
-                COUNT(f.fare_amount) AS fare_count,
-                SUM(f.trip_distance) * 1.60934 AS distance_km_sum,
-                COUNT(f.trip_distance) AS distance_count
+                SUM(f.fare_amount) FILTER (WHERE {VALID_FARE_SQL}) AS fare_sum,
+                COUNT(*) FILTER (WHERE {VALID_FARE_SQL}) AS fare_count,
+                SUM(f.trip_distance) FILTER (WHERE {VALID_DISTANCE_SQL}) * 1.60934 AS distance_km_sum,
+                COUNT(*) FILTER (WHERE {VALID_DISTANCE_SQL}) AS distance_count
             FROM analytics.fact_trip AS f
             {month_where}
             GROUP BY f.pickup_location_id, COALESCE(f.calendar_date_id, f.pickup_date), f.weather_id

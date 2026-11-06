@@ -53,7 +53,7 @@
 
 2.3. **Tối ưu hóa Truy vấn & Sao lưu**:
 - Áp dụng kỹ thuật **Deferred Indexing** (tắt index khi `COPY` hàng loạt 23,88 triệu dòng, sau đó tạo B-Tree index bằng `sql/postload/create_indexes.sql`).
-- Truy vấn Dashboard sử dụng tiền tổng hợp theo cụm (`WITH buckets AS (...)`) kết hợp `GROUP BY GROUPING SETS` trong giao dịch `REPEATABLE READ, READ ONLY`, nhờ đó KPI tổng hợp 23,88 triệu dòng mất `1,5–4,6 giây` khi đã có cache và `~27 giây` ở lần đầu. Bảng đa nguồn chậm hơn: `84–111 giây` khi lọc một tháng và vượt giới hạn `180 giây` khi không lọc, lúc đó giao diện báo rõ và hiện số tổng hợp cố định.
+- Truy vấn Dashboard sử dụng tiền tổng hợp theo cụm (`WITH buckets AS (...)`) kết hợp `GROUP BY GROUPING SETS` trong giao dịch `REPEATABLE READ, READ ONLY`, nhờ đó KPI tổng hợp 23,88 triệu dòng mất `1,2–4,7 giây` khi đã có cache và `26–52 giây` ở lần đầu. Bảng đa nguồn chậm hơn: khoảng `1–2,7 phút` khi lọc một tháng và vượt giới hạn `180 giây` khi không lọc, lúc đó giao diện báo rõ và hiện số tổng hợp cố định.
 
 ---
 
@@ -66,14 +66,16 @@
 
 3.2. **Kết quả Phân tích Đa nguồn (Taxi × Thời tiết ERA5 × Lịch Nghỉ lễ)**:
 
-| Nhóm Phân tích Đa nguồn | Phân loại Chi tiết | Tỷ trọng Chuyến (%) | Giá cước TB (USD) | Quãng đường TB (km, bỏ bản ghi > 100 dặm) |
+| Nhóm Phân tích Đa nguồn | Phân loại Chi tiết | Tỷ trọng Chuyến (%) | Giá cước TB (USD) | Quãng đường TB (km) |
 | :--- | :--- | ---: | ---: | ---: |
-| **Theo Điều kiện Thời tiết ERA5** | 1. Trời quang / Khô ráo (`0 mm/h`) | `81,2%` | `17,91 USD` | `5,33 km` |
-| **Theo Điều kiện Thời tiết ERA5** | 2. Mưa nhỏ & Mưa vừa (`< 2 mm/h`) | `15,1%` | `18,05 USD` | `5,24 km` |
-| **Theo Điều kiện Thời tiết ERA5** | 3. Mưa lớn / Có tuyết (`>= 2 mm/h`) | `3,7%` | `17,06 USD` | `4,86 km` |
-| **Theo Lịch Nghỉ lễ (US Calendar)** | 1. Ngày làm việc (`Thứ 2 – Thứ 6`) | `68,7%` | `17,90 USD` | `5,15 km` |
-| **Theo Lịch Nghỉ lễ (US Calendar)** | 2. Cuối tuần (`Thứ 7 & Chủ Nhật`) | `29,1%` | `17,74 USD` | `5,59 km` |
-| **Theo Lịch Nghỉ lễ (US Calendar)** | 3. Ngày nghỉ lễ Liên bang (`US Holiday`) | `2,2%` | `19,95 USD` | `6,22 km` |
+| **Theo Điều kiện Thời tiết ERA5** | 1. Trời quang / Khô ráo (`0 mm/h`) | `81,2%` | `19,43 USD` | `5,48 km` |
+| **Theo Điều kiện Thời tiết ERA5** | 2. Mưa nhỏ & Mưa vừa (`< 2 mm/h`) | `15,1%` | `19,89 USD` | `5,41 km` |
+| **Theo Điều kiện Thời tiết ERA5** | 3. Mưa lớn / Có tuyết (`>= 2 mm/h`) | `3,7%` | `18,76 USD` | `5,00 km` |
+| **Theo Lịch Nghỉ lễ (US Calendar)** | 1. Ngày làm việc (`Thứ 2 – Thứ 6`) | `68,7%` | `19,43 USD` | `5,33 km` |
+| **Theo Lịch Nghỉ lễ (US Calendar)** | 2. Cuối tuần (`Thứ 7 & Chủ Nhật`) | `29,1%` | `19,51 USD` | `5,65 km` |
+| **Theo Lịch Nghỉ lễ (US Calendar)** | 3. Ngày nghỉ lễ Liên bang (`US Holiday`) | `2,2%` | `20,37 USD` | `6,36 km` |
+
+Giá cước TB chỉ tính cước trong `(0; 500]` USD và quãng đường TB chỉ tính `(0; 100]` dặm. Trên toàn bộ `23.886.265` chuyến, cước TB là `19,48 USD` (`17,90 USD` nếu tính cả `1.322.979` chuyến cước âm) và quãng đường TB là `3,39 dặm` (`6,86 dặm` nếu tính cả bản ghi lỗi, lớn nhất `386.088 dặm`). Tổng số chuyến và tổng doanh thu vẫn giữ mọi bản ghi để đối soát khớp với kho dữ liệu.
 
 3.3. **5 Chỉ số Giám sát Pipeline (DataOps & MLOps Monitoring)**:
 1. **Metric 1 — Trạng thái tác vụ ETL (`Job Status`)**: `6/6` phân vùng tháng (`2025-01` → `2025-06`) đạt trạng thái `LOADED` (`100% Healthy`).
