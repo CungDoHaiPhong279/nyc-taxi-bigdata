@@ -298,20 +298,3 @@ def fetch_model_and_serving_metrics(
             "dashboard_container_resources": _read_cgroup_memory(),
         }
     }
-
-
-def collect_pipeline_monitoring_snapshot(
-    engine: Any = None,
-    inference_base_url: str = "http://fare-inference:8000",
-) -> dict[str, Any]:
-    """Collect all 5 pipeline monitoring metrics in one dictionary."""
-    out: dict[str, Any] = {}
-    out.update(fetch_etl_monitoring_metrics(engine=engine))
-    out.update(fetch_quality_and_reject_metrics())
-    out.update(
-        fetch_model_and_serving_metrics(
-            engine=engine,
-            inference_base_url=inference_base_url,
-        )
-    )
-    return out

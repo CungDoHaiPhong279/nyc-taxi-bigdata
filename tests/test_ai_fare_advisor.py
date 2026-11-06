@@ -353,7 +353,7 @@ def test_advice_reports_the_model_that_produced_the_price(m3_w, expected):
     advice = _advice_for({**_BASE_PREDICTION, "m3_weather_estimate_usd": m3_w})
     assert advice["metered_model_label"] == expected
     if m3_w is None:
-        assert advice["xai_components"]["weather_delta_usd"] == 0.0
+        assert advice["fare_breakdown"]["weather_delta_usd"] == 0.0
 
 
 def test_jfk_flat_fare_without_weather_stays_70():

@@ -70,4 +70,4 @@ Treat everything except Gold V3 as frozen history. `distribution/models/<version
 
 ## Where history and decisions live
 
-`plans/` and `reports/` hold the per-phase reports (ML P1–P6, PACKAGE P1–P3, PRETRIP v2.x, Gold V3). Check `reports/PROJECT_HANDOFF_CHECKLIST.md` and `reports/GOLD_V3_TRAINING_REPORT.md` before changing metrics, data counts or model claims. Figures such as 23,886,265 fact rows, MAE 2.92 and R² 86.85% are repeated in the README, dashboard config and tests.
+`reports/` holds the current reports, and `reports/history/` holds the per-phase ones (ML P1–P6, PACKAGE P1–P3, PRETRIP v2.x). Check `reports/PROJECT_HANDOFF_CHECKLIST.md` and `reports/GOLD_V3_TRAINING_REPORT.md` before changing metrics, data counts or model claims. Figures such as 23,886,265 fact rows, MAE 2.92 and R² 86.85% are repeated in the README, dashboard config and tests.

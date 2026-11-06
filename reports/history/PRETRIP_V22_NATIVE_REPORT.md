@@ -134,7 +134,7 @@ Hai baselines đã fit được khóa bằng `baselines.json`: global train medi
 **5** mẫu; fallback median PU/DO đủ5 rồi global. Artifact chứa train26573,
 1402 pair groups/1601 time groups; không tính lại median từ August.
 
-Theo `plans/ML_PRETRIP_PLAN.md`, khi bước August được phép thực hiện riêng:
+Theo `reports/history/ML_PRETRIP_PLAN.md`, khi bước August được phép thực hiện riêng:
 
 - Dùng nguyên ứng viên, fitted preprocessing và hai baselines đã khóa ở đây;
   kiểm identities/lineage trước khi đánh giá, không retrain/tuning.

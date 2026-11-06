@@ -42,7 +42,7 @@ Chủ dự án đã quyết định **tự làm sau** 2 hạng mục dưới đ�
   - Lấy mẫu băm 64-bit SplitMix64 tỷ lệ **10%** (`100.000 / 1.000.000`) kết hợp bảo toàn vùng hiếm trên tập Train (`min_train_zone_support = 30`).
   - Xuất **721.513 dòng** (gấp **10 lần** V2.2: `268.539` train, `235.025` validation, `217.949` holdout) vào `.sandbox/pretrip-v2/pilot-2026-06-08-v23-01/` (~37,75 MiB).
   - Nâng độ phủ vùng đón trên tập Train từ **117 lên 247 vùng** (+111,1% — đạt 100% toàn bộ các vùng có phát sinh chuyến xe hợp lệ trong tháng 06/2026) và vùng trả từ **224 lên 259 vùng** (99,6% toàn bộ các vùng có đường bộ tại NYC).
-  - Xem báo cáo chi tiết tại [`plans/PRETRIP_V23_PREPARATION_REPORT.md`](PRETRIP_V23_PREPARATION_REPORT.md).
+  - Xem báo cáo chi tiết tại [`reports/history/PRETRIP_V23_PREPARATION_REPORT.md`](PRETRIP_V23_PREPARATION_REPORT.md).
 
 ### ⏳ Các bước tiếp theo của Phần 4 (Bước 4.3 – 4.4)
 - **Bước 4.3 — Huấn luyện Native GBT (`maxBins=264`, `squared` vs `absolute`) & Đánh giá Holdout**: Lưu tại `.sandbox/pretrip-v2/training-YYYYMMDD-v23-01/`.
@@ -60,10 +60,10 @@ Chủ dự án đã quyết định **tự làm sau** 2 hạng mục dưới đ�
   khi `FARE_MODEL_VERSION=v1` (mặc định ở `prediction.py:30`) và `FARE_ADDRESS_ENABLED=0`
   (mặc định ở `docker-compose.inference.yml:67`).
 - `.sandbox/pretrip-v2/training-20261027-pilot-01/` và `training-20261027-absolute-01/`: là
-  `--reference-artifacts` / `--comparison-artifacts` của lượt huấn luyện native V2.2 (xem `plans/PRETRIP_V22_NATIVE_REPORT.md`).
+  `--reference-artifacts` / `--comparison-artifacts` của lượt huấn luyện native V2.2 (xem `reports/history/PRETRIP_V22_NATIVE_REPORT.md`).
 - `.sandbox/pretrip-v2/holdout-20261027-native-01/`: là `--output-dir` mặc định của `pretrip_holdout.py`.
   Checkpoint trong thư mục này góp phần chặn việc vô tình chạy holdout lại.
-- `.sandbox/pv22setup-26edfea-01/` (7,2 MB): bằng chứng của `plans/PACKAGE_V22_EXECUTION_REPORT.md`.
+- `.sandbox/pv22setup-26edfea-01/` (7,2 MB): bằng chứng của `reports/history/PACKAGE_V22_EXECUTION_REPORT.md`.
 - `scikit-learn` trong `requirements.txt`: không còn code nào import (`pandas` vẫn được `dashboard/app.py` dùng).
   Tuy nhiên `requirements.txt` bị ghim hash (bootstrap, image identity, `holdout.CORE_FILES`), nên chỉ gỡ khi
   đổi phiên bản dependency có chủ đích.

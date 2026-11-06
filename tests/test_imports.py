@@ -7,7 +7,6 @@ import pytest
 MODULES = [
     "nyc_taxi",
     "nyc_taxi.common.config",
-    "nyc_taxi.common.logging_config",
     "nyc_taxi.common.spark",
     "nyc_taxi.ingestion.taxi",
     "nyc_taxi.ingestion.weather",
