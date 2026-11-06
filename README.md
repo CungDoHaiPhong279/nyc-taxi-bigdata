@@ -87,7 +87,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 - **R² (*Coefficient of Determination* — Hệ số xác định, %)**: Cho biết mô hình giải thích được bao nhiêu phần trăm sự biến thiên của giá cước thực tế. **R² càng gần 100% (1.0) càng tốt** (Gold V3 đạt `R² = 86,85%` trên chuyến đồng hồ chuẩn, `75,3%` trên mọi loại chuyến).
 - **P50 / P90 Abs Error (Sai số phân vị thứ 50 và 90, USD)**: `P50 = 2,05 USD` nghĩa là có tới **50% số chuyến xe được dự đoán lệch không quá 2,05 USD** so với thực tế (chuyến đồng hồ chuẩn; mọi loại chuyến là `2,36 USD`).
 - **Out-of-Time Drift (Kiểm định độ trôi dữ liệu theo thời gian — Năm 2026)**: Đem mô hình học từ dữ liệu năm 2025 chạy kiểm nghiệm trên `721.513` chuyến xe hoàn toàn mới của **Tháng 06, 07, 08/2026** để chứng minh mô hình không bị lỗi thời.
-- **Frozen Inference (`fit_calls = 0`)**: Cơ chế đóng băng mô hình đã huấn luyện thành gói bất biến (`distribution/models/gold-v3/`). Máy chủ suy luận chỉ nạp mô hình lên RAM để trả kết quả (đo thực tế trung vị `0,34–0,54 giây/lượt`, lượt đầu sau thời gian rảnh có thể tới vài chục giây), tuyệt đối không huấn luyện lại khi đang phục vụ người dùng.
+- **Frozen Inference**: Cơ chế đóng băng mô hình đã huấn luyện thành gói bất biến (`distribution/models/gold-v3/`). Máy chủ suy luận chỉ nạp mô hình lên RAM để trả kết quả (đo thực tế trung vị `0,34–0,54 giây/lượt`, lượt đầu sau thời gian rảnh có thể tới vài chục giây), không có bước huấn luyện trong luồng phục vụ (bộ đếm `fit_calls` luôn bằng 0 nên chỉ mang tính khai báo).
 
 ---
 
@@ -100,7 +100,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 | **2. Thời gian xử lý (`Processing Time`)** | **`864 giây / tháng`** | Tổng nạp PostgreSQL `5.184s` (~4.600 dòng/giây); trích mẫu ML `28,3s`; huấn luyện 5 mô hình `100,2s`. |
 | **3. Đối soát số dòng (`Reconciliation`)** | **`23.886.265 dòng`** | Khớp tuyệt đối giữa Silver/Gold Parquet và bảng `analytics.fact_trip` (`Chênh lệch = 0 / Zero-Loss`). |
 | **4. Tỷ lệ lọc dữ liệu bẩn (`Reject Rate`)** | **`0,82%` (`197.119` dòng)** | Lọc từ `24.083.384` dòng Raw; tầng Gold khớp **100% Taxi Zones** và **99,92% Thời tiết ERA5**. |
-| **5. Dịch vụ AI & RAM (`Serving Health`)** | **`READY (200 OK)`** | Mô hình đóng băng (`fit_calls = 0`), container `fare-inference` dùng `~850–930 / 3072 MB RAM`. |
+| **5. Dịch vụ AI & RAM (`Serving Health`)** | **`READY (200 OK)`** | Mô hình đóng băng, luồng phục vụ không có bước huấn luyện; container `fare-inference` dùng `~850–930 / 3072 MB RAM`. |
 
 ### 4.2. So sánh 6 Cấu hình Mô hình (Holdout Test 06/2025 — `80.770` chuyến đồng hồ chuẩn `ratecode_id = 1`) & Kiểm chứng Năm 2026 (`721.513` chuyến)
 | Mô hình | Thuật toán Cốt lõi | Dùng Thời tiết | MAE 2025 (USD) ↓ | RMSE 2025 (USD) ↓ | R² 2025 (%) ↑ | P50 2025 (USD) ↓ | MAE Năm 2026 (USD) ↓ |
@@ -125,6 +125,8 @@ Bảng 4.2 chỉ tính chuyến `ratecode_id = 1`, đúng phạm vi huấn luy�
 | Ratecode khác (`3, 4, 5, 6, 99`) | `2,3%` | `22,92` | `36,35` | `-23,3%` | `14,55` |
 
 Chuyến hợp lệ là chuyến có cước trong `(0; 500]` USD và vùng `1..263`; tháng 06/2025 có `4.254.377` chuyến, trong đó `277.468` chuyến cước không dương, `86` chuyến trên 500 USD và `32.145` chuyến vùng `264/265`. Tái lập bằng `scripts/eval_all_ratecodes_sample.py` và `scripts/eval_all_ratecodes_score.py`. Tập `721.513` chuyến năm 2026 lấy từ `.sandbox/pretrip-v2/pilot-2026-06-08-v23-01`, hiện không còn trên máy nên các số 2026 được giữ theo lần chạy gốc và chưa tái lập được.
+
+**Hạn chế cần lưu ý:** Con số `Cước đồng hồ ML` trên giao diện là dự đoán của mô hình cộng thêm một phần điều chỉnh theo quãng đường Mapbox; các chỉ số MAE ở trên chỉ đánh giá phần mô hình, chưa đánh giá phần điều chỉnh này. Gợi ý giờ đi dựa trên chênh lệch của mô hình, không dùng dữ liệu giao thông thời gian thực, và mức chênh có thể nhỏ hơn sai số trung bình. Airflow và Kubernetes mới dừng ở mức cấu hình, chưa triển khai thật.
 
 ---
 
@@ -153,7 +155,7 @@ nyc-taxi-bigdata/
 │   ├── ml/                        # Chuẩn bị mẫu phân tầng, huấn luyện Spark ML & HTTP Server
 │   ├── monitoring/                # Bộ thu thập 5 chỉ số giám sát vận hành Pipeline
 │   └── dashboard/                 # Giao diện Streamlit (Bản đồ Mapbox 2 chiều, Gợi ý giờ khởi hành, Đánh giá ML, Giám sát)
-└── tests/                         # Bộ kiểm thử tự động (1.473 bài test Python + 30 bài test frontend Node.js)
+└── tests/                         # Bộ kiểm thử tự động (1.474 bài test Python + 30 bài test frontend Node.js)
 ```
 
 ---
@@ -208,7 +210,7 @@ python scripts/package_gold_v3_bundle.py
 # Sao lưu PostgreSQL (Schema + Metadata hoặc Full Dump ra thư mục backups/)
 .\scripts\backup.ps1
 
-# Chạy toàn bộ 1.473 bài kiểm thử Python theo đúng profile GitHub Actions CI
+# Chạy toàn bộ 1.474 bài kiểm thử Python theo đúng profile GitHub Actions CI
 python scripts/ci_python.py
 
 # Chạy bộ kiểm thử giao diện người dùng (30 bài test frontend Node.js)

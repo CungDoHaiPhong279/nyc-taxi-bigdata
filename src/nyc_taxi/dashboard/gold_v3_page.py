@@ -660,26 +660,26 @@ def render_pipeline_monitoring(base_url: str) -> None:
         with f1:
             st.info(
                 "**Bước 1: Dữ liệu Thô (Raw)**\n\n"
-                "📥 **24.083.384 chuyến**\n\n"
+                f"📥 **{m4_silver['raw_taxi_rows']:,} chuyến**\n\n"
                 "Dữ liệu gốc NYC Yellow Taxi 2025 + Thời tiết ERA5 + Lịch nghỉ lễ + 263 vùng."
             )
         with f2:
             st.warning(
                 "**Bước 2: Tầng Sạch (Silver)**\n\n"
-                "🧹 **Loại bỏ 197.119 dòng lỗi (0.82%)**\n\n"
+                f"🧹 **Loại bỏ {m4_silver['silver_rejected_rows']:,} dòng lỗi ({m4_silver['silver_reject_rate_pct']}%)**\n\n"
                 "Lọc các chuyến có thời gian lỗi (dropoff <= pickup), thiếu vùng đón/trả hoặc trùng lặp."
             )
         with f3:
             st.success(
                 "**Bước 3: Tầng Tích hợp (Gold)**\n\n"
-                "✨ **23.886.265 chuyến hợp lệ**\n\n"
-                f"Khớp **100%** vùng bản đồ và **{m4_gold.get('weather_match_rate_pct', 99.92)}%** thời tiết ERA5 theo giờ."
+                f"✨ **{m4_silver['silver_valid_rows']:,} chuyến hợp lệ**\n\n"
+                f"Khớp **100%** vùng bản đồ và **{m4_gold.get('weather_match_rate_pct', 'N/A')}%** thời tiết ERA5 theo giờ."
             )
         with f4:
             st.success(
                 "**Bước 4: Kho PostgreSQL & AI**\n\n"
-                "🗄️ **23.886.265 dòng (Thất thoát = 0)**\n\n"
-                "Nạp thành công 100% vào PostgreSQL và phục vụ suy luận trực tuyến (khoảng 0,3–0,5 giây/lượt)."
+                f"🗄️ **{m3['total_loaded_rows']:,} dòng (Chênh lệch = {m3['row_delta']})**\n\n"
+                f"Nạp {m1['loaded_jobs']}/{m1['total_jobs']} phân vùng vào PostgreSQL; suy luận trực tuyến khoảng 0,3–0,5 giây/lượt (đo ngày 06/11/2026)."
             )
 
         st.divider()
@@ -698,7 +698,7 @@ def render_pipeline_monitoring(base_url: str) -> None:
         c3.metric(
             "3. Đối soát số dòng",
             f"{m3['total_loaded_rows']:,}",
-            f"Chênh lệch = {m3['row_delta']} (Zero Loss)",
+            f"Chênh lệch = {m3['row_delta']}" + (" (Zero Loss)" if m3["row_delta"] == 0 else ""),
         )
         c4.metric(
             "4. Tỷ lệ lọc dữ liệu bẩn",
@@ -710,7 +710,7 @@ def render_pipeline_monitoring(base_url: str) -> None:
         mem_label = f"RAM {inf_mem:.0f}/{inf_lim:.0f} MB" if inf_mem and inf_lim else f"Hỗ trợ {m5_srv.get('supported_pickup_zones', 258)}/263 vùng"
         c5.metric(
             "5. Máy chủ AI & RAM",
-            "SẴN SÀNG (200)" if m5_srv.get("ready") else "NGỪNG HOẠT ĐỘNG",
+            f"SẴN SÀNG ({m5_srv.get('http_status', 200)})" if m5_srv.get("ready") else "NGỪNG HOẠT ĐỘNG",
             mem_label,
         )
 
@@ -720,7 +720,10 @@ def render_pipeline_monitoring(base_url: str) -> None:
             col_j1, col_j2 = st.columns(2)
             with col_j1:
                 st.markdown("#### Sơ đồ Khối lượng Chuyến xe Đã nạp theo Tháng (2025)")
-                st.caption("Mỗi tháng hệ thống xử lý và đối soát từ 3,47 triệu đến 4,59 triệu chuyến xe với độ chính xác tuyệt đối (Zero-Loss).")
+                job_rows = [int(j.get("loaded_row_count", 0)) for j in jobs]
+                st.caption(
+                    f"Mỗi tháng nạp và đối soát từ {min(job_rows) / 1_000_000:.2f} đến {max(job_rows) / 1_000_000:.2f} triệu chuyến xe."
+                )
                 jobs_chart = [
                     {
                         "Tháng": str(j.get("dataset", "")).replace("fact_trip (", "Tháng ").replace("taxi (", "Tháng ").replace(")", ""),
@@ -762,7 +765,7 @@ def render_pipeline_monitoring(base_url: str) -> None:
 
             with col_j2:
                 st.markdown("#### Sơ đồ Thời gian Nạp Dữ liệu vào PostgreSQL theo Tháng (Giây)")
-                st.caption("Thời gian nạp trung bình ~864 giây/tháng (~4.600 dòng/giây) qua cơ chế kiểm tra đối soát tự động.")
+                st.caption(f"Thời gian nạp trung bình {m2['avg_job_seconds']:.0f} giây/tháng, có đối soát số dòng tự động.")
                 st.vega_lite_chart(
                     jobs_chart,
                     {
@@ -795,12 +798,16 @@ def render_pipeline_monitoring(base_url: str) -> None:
 
         dash_mem = m5_dash_res.get("memory_current_mb")
         dash_lim = m5_dash_res.get("memory_limit_mb")
+        ml_cohort = qual_metrics["metric_4_quality_and_rejects"].get("ml_gold_v3_cohort", {})
+        prep_s = ml_cohort.get("preparation_elapsed_seconds", "N/A")
+        train_s = ml_cohort.get("training_elapsed_seconds", "N/A")
+        startup_s = m5_srv.get("startup_seconds", "N/A")
         st.info(
             f"**Hiệu năng Huấn luyện & Phục vụ AI:**\n"
-            f"- **Huấn luyện Spark ML:** Trích xuất mẫu phân tầng từ 23,88 triệu dòng mất **28.3 giây**; huấn luyện cả 5 mô hình mất **100.2 giây**.\n"
-            f"- **Tài nguyên Container hiện tại:** Máy chủ suy luận `fare-inference` dùng **{inf_mem or 'N/A'} / {inf_lim or 3072} MB RAM** "
-            f"(đóng băng mô hình `fit_calls = {m5_srv.get('fit_calls', 0)}`, khởi động **{float(m5_srv.get('startup_seconds') or 38.0):.1f}s**); "
-            f"Giao diện `dashboard` dùng **{dash_mem or 'N/A'} / {dash_lim or 1024} MB RAM**."
+            f"- **Huấn luyện Spark ML:** Trích xuất mẫu phân tầng từ 23,88 triệu dòng mất **{prep_s} giây**; huấn luyện cả 5 mô hình mất **{train_s} giây** (số ghi nhận lúc huấn luyện).\n"
+            f"- **Tài nguyên Container hiện tại:** Máy chủ suy luận `fare-inference` dùng **{inf_mem or 'N/A'} / {inf_lim or 'N/A'} MB RAM** "
+            f"(mô hình chỉ nạp để dự đoán, luồng phục vụ không có bước huấn luyện; khởi động **{startup_s}s**); "
+            f"Giao diện `dashboard` dùng **{dash_mem or 'N/A'} / {dash_lim or 'N/A'} MB RAM**."
         )
 
         with st.expander("📋 Xem nhật ký đối soát ETL chi tiết & Thông số kỹ thuật JSON", expanded=False):

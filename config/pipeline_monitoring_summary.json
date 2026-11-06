@@ -32,6 +32,8 @@
       "drift_2026": 89625
     },
     "rare_zone_stratified_rows_added": 4469,
+    "train_active_pickup_zones": 258,
+    "train_active_dropoff_zones": 259,
     "jfk_manhattan_ratecode2": {
       "trip_count": 574602,
       "fare_70_count": 574524,
