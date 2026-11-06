@@ -369,6 +369,94 @@ def test_missing_model_curve_keeps_fare_flat_instead_of_inventing_hourly_differe
     assert len({pt["metered_fare_usd"] for pt in curve}) == 1
 
 
+def _hour_stats(mean, trips=400, variance=4.0):
+    return {"trip_count": trips, "mean_fare_usd": mean, "fare_variance": variance}
+
+
+def _midday_advice(curve_drop=0.0, history=None, day=(2025, 6, 11)):
+    """A 12:30 weekday trip, where no later hour changes the time-based surcharges until 16:00."""
+    hourly_curve = [
+        {"hour": h, "fare_amount_usd": 20.0 - (curve_drop if h == 13 else 0.0), "metered_ml_usd": 20.0 - (curve_drop if h == 13 else 0.0)}
+        for h in range(24)
+    ]
+    return build_fare_explanation_and_advice(
+        prediction={**_BASE_PREDICTION, "hourly_curve": hourly_curve},
+        pickup_zone=_ZONES[0],
+        dropoff_zone=_ZONES[1],
+        pickup_dt=datetime(*day, 12, 30, tzinfo=NYC_TZ),
+        mode="now",
+        now_nyc=datetime(*day, 12, 30, tzinfo=NYC_TZ),
+        route_hour_history=history,
+    )["nearest_better_option"]
+
+
+def test_model_curve_alone_no_longer_produces_a_suggestion():
+    option = _midday_advice(curve_drop=5.0)
+    assert option["has_better_nearby"] is False
+    assert "tối ưu" not in option["message_vi"]
+
+
+def test_clear_route_history_produces_a_suggestion_that_names_its_evidence():
+    option = _midday_advice(history={12: _hour_stats(20.0), 13: _hour_stats(18.5)})
+    assert option["has_better_nearby"] is True
+    assert option["hour"] == 13
+    assert option["savings_usd"] == pytest.approx(1.5)
+    assert "800 chuyến" in option["message_vi"]
+    assert "$" not in option["message_vi"]
+
+
+def test_history_inside_its_noise_is_ignored():
+    # 1.00 USD apart with a standard error of 1.00 USD: not 3 standard errors.
+    noisy = {12: _hour_stats(20.0, trips=100, variance=50.0), 13: _hour_stats(19.0, trips=100, variance=50.0)}
+    assert _midday_advice(history=noisy)["has_better_nearby"] is False
+
+
+def test_history_is_ignored_on_holidays_because_it_excludes_them():
+    history = {12: _hour_stats(20.0), 13: _hour_stats(18.5)}
+    assert _midday_advice(history=history, day=(2025, 6, 19))["has_better_nearby"] is False
+
+
+def test_a_later_hour_with_higher_fares_loses_its_surcharge_saving():
+    # Leaving the 17:30 rush hour for 20:30 saves 1.50 USD of surcharges, but history says fares rise by 1.20 USD.
+    dt = datetime(2025, 6, 11, 17, 30, tzinfo=NYC_TZ)
+    curve = [{"hour": h, "fare_amount_usd": 20.0, "metered_ml_usd": 20.0} for h in range(24)]
+    option = build_fare_explanation_and_advice(
+        prediction={**_BASE_PREDICTION, "hourly_curve": curve},
+        pickup_zone=_ZONES[0],
+        dropoff_zone=_ZONES[1],
+        pickup_dt=dt,
+        mode="now",
+        now_nyc=dt,
+        route_hour_history={17: _hour_stats(20.0), 20: _hour_stats(21.2)},
+    )["nearest_better_option"]
+    # 20:30 nets only 0.30 USD, below the minimum, so the next hour without a known rise wins.
+    assert option["hour"] == 21
+    assert option["savings_usd"] == pytest.approx(1.50)
+
+
+def test_message_mentions_the_night_surcharge_a_later_hour_adds():
+    dt = datetime(2025, 6, 11, 17, 30, tzinfo=NYC_TZ)
+    curve = [{"hour": h, "fare_amount_usd": 20.0, "metered_ml_usd": 20.0} for h in range(24)]
+    option = build_fare_explanation_and_advice(
+        prediction={**_BASE_PREDICTION, "hourly_curve": curve},
+        pickup_zone=_ZONES[0],
+        dropoff_zone=_ZONES[1],
+        pickup_dt=dt,
+        mode="now",
+        now_nyc=dt,
+    )["nearest_better_option"]
+    assert option["hour"] == 20
+    assert option["savings_usd"] == pytest.approx(1.50)
+    assert "Phụ phí Ban đêm 1.00 USD phải trả thêm" in option["message_vi"]
+
+
+def test_route_history_is_skipped_without_a_configured_database(monkeypatch):
+    from nyc_taxi.dashboard.ai_fare_advisor import load_route_hour_history
+
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    assert load_route_hour_history(161, 236, datetime(2025, 6, 11, 12, 30)) is None
+
+
 def _gold_v3_app(monkeypatch):
     from streamlit.testing.v1 import AppTest
     from nyc_taxi.dashboard import address_page

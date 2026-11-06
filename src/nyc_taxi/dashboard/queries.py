@@ -285,3 +285,47 @@ def fetch_multisource_summary(
     finally:
         if engine is not None:
             engine.dispose()
+
+
+def fetch_route_hour_history(
+    pickup_location_id: int,
+    dropoff_location_id: int,
+    is_weekend: bool,
+    *,
+    config: dict[str, Any] | None = None,
+) -> dict[int, dict[str, float]]:
+    """Read one route's Jan-May fare statistics by pickup hour from the precomputed summary."""
+    query = text(
+        """
+        SELECT pickup_hour, trip_count, mean_fare_usd, fare_variance
+        FROM analytics.mv_route_hour_fare
+        WHERE pickup_location_id = :pickup AND dropoff_location_id = :dropoff AND is_weekend = :is_weekend
+        """
+    )
+    engine = None
+    try:
+        engine = get_engine(config, connect_timeout_seconds=CONNECT_TIMEOUT_SECONDS)
+        with engine.connect() as connection:
+            with connection.begin():
+                connection.exec_driver_sql("SET TRANSACTION READ ONLY")
+                connection.execute(
+                    text("SELECT set_config('statement_timeout', :timeout, true)"),
+                    {"timeout": str(STATEMENT_TIMEOUT_MS)},
+                )
+                rows = connection.execute(
+                    query,
+                    {"pickup": int(pickup_location_id), "dropoff": int(dropoff_location_id), "is_weekend": bool(is_weekend)},
+                ).mappings().all()
+        return {
+            int(r["pickup_hour"]): {
+                "trip_count": int(r["trip_count"]),
+                "mean_fare_usd": float(r["mean_fare_usd"]),
+                "fare_variance": float(r["fare_variance"]),
+            }
+            for r in rows
+        }
+    except (SQLAlchemyError, OSError, ValueError, KeyError) as exc:
+        raise DashboardQueryError("Không thể đọc lịch sử cước theo tuyến từ PostgreSQL.") from exc
+    finally:
+        if engine is not None:
+            engine.dispose()

@@ -16,6 +16,7 @@ from nyc_taxi.dashboard.address_component import (
 )
 from nyc_taxi.dashboard.ai_fare_advisor import (
     build_fare_explanation_and_advice,
+    load_route_hour_history,
     fetch_nyc_hourly_weather,
     render_smart_fare_advisor_panel,
 )
@@ -727,6 +728,11 @@ def render_page() -> None:
                             mapbox_distance_km=res_dict.get("distance_km"),
                             weather_info=weather_info_used,
                             mode=mode,
+                            route_hour_history=load_route_hour_history(
+                                res_dict["pickup"]["location_id"],
+                                res_dict["dropoff"]["location_id"],
+                                datetime.fromisoformat(res_dict["pickup_datetime"]),
+                            ),
                         )
                     st.session_state.address_fare_result = res_dict
                     if is_gold_v3:
@@ -759,6 +765,9 @@ def render_page() -> None:
                 mapbox_distance_km=stored.get("distance_km"),
                 weather_info=stored.get("weather_info"),
                 mode=(stored.get("time_selection") or {}).get("mode", "now"),
+                route_hour_history=load_route_hour_history(
+                    stored["pickup"]["location_id"], stored["dropoff"]["location_id"], submitted_at
+                ),
             )
             is_flat_jfk = bool(prediction.get("flat_fare_applied"))
             m1, m2, m3, m4 = st.columns(4)

@@ -235,6 +235,15 @@ def test_postgres_readonly_weighted_aggregates_against_row_reference():
 
 
 
+def test_route_history_summary_covers_only_the_validated_months_and_cohort():
+    summary = (Path(__file__).resolve().parents[1] / "sql" / "postload" / "create_aggregates.sql").read_text(encoding="utf-8")
+    block = summary[summary.index("CREATE MATERIALIZED VIEW analytics.mv_route_hour_fare"):]
+    assert "f.source_year = 2025 AND f.source_month <= 5" in block  # June stays the holdout
+    assert "f.ratecode_id = 1" in block
+    assert "NOT c.is_holiday" in block
+    assert "HAVING COUNT(*) >= 30" in block
+
+
 def test_multisource_query_uses_calendar_date_id_and_reduces_fact_first():
     query, params = queries.build_multisource_query(
         queries.DashboardFilters.from_selection(["2025-01"], ["Manhattan"])

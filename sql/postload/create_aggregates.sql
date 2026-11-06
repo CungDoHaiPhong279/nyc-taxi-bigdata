@@ -32,3 +32,28 @@ FROM analytics.fact_trip AS f
 LEFT JOIN analytics.dim_weather AS w ON w.weather_id = f.weather_id
 LEFT JOIN analytics.dim_calendar AS c ON c.date_id = COALESCE(f.calendar_date_id, f.pickup_date)
 GROUP BY 1, 2, 3, 4, 5;
+
+-- Fare history by route and hour for departure advice. Jan-May only, because the
+-- rule was validated by predicting June from these months (see the README).
+DROP MATERIALIZED VIEW IF EXISTS analytics.mv_route_hour_fare;
+CREATE MATERIALIZED VIEW analytics.mv_route_hour_fare AS
+SELECT
+    f.pickup_location_id,
+    f.dropoff_location_id,
+    c.is_weekend,
+    f.pickup_hour,
+    COUNT(*) AS trip_count,
+    AVG(f.fare_amount) AS mean_fare_usd,
+    VAR_POP(f.fare_amount) AS fare_variance
+FROM analytics.fact_trip AS f
+JOIN analytics.dim_calendar AS c ON c.date_id = COALESCE(f.calendar_date_id, f.pickup_date)
+WHERE f.source_year = 2025 AND f.source_month <= 5
+    AND f.ratecode_id = 1
+    AND f.fare_amount > 0 AND f.fare_amount <= 500
+    AND f.pickup_location_id BETWEEN 1 AND 263
+    AND f.dropoff_location_id BETWEEN 1 AND 263
+    AND NOT c.is_holiday
+GROUP BY 1, 2, 3, 4
+HAVING COUNT(*) >= 30;
+CREATE UNIQUE INDEX mv_route_hour_fare_key
+    ON analytics.mv_route_hour_fare (pickup_location_id, dropoff_location_id, is_weekend, pickup_hour);

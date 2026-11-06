@@ -25,6 +25,7 @@ from sqlalchemy import text
 from nyc_taxi.dashboard.address_page import address_flow_enabled, render_page as render_address_page
 from nyc_taxi.dashboard.ai_fare_advisor import (
     build_fare_explanation_and_advice,
+    load_route_hour_history,
     fetch_nyc_hourly_weather,
     render_smart_fare_advisor_panel,
 )
@@ -318,6 +319,7 @@ def render_zone_weather_simulator(base_url: str) -> None:
                 mapbox_distance_km=None,
                 weather_info=weather_info_used,
                 mode="scheduled",
+                route_hour_history=load_route_hour_history(int(pu_id), int(do_id), target_dt),
             )
             is_flat_jfk = bool(res.get("flat_fare_applied"))
             m1, m2, m3, m4 = st.columns(4)
@@ -599,10 +601,10 @@ def render_model_evaluation_and_drift() -> None:
                 )
 
         st.info(
-            "**Tóm tắt kiến trúc AI Smart Fare Advisor đang vận hành:**\n"
+            "**Tóm tắt cách hệ thống ước tính giá:**\n"
             "- **Mô hình phục vụ:** Giá dùng `M3-nw` (**MAE = 2.92 USD/chuyến, R² = 86.85%** với chuyến đồng hồ chuẩn; **MAE = 4.06 USD, R² = 75.3%** với mọi loại chuyến). `M3-w` (**MAE = 2.99 USD/chuyến, R² = 86.52%**) được giữ để đối chứng và mô phỏng thời tiết thủ công. Thời tiết tự lấy theo giờ đón chỉ để tham khảo.\n"
             "- **Tích hợp Phụ phí Chính thức NYC TLC & Gợi ý Giờ đi:** Kết hợp cước đồng hồ ML với bảng kê các khoản phụ phí thực tế phát sinh "
-            "(đối chiếu 60.000 chuyến 06/2025: khớp đến từng xu 94,1%, sai lệch trung bình 0,11 USD) và chủ động đề xuất khung giờ lân cận có tổng giá cước thấp hơn."
+            "(đối chiếu 60.000 chuyến 06/2025: khớp đến từng xu 94,1%, sai lệch trung bình 0,11 USD) và gợi ý giờ đi dựa trên phụ phí TLC và lịch sử cước của từng tuyến."
         )
 
         with st.expander("📋 Xem bảng số liệu chi tiết của tất cả các Mô hình & Hành trình Liên Quận", expanded=False):
