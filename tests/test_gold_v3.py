@@ -302,3 +302,68 @@ def test_gold_v3_inference_server_returns_gold_v3_error_message_on_400():
     handler.do_POST()
     assert captured["status"] == 400
     assert "Gold-V3" in captured["payload"]["message"]
+
+
+def test_zone_simulator_sends_weather_only_when_entered_manually(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    from nyc_taxi.dashboard import gold_v3_page
+
+    fake_zones = {
+        **GOLD_V3_IDENTITY,
+        "zones": [
+            {"location_id": 161, "borough": "Manhattan", "zone": "Midtown Center", "supported_pickup": True, "supported_dropoff": True},
+            {"location_id": 236, "borough": "Manhattan", "zone": "Upper East Side North", "supported_pickup": True, "supported_dropoff": True},
+        ],
+    }
+    payloads = []
+
+    def fake_predict(_url, payload):
+        payloads.append(dict(payload))
+        m3_w = 19.0 if "temperature_2m" in payload else None
+        return {
+            **GOLD_V3_IDENTITY,
+            "fare_amount_usd": 19.0 if m3_w else 17.8,
+            "metered_ml_estimate_usd": 19.0 if m3_w else 17.8,
+            "m3_weather_estimate_usd": m3_w,
+            "m3_no_weather_estimate_usd": 17.8,
+            "baseline_fare_usd": 16.0,
+            "zone_centroid_distance_km": 3.45,
+            "flat_fare_applied": False,
+            "hourly_curve": None,
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(gold_v3_page, "_load_gold_v3_zones", lambda _url: fake_zones)
+    monkeypatch.setattr(gold_v3_page, "_predict_gold_v3", fake_predict)
+    monkeypatch.setattr(
+        gold_v3_page,
+        "fetch_nyc_hourly_weather",
+        lambda *_a, **_k: {
+            "temperature_2m": 5.0, "precipitation": 1.0, "snowfall": 0.0, "wind_speed_10m": 9.0,
+            "condition_vi": "Mưa nhẹ", "source": "open-meteo-live",
+            "hourly_24h_compact": [{"hour": h} for h in range(24)],
+        },
+    )
+
+    def main():
+        from nyc_taxi.dashboard.gold_v3_page import render_zone_weather_simulator
+        render_zone_weather_simulator("http://fake")
+
+    app = AppTest.from_function(main)
+    app.run(timeout=15)
+    assert not app.exception
+
+    app.button[0].click().run(timeout=15)  # form submit, manual-weather box unticked
+    assert not app.exception
+    assert len(payloads) == 1
+    for key in ("temperature_2m", "precipitation", "snowfall", "wind_speed_10m", "hourly_weather_24h"):
+        assert key not in payloads[0]
+    assert any(m.label == "Biến thể phục vụ" and m.value == "M3-nw" for m in app.metric)
+
+    app.checkbox[0].check()
+    app.button[0].click().run(timeout=15)
+    assert not app.exception
+    assert len(payloads) == 2
+    assert payloads[1]["temperature_2m"] == 22.0
+    assert payloads[1]["wind_speed_10m"] == 12.0
+    assert any(m.label == "Biến thể phục vụ" and m.value == "M3-w" for m in app.metric)

@@ -2,7 +2,7 @@
 
 Provides:
 1. Automatic NYC 24-Hour Weather Lookup (Open-Meteo Live Forecast + Historical Archive
-   with deterministic seasonal fallback & TTL caching so M3-w is always active).
+   with deterministic seasonal fallback & TTL caching; shown for reference only, never priced).
 2. Official NYC TLC Active Surcharge Engine (only surfaces surcharges that actually apply
    to the specific ride, verified against 23.88M trips in `analytics.fact_trip` & `nyc.gov`).
 3. Mapbox Real Driving Distance Refinement (smoothly adjusts intra-zone & detour routes).
@@ -622,6 +622,7 @@ def build_fare_explanation_and_advice(
 
     return {
         "metered_fare_usd": adjusted_metered_usd,
+        "metered_model_label": "M3-nw" if m3_w_usd is None else "M3-w",
         "metered_ml_reference_usd": round(metered_ml_usd, 2),
         "raw_ml_fare_usd": round(raw_fare_usd, 2),
         "distance_delta_usd": distance_delta_usd,
@@ -767,6 +768,7 @@ def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_sugge
 
         w_info = advice.get("weather_info")
         if isinstance(w_info, Mapping):
+            manual_w = w_info.get("source") == "manual-override"
             src_label = (
                 "Dự báo thời tiết thực tế Open-Meteo tại NYC"
                 if w_info.get("source") == "open-meteo-live"
@@ -777,7 +779,7 @@ def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_sugge
                 )
             )
             st.markdown(
-                f"🌦️ **Thời tiết áp dụng (`M3-w`)**: **{w_info.get('condition_vi', 'Khô ráo')}** · "
+                f"🌦️ **{'Thời tiết giả lập (`M3-w`)' if manual_w else 'Thời tiết tại giờ đón (chỉ tham khảo, không tính vào giá)'}**: **{w_info.get('condition_vi', 'Khô ráo')}** · "
                 f"Nhiệt độ `{w_info.get('temperature_2m', 18.0):.1f}°C` · "
                 f"Lượng mưa `{w_info.get('precipitation', 0.0):.1f} mm/h` · "
                 f"Tốc độ gió `{w_info.get('wind_speed_10m', 10.0):.1f} km/h` *({src_label})*"
@@ -796,7 +798,7 @@ def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_sugge
             )
         else:
             rows_md.append(
-                f"- **Cước đồng hồ dự báo (`fare_amount` — Mô hình Spark ML `M3-w`)**: **`{advice['metered_fare_usd']:.2f} USD`**"
+                f"- **Cước đồng hồ dự báo (`fare_amount` — Mô hình Spark ML `{advice['metered_model_label']}`)**: **`{advice['metered_fare_usd']:.2f} USD`**"
             )
             if advice.get("distance_explanation_vi"):
                 rows_md.append(f"  - *↳ {advice['distance_explanation_vi']}*")
@@ -823,8 +825,8 @@ def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_sugge
             st.caption(
                 f"🧠 **Giải thích AI (Counterfactual XAI)**: Cước nền lúc đường thông thoáng `{base_off:.2f} USD` "
                 f"· Mật độ giao thông theo khung giờ `+{t_delta:.2f} USD` "
-                f"· Tác động thời tiết ERA5 `{w_sign} USD` "
-                f"· Tổng phụ phí luật TLC `+{advice['total_surcharges_usd']:.2f} USD`."
+                + (f"· Tác động thời tiết ERA5 `{w_sign} USD` " if advice.get("metered_model_label") == "M3-w" else "")
+                + f"· Tổng phụ phí luật TLC `+{advice['total_surcharges_usd']:.2f} USD`."
             )
 
         curve = advice.get("hourly_total_curve") or []
