@@ -16,7 +16,6 @@ import socket
 import sys
 import traceback
 import unittest
-from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch

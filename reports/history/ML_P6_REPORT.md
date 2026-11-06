@@ -61,7 +61,7 @@ bàn giao ML P6; không cần chạy lại ML để xác nhận docs.
 
 ## 4. Checklist và giới hạn
 
-[PROJECT_HANDOFF_CHECKLIST.md](PROJECT_HANDOFF_CHECKLIST.md) tách bốn nhóm: đã đạt
+[PROJECT_HANDOFF_CHECKLIST.md](../PROJECT_HANDOFF_CHECKLIST.md) tách bốn nhóm: đã đạt
 có bằng chứng; chưa kiểm chứng; chưa triển khai; nâng cao. Bao phủ pipeline,
 analytics/ML/inference/startup/CI, bundle máy mới, bootstrap đầy đủ, cache miss,
 kỳ dữ liệu mới, auto-retraining và PBIX. Không tìm thấy rubric gốc giảng viên,

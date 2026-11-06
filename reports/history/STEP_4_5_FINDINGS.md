@@ -1,6 +1,6 @@
 # STEP 4.5 — Data profiling & timezone decision
 
-Phạm vi: Yellow Taxi từ sáu **source partition** 2025-01 đến 2025-06. Số liệu chi tiết và lineage nằm trong [`step4_5_profile.json`](step4_5_profile.json); profile đọc Silver cho các chuyến được giữ và Bronze cho các chuyến bị loại vì thời lượng. Không sửa Raw, Bronze, Silver hay tạo Gold.
+Phạm vi: Yellow Taxi từ sáu **source partition** 2025-01 đến 2025-06. Số liệu chi tiết và lineage nằm trong [`step4_5_profile.json`](../step4_5_profile.json); profile đọc Silver cho các chuyến được giữ và Bronze cho các chuyến bị loại vì thời lượng. Không sửa Raw, Bronze, Silver hay tạo Gold.
 
 ## 1. Timezone: evidence, inference, assumption
 

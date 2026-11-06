@@ -144,6 +144,7 @@ nyc-taxi-bigdata/
 │   ├── FINAL_REPORT_OUTLINE.md    # Nội dung chi tiết 6 Chương Báo cáo Cuối kỳ
 │   ├── GOLD_V3_TRAINING_REPORT.md # Báo cáo thực nghiệm 5 mô hình ML, Ablation & Drift 2026
 │   ├── POWER_BI_MODEL_PAGE_GUIDE.md
+│   ├── history/                   # Báo cáo theo từng giai đoạn trước Gold V3 (ML P1–P6, PACKAGE, PRETRIP)
 │   └── NYC_Taxi_Dashboard.pbix    # File báo cáo Power BI Desktop kết nối PostgreSQL
 ├── scripts/                       # Các script thực thi ELT (Raw/Bronze/Silver/Gold), nạp DB & ML
 ├── sql/                           # DDL khởi tạo Star Schema, Deferred Indexes & Views
@@ -155,7 +156,7 @@ nyc-taxi-bigdata/
 │   ├── ml/                        # Chuẩn bị mẫu phân tầng, huấn luyện Spark ML & HTTP Server
 │   ├── monitoring/                # Bộ thu thập 5 chỉ số giám sát vận hành Pipeline
 │   └── dashboard/                 # Giao diện Streamlit (Bản đồ Mapbox 2 chiều, Gợi ý giờ khởi hành, Đánh giá ML, Giám sát)
-└── tests/                         # Bộ kiểm thử tự động (1.474 bài test Python + 30 bài test frontend Node.js)
+└── tests/                         # Bộ kiểm thử tự động (1.473 bài test Python + 30 bài test frontend Node.js)
 ```
 
 ---
@@ -210,7 +211,7 @@ python scripts/package_gold_v3_bundle.py
 # Sao lưu PostgreSQL (Schema + Metadata hoặc Full Dump ra thư mục backups/)
 .\scripts\backup.ps1
 
-# Chạy toàn bộ 1.474 bài kiểm thử Python theo đúng profile GitHub Actions CI
+# Chạy toàn bộ 1.473 bài kiểm thử Python theo đúng profile GitHub Actions CI
 python scripts/ci_python.py
 
 # Chạy bộ kiểm thử giao diện người dùng (30 bài test frontend Node.js)

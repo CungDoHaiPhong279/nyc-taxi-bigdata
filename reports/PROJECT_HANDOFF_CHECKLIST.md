@@ -15,9 +15,9 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
 |---|---|
 | Pipeline dữ liệu Jan–Jun/2025 | Raw → Bronze → Silver → Gold → PostgreSQL: checkpoint 23.886.265 facts; dimensions 265/365/4.344, manifest và [load report](postgres_load_report.json). P6 không chạy lại ETL/count toàn fact. |
 | Docker và cách ly bootstrap thử | P6.3 fixture 30 raw → 20 facts có rerun PASS. Sau đó PACKAGE P3 chạy dữ liệu thật Jan–Jun trong `package-test`, đủ 14 stage và đạt READY; SQL khớp 23.886.265 facts, dimensions 265/365/4.344. Rerun đầy đủ của P3 chưa hoàn tất. |
-| Dashboard lịch sử | 4 KPI/3 charts, filters nhất quán, aggregate PostgreSQL READ ONLY; 23.886.265 toàn bộ, January 3.473.175, January+Manhattan 3.087.471; README P4/P4.1 và [P4 report](ML_P4_REPORT.md). |
-| ML pilot và holdout | [P2.1](ML_P2_1_REPORT.md): train110.356/validation29.979; [P3](ML_P3_REPORT.md): June27.310, GBT MAE2,25014USD/RMSE3,52047/R²0,92063, baseline MAE7,90497USD. Cohort/sampling1% seed42 cố định; overlap được kiểm trên sample, không full cohort. |
-| Frozen inference | [Model card](ML_P3_MODEL_CARD.md), [P4](ML_P4_REPORT.md)/[P5](ML_P5_REPORT.md): API8/8 + AppTest/API3/3 parity0USD, đúng preprocessing/model, no latest/fallback; demo lịch sử2025 theo distance, không routing/báo giá hiện tại. |
+| Dashboard lịch sử | 4 KPI/3 charts, filters nhất quán, aggregate PostgreSQL READ ONLY; 23.886.265 toàn bộ, January 3.473.175, January+Manhattan 3.087.471; README P4/P4.1 và [P4 report](history/ML_P4_REPORT.md). |
+| ML pilot và holdout | [P2.1](history/ML_P2_1_REPORT.md): train110.356/validation29.979; [P3](history/ML_P3_REPORT.md): June27.310, GBT MAE2,25014USD/RMSE3,52047/R²0,92063, baseline MAE7,90497USD. Cohort/sampling1% seed42 cố định; overlap được kiểm trên sample, không full cohort. |
+| Frozen inference | [Model card](history/ML_P3_MODEL_CARD.md), [P4](history/ML_P4_REPORT.md)/[P5](history/ML_P5_REPORT.md): API8/8 + AppTest/API3/3 parity0USD, đúng preprocessing/model, no latest/fallback; demo lịch sử2025 theo distance, không routing/báo giá hiện tại. |
 | Startup có inference | P5 hai lượt healthy reuse giữ IDs/StartedAt; artifacts/full hash/drift/ready guard. Stopped/missing/timeout kiểm bằng mock; không dừng services thật. |
 | CI local | P5 Python380PASS/1SQLdeselected, web93PASS/1SQLdeselected, Pester204PASS, Compose14PASS/actionlintPASS; offline, không fitted artifacts/Spark/training mặc định. |
 | CI remote phần ML | Commit **`afbf22c4886e10aaf6a81fe6221b2807154362c9`**, push `main`: [run40001163976](https://github.com/CungDoHaiPhong279/nyc-taxi-bigdata/actions/runs/40001163976) **SUCCESS**, cả3jobs Python/Pester/Compose+dashboard. Đây là bằng chứng remote, không suy từ local; commit cập nhật tài liệu được theo dõi CI riêng. |
@@ -76,7 +76,7 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
   nguyên; không đồng nghĩa một lệnh từ clone mới. Model June đã chốt, không tự
   retrain khi có dữ liệu mới. Các giới hạn cache miss/PBIX/CI remote nêu trên
   giữ nguyên; P1 chưa commit/push hoặc có lượt CI remote cho code mới.
-- Chi tiết/lệnh kiểm chứng tiếp theo: [PACKAGE P1 report](PACKAGE_P1_REPORT.md).
+- Chi tiết/lệnh kiểm chứng tiếp theo: [PACKAGE P1 report](history/PACKAGE_P1_REPORT.md).
 
 ## PACKAGE P2 — cập nhật model distribution
 
@@ -90,7 +90,7 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
 - Gate phân phối model chung ở P1 được thay thế; dự án vẫn chưa chọn license
   tái sử dụng tổng thể/model-specific. Bundle không được bake vào images.
 - Full bootstrap/acquisition/rerun dữ liệu thật trên máy mới vẫn chưa E2E; model
-  bundle test/PLAN không thay chứng cứ đó. Chi tiết [PACKAGE P2 report](PACKAGE_P2_REPORT.md).
+  bundle test/PLAN không thay chứng cứ đó. Chi tiết [PACKAGE P2 report](history/PACKAGE_P2_REPORT.md).
 
 ## PACKAGE P3 — cập nhật kiểm chứng và dọn môi trường thử
 
@@ -102,4 +102,4 @@ không tự động được xem là yêu cầu bắt buộc của thầy.
   skip/idempotency PASS và chưa gọi đây là một lượt liên tục từ clone/máy trống.
 - Containers, volumes, networks, runtime và image/cache riêng của package-test đã
   được dọn có chọn lọc; hệ thống thật và PBIX được bảo toàn. Bằng chứng/tóm tắt:
-  [PACKAGE P3 report](PACKAGE_P3_REPORT.md).
+  [PACKAGE P3 report](history/PACKAGE_P3_REPORT.md).

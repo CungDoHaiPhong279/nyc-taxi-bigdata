@@ -594,11 +594,11 @@ def build_fare_explanation_and_advice(
 
     current_hour = int(pickup_dt.hour)
     offpeak_metered_min = min(pt["metered_fare_usd"] for pt in hourly_total_curve)
-    time_of_day_traffic_delta_usd = (
+    time_of_day_delta_usd = (
         0.0 if flat_fare else round(max(0.0, adjusted_metered_usd - weather_delta_usd - offpeak_metered_min), 2)
     )
     base_offpeak_route_usd = (
-        70.0 if flat_fare else round(adjusted_metered_usd - weather_delta_usd - time_of_day_traffic_delta_usd, 2)
+        70.0 if flat_fare else round(adjusted_metered_usd - weather_delta_usd - time_of_day_delta_usd, 2)
     )
 
     nearest_better = _find_nearest_better_hour(
@@ -625,9 +625,9 @@ def build_fare_explanation_and_advice(
         "has_rush_hour_surcharge": surcharge_info["has_rush_hour_surcharge"],
         "has_overnight_surcharge": surcharge_info["has_overnight_surcharge"],
         "flat_fare_applied": flat_fare,
-        "xai_components": {
+        "fare_breakdown": {
             "base_route_offpeak_usd": base_offpeak_route_usd,
-            "time_of_day_traffic_delta_usd": time_of_day_traffic_delta_usd,
+            "time_of_day_delta_usd": time_of_day_delta_usd,
             "weather_delta_usd": weather_delta_usd,
             "tlc_surcharges_usd": total_surcharges_usd,
         },
@@ -812,11 +812,11 @@ def render_smart_fare_advisor_panel(advice: Mapping[str, Any], *, on_apply_sugge
         )
         st.markdown("\n".join(rows_md))
 
-        xai = advice.get("xai_components") or {}
-        if not advice.get("flat_fare_applied") and xai:
-            w_delta = float(xai.get("weather_delta_usd", 0.0))
-            t_delta = float(xai.get("time_of_day_traffic_delta_usd", 0.0))
-            base_off = float(xai.get("base_route_offpeak_usd", advice["metered_fare_usd"]))
+        breakdown = advice.get("fare_breakdown") or {}
+        if not advice.get("flat_fare_applied") and breakdown:
+            w_delta = float(breakdown.get("weather_delta_usd", 0.0))
+            t_delta = float(breakdown.get("time_of_day_delta_usd", 0.0))
+            base_off = float(breakdown.get("base_route_offpeak_usd", advice["metered_fare_usd"]))
             w_sign = f"+{w_delta:.2f}" if w_delta >= 0 else f"-{abs(w_delta):.2f}"
             st.caption(
                 f"🧮 **Phân tách theo mô hình**: Cước thấp nhất trong ngày của tuyến `{base_off:.2f} USD` "
