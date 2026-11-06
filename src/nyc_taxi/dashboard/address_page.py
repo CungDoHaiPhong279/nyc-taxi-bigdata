@@ -642,7 +642,7 @@ def render_page() -> None:
                 "thời tiết không được tính vào giá."
             )
             use_weather = st.checkbox(
-                "🌦️ Tùy chỉnh thủ công thông số thời tiết (Mặc định: Tự động lấy dự báo thời tiết NYC thực tế theo giờ đón)",
+                "🌦️ Tùy chỉnh thủ công thông số thời tiết để mô phỏng (Mặc định: giá không dùng thời tiết)",
                 value=False,
                 key="address_gold_v3_use_weather",
             )
@@ -845,7 +845,7 @@ def render_page() -> None:
             if stored.get("model_version") == "gold-v3":
                 st.write(
                     "Mô hình Gold V3 (Spark ML GBTRegressor) huấn luyện trên tầng Medallion Gold 2025 (23,88 triệu chuyến). "
-                    "Đầu vào gồm vùng đón/trả (263 Taxi Zones), khoảng cách tâm vùng Haversine Centroid, chu kỳ giờ/thứ, lịch nghỉ lễ OPM và thời tiết ERA5. "
+                    "Đầu vào gồm vùng đón/trả (263 Taxi Zones), khoảng cách tâm vùng Haversine Centroid, chu kỳ giờ/thứ và lịch nghỉ lễ OPM; thời tiết chỉ dùng khi bạn tự nhập. "
                     "Tuyến JFK (Zone 132) ↔ Manhattan áp dụng quy tắc cước xe cố định 70.00 USD (Ratecode 2) cộng thuế/phí TLC."
                 )
                 st.write({
