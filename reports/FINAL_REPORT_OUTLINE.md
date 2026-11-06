@@ -13,8 +13,8 @@
 | :--- | :--- | :--- |
 | **Bài giảng 3 — Các loại Cơ sở dữ liệu & Báo cáo Giữa kỳ Chọn Database**:<br>- Kiến trúc Hybrid Storage: **Data Lake (Parquet)** + **Serving DB (PostgreSQL 16)**.<br>- Mô hình **Star Schema** (`fact_trip`, `dim_location`, `dim_weather`, `dim_calendar`, `etl_load_log`).<br>- Tạo Index tối ưu sau khi nạp (`postload/create_indexes.sql`) và Chiến lược Sao lưu (`Backup & Recovery`). | - Tầng Data Lake: `data/raw/`, `data/bronze/`, `data/silver/`, `data/gold/`<br>- Tầng Serving DB: `sql/01_create_schema.sql`, `sql/02_create_tables.sql`, `sql/postload/create_indexes.sql`, `sql/03_gold_v3_predictions.sql`<br>- Script nạp: `scripts/load_postgres.py`, `scripts/write_gold_v3_predictions.py`<br>- Script sao lưu tự động: `scripts/backup.ps1` | - **`23.886.265` dòng** trong `analytics.fact_trip` (`0` dòng thất thoát so với Silver/Gold).<br>- `265` vùng `dim_location`, `365` ngày `dim_calendar`, `4.344` bản ghi giờ `dim_weather`.<br>- **`170.395` dòng** dự đoán trong `analytics.fact_fare_prediction` + `24` dòng chỉ số trong `analytics.model_metrics`. |
 | **Bài giảng 4 — Pipeline Dữ liệu Lớn & Báo cáo Thiết kế Data Pipeline**:<br>- Kiến trúc **ELT Medallion 4 tầng (`Raw -> Bronze -> Silver -> Gold`)** bằng **Apache Spark (PySpark)**.<br>- Tích hợp đa nguồn: **NYC TLC Yellow Taxi + Thời tiết ERA5 + Lịch nghỉ lễ + Bản đồ Taxi Zones**.<br>- Điều phối tự động (**Airflow DAG**) & **5 Metrics Giám sát Pipeline**. | - Pipeline PySpark: `scripts/download_raw_data.py`, `scripts/build_bronze.py`, `scripts/build_silver.py`, `scripts/build_gold.py`<br>- Điều phối Airflow: `airflow/dags/nyc_taxi_elt_ml_dag.py`<br>- Module giám sát 5 Metrics: `src/nyc_taxi/monitoring/metrics.py` | - `24.083.384` dòng Raw/Bronze → làm sạch `197.119` dòng bẩn (`0,82%`, lý do chính: `invalid_duration`) → còn **`23.886.265` dòng** hợp lệ.<br>- Tỷ lệ khớp thời tiết ERA5 (`weather_matched`): **`99,92%`** (`23.866.019 / 23.886.265`).<br>- `6/6` phân vùng fact + `3/3` bảng chiều nạp PostgreSQL trạng thái `loaded` (`100%`), `row_delta = 0`. |
-| **Phân tích Chuyên sâu & Học máy Phân tán (Spark MLlib + MLflow)**:<br>- Huấn luyện trực tiếp từ dữ liệu **Gold 2025 đã tích hợp Thời tiết ERA5** (`gold-v3`).<br>- So sánh đa mô hình (`Baseline B0`, `LinearRegression M1`, `RandomForest M2`, `GBTRegressor M3` có thời tiết & `M3-nw` không thời tiết).<br>- Đánh giá khả năng tổng quát hóa sang năm hiện tại **2026**. | - Chuẩn bị dữ liệu Gold V3: `src/nyc_taxi/ml/gold_v3_data.py`, `scripts/prepare_gold_v3.py`<br>- Huấn luyện Spark ML & MLflow: `src/nyc_taxi/ml/gold_v3_training.py`, `scripts/train_gold_v3.py`<br>- Báo cáo kết quả: `reports/GOLD_V3_TRAINING_REPORT.md`<br>- MLflow Experiment: `nyc-taxi-fare-gold-v3` (ID `2`, 5 runs). | - Phủ **100% Zone hoạt động** trong tập Train (`258/258` Pickup, `259/259` Dropoff) trên mẫu `507.259` dòng.<br>- Quy tắc cố định JFK ↔ Manhattan (`ratecode_id = 2`): **`99,9864%`** khớp **70,00 USD** (`574.524 / 574.602` chuyến).<br>- Tập Test 06/2025: **MAE `= 2,92 USD`**, **`R² = 0,8685`** (cải thiện `R² +30,6%` so với V2.2 cũ).<br>- Kiểm tra năm 2026 (`721.513` chuyến): **MAE `= 3,08 USD`**, **`R² = 0,8297`**. |
-| **Bài giảng Hạ tầng Ứng dụng Dữ liệu (Microservices, Docker, CI/CD, Kubernetes)**:<br>- Tách biệt **Data Processing (`worker`)**, **Model Serving (`fare-inference`)**, **Web UI (`dashboard`)**, **Tracking (`mlflow`)**, **OLAP DB (`postgres`)**.<br>- Đóng gói Container, kiểm thử tự động CI/CD và cấu hình **Kubernetes (Deployment, Service, HPA, Probes)**. | - Docker & Compose: `Dockerfile.spark`, `Dockerfile.inference`, `Dockerfile.dashboard`, `docker-compose.yml`, `docker-compose.gold-v3.yml`<br>- Suy luận Microservice: `src/nyc_taxi/ml/inference_server.py`, `src/nyc_taxi/ml/gold_v3_inference.py`<br>- Giao diện Streamlit, Bản đồ 2 chiều & Gợi ý giờ khởi hành: `src/nyc_taxi/dashboard/gold_v3_page.py`, `src/nyc_taxi/dashboard/address_page.py`, `src/nyc_taxi/dashboard/ai_fare_advisor.py`, `src/nyc_taxi/dashboard/interactive_map.py`, `src/nyc_taxi/dashboard/interactive_map_frontend/`<br>- Kubernetes Manifest: `k8s/fare-inference-deployment.yaml`<br>- Bộ kiểm thử CI/CD: `scripts/ci_python.py`, `tests/test_address_frontend.js`, `tests/test_route_map_frontend.js` | - 4 container chạy độc lập với Healthcheck (`/health`, `/ready`, `pg_isready`, `_stcore/health`).<br>- Gói mô hình đóng băng `distribution/models/gold-v3/` (`24` file, kiểm chứng SHA-256).<br>- **1.479 bài kiểm thử tự động đạt 100% PASS** (`1.449` bài test Python + `30` bài test giao diện Node.js).<br>- Hướng dẫn tích hợp trang mới trên Power BI: `reports/POWER_BI_MODEL_PAGE_GUIDE.md`. |
+| **Phân tích Chuyên sâu & Học máy Phân tán (Spark MLlib + MLflow)**:<br>- Huấn luyện trực tiếp từ dữ liệu **Gold 2025 đã tích hợp Thời tiết ERA5** (`gold-v3`).<br>- So sánh đa mô hình (`Baseline B0`, `LinearRegression M1`, `RandomForest M2`, `GBTRegressor M3` có thời tiết & `M3-nw` không thời tiết).<br>- Đánh giá khả năng tổng quát hóa sang năm hiện tại **2026**. | - Chuẩn bị dữ liệu Gold V3: `src/nyc_taxi/ml/gold_v3_data.py`, `scripts/prepare_gold_v3.py`<br>- Huấn luyện Spark ML & MLflow: `src/nyc_taxi/ml/gold_v3_training.py`, `scripts/train_gold_v3.py`<br>- Báo cáo kết quả: `reports/GOLD_V3_TRAINING_REPORT.md`<br>- MLflow Experiment: `nyc-taxi-fare-gold-v3` (ID `2`, 5 runs). | - Phủ **100% Zone hoạt động** trong tập Train (`258/258` Pickup, `259/259` Dropoff) trên mẫu `507.259` dòng.<br>- Quy tắc cố định JFK ↔ Manhattan (`ratecode_id = 2`): **`99,9864%`** khớp **70,00 USD** (`574.524 / 574.602` chuyến).<br>- Tập Test 06/2025, chuyến đồng hồ chuẩn: **MAE `= 2,92 USD`**, **`R² = 0,8685`**; mọi loại chuyến: **MAE `= 4,06 USD`**, **`R² = 0,753`** (cải thiện `R² +30,6%` so với V2.2 cũ).<br>- Kiểm tra năm 2026 (`721.513` chuyến): **MAE `= 3,08 USD`**, **`R² = 0,8297`**. |
+| **Bài giảng Hạ tầng Ứng dụng Dữ liệu (Microservices, Docker, CI/CD, Kubernetes)**:<br>- Tách biệt **Data Processing (`worker`)**, **Model Serving (`fare-inference`)**, **Web UI (`dashboard`)**, **Tracking (`mlflow`)**, **OLAP DB (`postgres`)**.<br>- Đóng gói Container, kiểm thử tự động CI/CD và cấu hình **Kubernetes (Deployment, Service, HPA, Probes)**. | - Docker & Compose: `Dockerfile.spark`, `Dockerfile.inference`, `Dockerfile.dashboard`, `docker-compose.yml`, `docker-compose.gold-v3.yml`<br>- Suy luận Microservice: `src/nyc_taxi/ml/inference_server.py`, `src/nyc_taxi/ml/gold_v3_inference.py`<br>- Giao diện Streamlit, Bản đồ 2 chiều & Gợi ý giờ khởi hành: `src/nyc_taxi/dashboard/gold_v3_page.py`, `src/nyc_taxi/dashboard/address_page.py`, `src/nyc_taxi/dashboard/ai_fare_advisor.py`, `src/nyc_taxi/dashboard/interactive_map.py`, `src/nyc_taxi/dashboard/interactive_map_frontend/`<br>- Kubernetes Manifest: `k8s/fare-inference-deployment.yaml`<br>- Bộ kiểm thử CI/CD: `scripts/ci_python.py`, `tests/test_address_frontend.js`, `tests/test_route_map_frontend.js` | - 4 container chạy độc lập với Healthcheck (`/health`, `/ready`, `pg_isready`, `_stcore/health`).<br>- Gói mô hình đóng băng `distribution/models/gold-v3/` (`24` file, kiểm chứng SHA-256).<br>- **1.502 bài kiểm thử tự động đạt 100% PASS** (`1.472` bài test Python + `30` bài test giao diện Node.js).<br>- Hướng dẫn tích hợp trang mới trên Power BI: `reports/POWER_BI_MODEL_PAGE_GUIDE.md`. |
 
 ---
 
@@ -30,7 +30,7 @@
   3. Dữ liệu không gian 263 vùng Taxi Zones (`GeoJSON` polygons & `CSV` lookup).
   4. Dữ liệu lịch nghỉ lễ Liên bang Mỹ (`JSON` — US Federal Holidays & Weekends).
 - **Velocity & Veracity (Tốc độ & Độ tin cậy)**: Làm sạch `197.119` bản ghi lỗi ở tầng Silver (`0,82%`, chủ yếu do thời gian trả khách nhỏ hơn hoặc bằng thời gian đón khách `invalid_duration`) và lọc các bản ghi nhiễu cực đoan (cước âm, đồng hồ nhảy số `863.372 USD`, mã vùng `264/265` không xác định) khi tuyển chọn tập huấn luyện Học máy.
-- **Value (Giá trị mang lại)**: Cung cấp Kho dữ liệu Star Schema phục vụ BI (Power BI & Streamlit) và dịch vụ AI dự báo giá cước trước chuyến đi với sai số trung vị chỉ `2,05 USD/chuyến`.
+- **Value (Giá trị mang lại)**: Cung cấp Kho dữ liệu Star Schema phục vụ BI (Power BI & Streamlit) và dịch vụ AI dự báo giá cước trước chuyến đi với sai số trung vị `2,05 USD/chuyến` trên chuyến đồng hồ chuẩn (`2,36 USD/chuyến` trên mọi loại chuyến).
 
 ---
 
@@ -53,7 +53,7 @@
 
 2.3. **Tối ưu hóa Truy vấn & Sao lưu**:
 - Áp dụng kỹ thuật **Deferred Indexing** (tắt index khi `COPY` hàng loạt 23,88 triệu dòng, sau đó tạo B-Tree index bằng `sql/postload/create_indexes.sql`).
-- Truy vấn Dashboard sử dụng tiền tổng hợp theo cụm (`WITH buckets AS (...)`) kết hợp `GROUP BY GROUPING SETS` trong giao dịch `REPEATABLE READ, READ ONLY`, giúp tổng hợp 23,88 triệu dòng trong `~1–2 giây`.
+- Truy vấn Dashboard sử dụng tiền tổng hợp theo cụm (`WITH buckets AS (...)`) kết hợp `GROUP BY GROUPING SETS` trong giao dịch `REPEATABLE READ, READ ONLY`, nhờ đó KPI tổng hợp 23,88 triệu dòng mất `1,5–4,6 giây` khi đã có cache và `~27 giây` ở lần đầu. Bảng đa nguồn chậm hơn: `84–111 giây` khi lọc một tháng và vượt giới hạn `180 giây` khi không lọc, lúc đó giao diện báo rõ và hiện số tổng hợp cố định.
 
 ---
 
@@ -66,21 +66,21 @@
 
 3.2. **Kết quả Phân tích Đa nguồn (Taxi × Thời tiết ERA5 × Lịch Nghỉ lễ)**:
 
-| Nhóm Phân tích Đa nguồn | Phân loại Chi tiết | Tỷ trọng Chuyến (%) | Giá cước TB (USD) | Khoảng cách Tâm vùng TB (km) |
+| Nhóm Phân tích Đa nguồn | Phân loại Chi tiết | Tỷ trọng Chuyến (%) | Giá cước TB (USD) | Quãng đường TB (km, bỏ bản ghi > 100 dặm) |
 | :--- | :--- | ---: | ---: | ---: |
-| **Theo Điều kiện Thời tiết ERA5** | 1. Trời quang / Khô ráo (`0 mm/h`) | `74,6%` | `16,71 USD` | `3,17 km` |
-| **Theo Điều kiện Thời tiết ERA5** | 2. Mưa nhỏ & Mưa vừa (`< 2 mm/h`) | `23,6%` | `16,87 USD` | `3,07 km` |
-| **Theo Điều kiện Thời tiết ERA5** | 3. Mưa lớn / Có tuyết (`>= 2 mm/h`) | `1,8%` | `16,29 USD` | `2,79 km` |
-| **Theo Lịch Nghỉ lễ (US Calendar)** | 1. Ngày làm việc (`Thứ 2 – Thứ 6`) | `71,3%` | `16,87 USD` | `3,09 km` |
-| **Theo Lịch Nghỉ lễ (US Calendar)** | 2. Cuối tuần (`Thứ 7 & Chủ Nhật`) | `26,1%` | `16,43 USD` | `3,26 km` |
-| **Theo Lịch Nghỉ lễ (US Calendar)** | 3. Ngày nghỉ lễ Liên bang (`US Holiday`) | `2,6%` | `16,34 USD` | `3,32 km` |
+| **Theo Điều kiện Thời tiết ERA5** | 1. Trời quang / Khô ráo (`0 mm/h`) | `81,2%` | `17,91 USD` | `5,33 km` |
+| **Theo Điều kiện Thời tiết ERA5** | 2. Mưa nhỏ & Mưa vừa (`< 2 mm/h`) | `15,1%` | `18,05 USD` | `5,24 km` |
+| **Theo Điều kiện Thời tiết ERA5** | 3. Mưa lớn / Có tuyết (`>= 2 mm/h`) | `3,7%` | `17,06 USD` | `4,86 km` |
+| **Theo Lịch Nghỉ lễ (US Calendar)** | 1. Ngày làm việc (`Thứ 2 – Thứ 6`) | `68,7%` | `17,90 USD` | `5,15 km` |
+| **Theo Lịch Nghỉ lễ (US Calendar)** | 2. Cuối tuần (`Thứ 7 & Chủ Nhật`) | `29,1%` | `17,74 USD` | `5,59 km` |
+| **Theo Lịch Nghỉ lễ (US Calendar)** | 3. Ngày nghỉ lễ Liên bang (`US Holiday`) | `2,2%` | `19,95 USD` | `6,22 km` |
 
 3.3. **5 Chỉ số Giám sát Pipeline (DataOps & MLOps Monitoring)**:
 1. **Metric 1 — Trạng thái tác vụ ETL (`Job Status`)**: `6/6` phân vùng tháng (`2025-01` → `2025-06`) đạt trạng thái `LOADED` (`100% Healthy`).
 2. **Metric 2 — Thời gian xử lý (`Processing Time`)**: Tổng thời gian nạp PostgreSQL `5.184,25 giây` (trung bình `864,0 giây/tháng`); chuẩn bị mẫu ML `28,3 giây`; huấn luyện 5 mô hình Spark ML `100,2 giây`.
 3. **Metric 3 — Đối soát số dòng (`Row Reconciliation`)**: `source_row_count = 23.886.265` khớp tuyệt đối `loaded_row_count = 23.886.265` (`row_delta = 0`, Zero-Loss).
 4. **Metric 4 — Tỷ lệ lọc dữ liệu bẩn (`Silver Reject Rate`)**: `0,82%` (`197.119 / 24.083.384` dòng).
-5. **Metric 5 — Sức khỏe Dịch vụ AI & Tài nguyên (`Serving Health & RAM`)**: Endpoint `http://fare-inference:8000/ready` phản hồi `200 OK`, mô hình đóng băng `fit_calls = 0`, tiêu thụ `~709 MB / 3072 MB RAM` (container suy luận) và `~149 MB / 1024 MB RAM` (container giao diện).
+5. **Metric 5 — Sức khỏe Dịch vụ AI & Tài nguyên (`Serving Health & RAM`)**: Endpoint `http://fare-inference:8000/ready` phản hồi `200 OK`, mô hình đóng băng `fit_calls = 0`, tiêu thụ `~850–930 MB / 3072 MB RAM` (container suy luận) và `~149 MB / 1024 MB RAM` (container giao diện).
 
 ---
 
@@ -90,7 +90,7 @@
 - **Bảo toàn 100% vùng hoạt động**: Kỹ thuật lấy mẫu phân tầng bổ sung (`rare_zone_stratified_rows_added = 4.469`) đảm bảo tập Train phủ đủ `258/258` vùng đón và `259/259` vùng trả có phát sinh chuyến chuẩn, kết hợp fallback về toàn bộ `263/263` vùng bản đồ NYC.
 - **Quy tắc nghiệp vụ Sân bay JFK ↔ Manhattan (`Ratecode 2`)**: Phát hiện `574.524 / 574.602` chuyến (`99,9864%`) tuân theo mức giá cố định `70,00 USD` của NYC TLC, được tích hợp thành quy tắc chính xác tuyệt đối trước khi gọi cây quyết định.
 
-4.2. **Bảng So sánh Thực nghiệm 5 Mô hình trên Tập Kiểm thử Độc lập (Holdout Test 06/2025 — `80.770` chuyến)**:
+4.2. **Bảng So sánh Thực nghiệm 6 Cấu hình Mô hình trên Tập Kiểm thử Độc lập (Holdout Test 06/2025 — `80.770` chuyến đồng hồ chuẩn `ratecode_id = 1`; huấn luyện trên `336.864` dòng)**:
 
 | Thứ tự | Mã Mô hình | Tên Mô hình & Cấu hình | Dùng Thời tiết ERA5 | MAE (USD) ↓ | RMSE (USD) ↓ | Độ chính xác R² ↑ | Sai số Trung vị P50 (USD) ↓ |
 | :---: | :--- | :--- | :--- | :---: | ---: | ---: | ---: | ---: |
@@ -101,7 +101,20 @@
 | 5 | `M3_gbt_weather` | Gradient Boosted Trees + Thời tiết ERA5 (`M3-w`) | Có | `2,99 USD` | `4,60 USD` | `86,52%` | `2,11 USD` |
 | **6** | **`M3_nw_gbt_no_weather`** | **GBT Tối ưu Không cần Thời tiết (`M3-nw` — Đang dùng)** | **Không** | **`2,92 USD`** | **`4,54 USD`** | **`86,85%`** | **`2,05 USD`** |
 
-4.3. **Bảng Kiểm chứng Độ ổn định trên Dữ liệu Tương lai Năm 2026 (Out-of-Time Drift — `721.513` chuyến)**:
+4.3. **Phạm vi của các con số**: Bảng 4.2 chỉ gồm chuyến đồng hồ chuẩn. Chấm mẫu ngẫu nhiên 5% (`197.930` chuyến) của `3.946.190` chuyến hợp lệ tháng 06/2025 bằng `M3-nw` + quy tắc JFK cho kết quả:
+
+| Nhóm chuyến | Tỷ trọng | MAE (USD) | RMSE (USD) | R² | P50 (USD) |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| **Mọi loại chuyến** | **`100%`** | **`4,06`** | **`8,18`** | **`75,3%`** | **`2,36`** |
+| Đồng hồ chuẩn (`ratecode_id = 1`) | `69,3%` | `2,93` | `4,60` | `86,5%` | `2,04` |
+| Không có ratecode (`NULL`) | `25,5%` | `5,58` | `8,25` | `50,7%` | `3,91` |
+| `ratecode_id = 2`, tuyến JFK ↔ Manhattan (quy tắc 70 USD) | `2,6%` | `0,00` | `0,00` | — | `0,00` |
+| `ratecode_id = 2`, tuyến khác | `0,2%` | `44,01` | `49,13` | — | `57,25` |
+| Ratecode khác (`3, 4, 5, 6, 99`) | `2,3%` | `22,92` | `36,35` | `-23,3%` | `14,55` |
+
+Nhóm `ratecode_id = 1` ra `2,93 USD`, khớp với `2,92 USD` của bảng 4.2, nên cách đo đáng tin. Sai số tăng chủ yếu vì chuyến không có ratecode và các ratecode đặc biệt nằm ngoài phạm vi huấn luyện. Tái lập bằng `scripts/eval_all_ratecodes_sample.py` và `scripts/eval_all_ratecodes_score.py`.
+
+4.4. **Bảng Kiểm chứng Độ ổn định trên Dữ liệu Tương lai Năm 2026 (Out-of-Time Drift — `721.513` chuyến)**:
 
 | Giai đoạn Kiểm chứng Năm 2026 | Số lượng Chuyến | MAE — Thống kê B0 (USD) | MAE — Mô hình AI Gold V3 (USD) | RMSE — Gold V3 (USD) | Độ chính xác R² — Gold V3 | P50 — Gold V3 (USD) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -109,6 +122,8 @@
 | **Tháng 07/2026** (`drift_2026-07`) | `235.025` | `3,48 USD` | **`3,02 USD`** | `4,78 USD` | `84,97%` | `2,10 USD` |
 | **Tháng 08/2026** (`drift_2026-08`) | `217.949` | `3,36 USD` | **`2,90 USD`** | `4,52 USD` | **`87,10%`** | **`2,04 USD`** |
 | **Tổng hợp 3 tháng Năm 2026** | **`721.513`** | `3,62 USD` | **`3,08 USD`** | `5,33 USD` | **`82,97%`** | **`2,11 USD`** |
+
+Tập `721.513` chuyến năm 2026 lấy từ `.sandbox/pretrip-v2/pilot-2026-06-08-v23-01`, hiện không còn trên máy nên các số 2026 được giữ theo lần chạy gốc và chưa tái lập được.
 
 ---
 
@@ -127,12 +142,12 @@
   - **Tab 2 (`📊 Độ chính xác & So sánh Mô hình`)**: 4 thẻ KPI kết quả + 3 Sơ đồ trực quan (So sánh MAE 6 cấu hình có nhãn số trên cột; Đường Giá thực tế vs Giá AI dự đoán theo 24 giờ; Biểu đồ cột đôi Kiểm chứng Năm 2026).
   - **Tab 3 (`🩺 Giám sát Hệ thống & Dữ liệu`)**: Sơ đồ Luồng xử lý 4 bước Medallion + 5 Thẻ chỉ số vận hành + 2 Sơ đồ cột theo tháng (Sản lượng chuyến & Thời gian nạp PostgreSQL).
 5.3. **Chiến lược Đảm bảo Chất lượng & Kiểm thử Tự động (Automated Quality Assurance & CI/CD)**:
-- Kiểm thử toàn diện 2 tầng với tổng cộng **1.479 bài test tự động** (đạt tỷ lệ vượt qua **100% PASS**):
-  - **Tầng Backend Python (1.449 bài test)**: Thực thi qua `python scripts/ci_python.py` (Pytest + Streamlit AppTest) bao phủ pipeline PySpark Medallion, Star Schema PostgreSQL, đối soát số dòng (`row_delta = 0`), suy luận mô hình đóng băng (`fare-inference:8000`), Gợi ý giờ khởi hành (Smart Fare Advisor) và phân giải không gian Taxi Zones.
+- Kiểm thử toàn diện 2 tầng với tổng cộng **1.502 bài test tự động** (đạt tỷ lệ vượt qua **100% PASS**, chưa tính các bộ Pester, Spark và PostgreSQL trực tiếp chạy riêng):
+  - **Tầng Backend Python (1.472 bài test)**: Thực thi qua `python scripts/ci_python.py` (Pytest + Streamlit AppTest) bao phủ pipeline PySpark Medallion, Star Schema PostgreSQL, đối soát số dòng (`row_delta = 0`), suy luận mô hình đóng băng (`fare-inference:8000`), Gợi ý giờ khởi hành (Smart Fare Advisor) và phân giải không gian Taxi Zones.
   - **Tầng Frontend Web / Mapbox (30 bài test Node.js)**: Thực thi qua `node --test tests/test_address_frontend.js tests/test_route_map_frontend.js` bao phủ tương tác bản đồ, debounce gõ địa chỉ, cô lập iframe an toàn, xử lý ghim A/B và cơ chế đồng bộ 2 chiều `external_sync`.
 
 ---
 
 ### Chương 6: Kết luận và Hướng phát triển
-- Hệ thống đã giải quyết trọn vẹn bài toán tích hợp dữ liệu lớn từ `24,08 triệu` bản ghi thô đa nguồn sang kho dữ liệu phân tích Star Schema với độ chính xác đối soát tuyệt đối (`Zero-Loss`), đồng thời nâng độ chính xác dự báo giá cước trước chuyến đi từ `R² = 66,5%` (bản cũ) lên **`R² = 86,85%`** trên tập Holdout 2025 và duy trì **`R² = 82,97%`** trên `721.513` chuyến của năm 2026.
+- Hệ thống đã giải quyết trọn vẹn bài toán tích hợp dữ liệu lớn từ `24,08 triệu` bản ghi thô đa nguồn sang kho dữ liệu phân tích Star Schema với độ chính xác đối soát tuyệt đối (`Zero-Loss`), đồng thời nâng độ chính xác dự báo giá cước trước chuyến đi từ `R² = 66,5%` (bản cũ) lên **`R² = 86,85%`** trên chuyến đồng hồ chuẩn của tập Holdout 2025 (`R² = 75,3%` trên mọi loại chuyến) và duy trì **`R² = 82,97%`** trên `721.513` chuyến của năm 2026.
 - Giao diện người dùng được nâng cấp lên trải nghiệm đặt xe 2 chiều hiện đại tương đương các ứng dụng gọi xe thương mại (Uber/Grab), hoàn thiện toàn diện cả về mặt kỹ thuật kỹ thuật dữ liệu lớn, học máy phân tán, và sản phẩm phần mềm thực tế sẵn sàng chuyển giao.

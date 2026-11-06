@@ -391,9 +391,10 @@ def render_page() -> None:
             "hoặc **gõ tìm địa chỉ** để tự động nhận diện khu vực (263 NYC Taxi Zones), vẽ lộ trình lái xe thực tế và dự báo giá cước bằng **Gold V3 (Spark GBTRegressor)**."
         )
         st.caption(
-            "Mô hình được huấn luyện từ 23,88 triệu chuyến xe tầng Medallion Gold 2025 "
+            "Mô hình được huấn luyện trên mẫu 336.864 chuyến (01–04/2025) rút từ tầng Medallion Gold 23,88 triệu chuyến "
             "(kết hợp dữ liệu Taxi + Thời tiết ERA5 + Lịch nghỉ lễ + Bản đồ vùng), đạt sai số trung bình "
-            "MAE = 2.92 USD (R² = 86.9%) trên tập kiểm thử 2025 và MAE = 3.08 USD (R² = 83.0%) trên dữ liệu thực tế năm 2026."
+            "MAE = 2.92 USD (R² = 86.9%) với chuyến đồng hồ chuẩn trên tập kiểm thử 2025, MAE = 4.06 USD (R² = 75.3%) với mọi loại chuyến, "
+            "và MAE = 3.08 USD (R² = 83.0%) trên dữ liệu năm 2026."
         )
     elif is_v22:
         st.markdown("**Cước đồng hồ tiêu chuẩn · USD · chưa gồm tip, tolls và phụ phí.**")
@@ -844,7 +845,7 @@ def render_page() -> None:
             st.caption(f"{stored['pickup_datetime']} NYC")
             if stored.get("model_version") == "gold-v3":
                 st.write(
-                    "Mô hình Gold V3 (Spark ML GBTRegressor) huấn luyện trên tầng Medallion Gold 2025 (23,88 triệu chuyến). "
+                    "Mô hình Gold V3 (Spark ML GBTRegressor) huấn luyện trên mẫu 336.864 chuyến 01–04/2025 của tầng Medallion Gold (23,88 triệu chuyến). "
                     "Đầu vào gồm vùng đón/trả (263 Taxi Zones), khoảng cách tâm vùng Haversine Centroid, chu kỳ giờ/thứ và lịch nghỉ lễ OPM; thời tiết chỉ dùng khi bạn tự nhập. "
                     "Tuyến JFK (Zone 132) ↔ Manhattan áp dụng quy tắc cước xe cố định 70.00 USD (Ratecode 2) cộng thuế/phí TLC."
                 )

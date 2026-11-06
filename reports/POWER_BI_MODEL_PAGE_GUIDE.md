@@ -9,7 +9,7 @@ Tài liệu này hướng dẫn từng bước để thêm trang **"Model Evalua
 Giai đoạn **G3** đã bổ sung 2 bảng và 1 view vào cơ sở dữ liệu PostgreSQL (`localhost:5432`, database `nyc_taxi`, schema `analytics`):
 
 1. **`analytics.model_metrics`**:
-   - Lưu kết quả đánh giá định lượng (`MAE`, `RMSE`, `R2`, `P50`, `P90`, `P95`) của cả **5 cấu hình mô hình** (`B0_global_median`, `B0_hierarchical_median`, `M1_linear_regression`, `M2_random_forest`, `M3_gbt_weather`, `M3_nw_gbt_no_weather`) trên các tập `train` (01–04/2025), `validation` (05/2025), `test` (06/2025), cùng kết quả kiểm tra độ trôi thời gian năm 2026 (`drift_2026-06`, `drift_2026-07`, `drift_2026-08`).
+   - Lưu kết quả đánh giá định lượng (`MAE`, `RMSE`, `R2`, `P50`, `P90`, `P95`) của cả **6 cấu hình mô hình** (`B0_global_median`, `B0_hierarchical_median`, `M1_linear_regression`, `M2_random_forest`, `M3_gbt_weather`, `M3_nw_gbt_no_weather`) trên các tập `train` (01–04/2025), `validation` (05/2025), `test` (06/2025), cùng kết quả kiểm tra độ trôi thời gian năm 2026 (`drift_2026-06`, `drift_2026-07`, `drift_2026-08`).
 2. **`analytics.fact_fare_prediction`**:
    - Lưu **170.395 dòng** kết quả dự đoán thực tế (`89.625` dòng `validation` tháng 05/2025 + `80.770` dòng `test` tháng 06/2025), bao gồm giá thực tế (`actual_fare_usd`), giá dự đoán của từng mô hình (`pred_b0_hierarchical_usd`, `pred_m1_lr_usd`, `pred_m2_rf_usd`, `pred_m3_gbt_weather_usd`, `pred_m3_nw_gbt_usd`), sai số tuyệt đối (`abs_error_m3_weather_usd`, `abs_error_m3_nw_usd`), khoảng cách tâm vùng Haversine (`zone_centroid_distance_km`) và các biến thời tiết ERA5 (`temperature_2m`, `precipitation`, `snowfall`, `wind_speed_10m`).
 3. **`analytics.vw_fare_prediction_enriched`**:

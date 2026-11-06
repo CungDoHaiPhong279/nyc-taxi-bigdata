@@ -12,9 +12,9 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 | **1. Bài toán đặt ra** | **Dự báo cước trước chuyến đi (*Pre-trip Fare Estimation*)**: Ước tính cước cơ bản (`fare_amount`, USD) ngay khi khách chọn điểm đón/đến trên ứng dụng, trước khi xe lăn bánh. |
 | **2. Thách thức lớn nhất** | **Tuyệt đối tránh rò rỉ dữ liệu (*Zero Data Leakage*)**: Không dùng quãng đường hay thời gian di chuyển thực tế trên đồng hồ. Dự báo hoàn toàn dựa trên: khoảng cách tâm vùng Taxi Zones (*Haversine*), chu kỳ giờ/thứ/ngày lễ và thời tiết khí tượng ERA5. |
 | **3. Xử lý Dữ liệu Lớn** | Pipeline **PySpark Batch ELT** xử lý **24,08M** dòng thô qua 4 tầng Medallion (`Raw -> Bronze -> Silver -> Gold`), lọc sạch `0,82%` dữ liệu bẩn, lưu trữ **23,88M** dòng sạch (khớp 100% bản đồ, 99,92% thời tiết ERA5). |
-| **4. Kho Dữ liệu Phục vụ** | **PostgreSQL 16 Star Schema** (`analytics.fact_trip`: 23,88M dòng, Zero-Loss), tối ưu Deferred Indexing giúp Dashboard truy vấn phân tích chỉ trong ~1–2 giây. |
-| **5. Mô hình Học máy (AI)** | **`GBTRegressor` (Chuỗi cây tăng cường độ dốc) trên Spark MLlib** kết hợp **Quy tắc cước cố định JFK 70 USD** (`Ratecode 2`). Vượt trội 4 mô hình đối chứng (Baseline B0, LR, RF, GBT-w) với **`MAE = 2,92 USD`** và **`R² = 86,85%`**. |
-| **6. Triển khai & Giao diện** | Microservice suy luận đóng băng (`fare-inference:8000`, chấm điểm đồng thời đường cong 24h trong ~150ms) + Giao diện Streamlit Bản đồ tương tác Mapbox 2 chiều + **Bảng kê phụ phí và gợi ý giờ khởi hành (`ai_fare_advisor.py`)**: định giá bằng `M3-nw`, thời tiết tự động chỉ để tham khảo (`M3-w` chỉ chạy khi người dùng tự nhập thời tiết), công khai Phụ phí chính thức NYC TLC và chủ động đề xuất khung giờ gần nhất có giá tốt hơn. |
+| **4. Kho Dữ liệu Phục vụ** | **PostgreSQL 16 Star Schema** (`analytics.fact_trip`: 23,88M dòng, Zero-Loss), tối ưu Deferred Indexing KPI Dashboard mất 1,5–4,6 giây khi đã có cache và ~27 giây ở lần đầu; bảng đa nguồn chậm hơn nhiều (84–111 giây khi lọc một tháng, vượt giới hạn 180 giây khi không lọc). |
+| **5. Mô hình Học máy (AI)** | **`GBTRegressor` (Chuỗi cây tăng cường độ dốc) trên Spark MLlib** kết hợp **Quy tắc cước cố định JFK 70 USD** (`Ratecode 2`). Vượt trội 4 mô hình đối chứng (Baseline B0, LR, RF, GBT-w) với **`MAE = 2,92 USD`** và **`R² = 86,85%`** trên chuyến đồng hồ chuẩn (`ratecode_id = 1`); trên mọi loại chuyến là **`MAE = 4,06 USD`**, **`R² = 75,3%`** (xem mục 4.3). |
+| **6. Triển khai & Giao diện** | Microservice suy luận đóng băng (`fare-inference:8000`, chấm điểm đồng thời đường cong 24h trong khoảng 0,3–0,5 giây/lượt) + Giao diện Streamlit Bản đồ tương tác Mapbox 2 chiều + **Bảng kê phụ phí và gợi ý giờ khởi hành (`ai_fare_advisor.py`)**: định giá bằng `M3-nw`, thời tiết tự động chỉ để tham khảo (`M3-w` chỉ chạy khi người dùng tự nhập thời tiết), công khai Phụ phí chính thức NYC TLC và chủ động đề xuất khung giờ gần nhất có giá tốt hơn. |
 
 ---
 
@@ -82,12 +82,12 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 - **`M3-w` & `M3-nw` (Gradient Boosted Trees - GBT)**:
   - **`M3-w` (Full Weather)**: Dùng đủ **14 đặc trưng** (10 đặc trưng hành trình/thời gian + 4 đặc trưng thời tiết ERA5: nhiệt độ, lượng mưa, lượng tuyết, tốc độ gió).
   - **`M3-nw` (No-Weather — Mặc định phục vụ)**: Dùng **10 đặc trưng cơ bản** (không bắt buộc người dùng phải nhập thông số thời tiết khi đặt xe mà vẫn đạt độ chính xác cao nhất).
-- **MAE (*Mean Absolute Error* — Sai số tuyệt đối trung bình, USD)**: Trung bình mỗi chuyến đi mô hình dự đoán lệch bao nhiêu đô-la so với thực tế. **MAE càng thấp thì mô hình càng chính xác** (Gold V3 đạt `MAE = 2,92 USD`).
-- **RMSE (*Root Mean Squared Error* — Sai số bình phương trung bình căn, USD)**: Tương tự MAE nhưng phạt nặng các chuyến có sai số lớn bất thường. **RMSE càng thấp càng tốt** (Gold V3 đạt `RMSE = 4,54 USD`).
-- **R² (*Coefficient of Determination* — Hệ số xác định, %)**: Cho biết mô hình giải thích được bao nhiêu phần trăm sự biến thiên của giá cước thực tế. **R² càng gần 100% (1.0) càng tốt** (Gold V3 đạt `R² = 86,85%`).
-- **P50 / P90 Abs Error (Sai số phân vị thứ 50 và 90, USD)**: `P50 = 2,05 USD` nghĩa là có tới **50% số chuyến xe được dự đoán lệch không quá 2,05 USD** so với thực tế.
+- **MAE (*Mean Absolute Error* — Sai số tuyệt đối trung bình, USD)**: Trung bình mỗi chuyến đi mô hình dự đoán lệch bao nhiêu đô-la so với thực tế. **MAE càng thấp thì mô hình càng chính xác** (Gold V3 đạt `MAE = 2,92 USD` trên chuyến đồng hồ chuẩn, `4,06 USD` trên mọi loại chuyến).
+- **RMSE (*Root Mean Squared Error* — Sai số bình phương trung bình căn, USD)**: Tương tự MAE nhưng phạt nặng các chuyến có sai số lớn bất thường. **RMSE càng thấp càng tốt** (Gold V3 đạt `RMSE = 4,54 USD` trên chuyến đồng hồ chuẩn, `8,18 USD` trên mọi loại chuyến).
+- **R² (*Coefficient of Determination* — Hệ số xác định, %)**: Cho biết mô hình giải thích được bao nhiêu phần trăm sự biến thiên của giá cước thực tế. **R² càng gần 100% (1.0) càng tốt** (Gold V3 đạt `R² = 86,85%` trên chuyến đồng hồ chuẩn, `75,3%` trên mọi loại chuyến).
+- **P50 / P90 Abs Error (Sai số phân vị thứ 50 và 90, USD)**: `P50 = 2,05 USD` nghĩa là có tới **50% số chuyến xe được dự đoán lệch không quá 2,05 USD** so với thực tế (chuyến đồng hồ chuẩn; mọi loại chuyến là `2,36 USD`).
 - **Out-of-Time Drift (Kiểm định độ trôi dữ liệu theo thời gian — Năm 2026)**: Đem mô hình học từ dữ liệu năm 2025 chạy kiểm nghiệm trên `721.513` chuyến xe hoàn toàn mới của **Tháng 06, 07, 08/2026** để chứng minh mô hình không bị lỗi thời.
-- **Frozen Inference (`fit_calls = 0`)**: Cơ chế đóng băng mô hình đã huấn luyện thành gói bất biến (`distribution/models/gold-v3/`). Máy chủ suy luận chỉ nạp mô hình lên RAM để trả kết quả tức thì (`<50ms`), tuyệt đối không huấn luyện lại khi đang phục vụ người dùng.
+- **Frozen Inference (`fit_calls = 0`)**: Cơ chế đóng băng mô hình đã huấn luyện thành gói bất biến (`distribution/models/gold-v3/`). Máy chủ suy luận chỉ nạp mô hình lên RAM để trả kết quả (đo thực tế trung vị `0,34–0,54 giây/lượt`, lượt đầu sau thời gian rảnh có thể tới vài chục giây), tuyệt đối không huấn luyện lại khi đang phục vụ người dùng.
 
 ---
 
@@ -100,9 +100,9 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 | **2. Thời gian xử lý (`Processing Time`)** | **`864 giây / tháng`** | Tổng nạp PostgreSQL `5.184s` (~4.600 dòng/giây); trích mẫu ML `28,3s`; huấn luyện 5 mô hình `100,2s`. |
 | **3. Đối soát số dòng (`Reconciliation`)** | **`23.886.265 dòng`** | Khớp tuyệt đối giữa Silver/Gold Parquet và bảng `analytics.fact_trip` (`Chênh lệch = 0 / Zero-Loss`). |
 | **4. Tỷ lệ lọc dữ liệu bẩn (`Reject Rate`)** | **`0,82%` (`197.119` dòng)** | Lọc từ `24.083.384` dòng Raw; tầng Gold khớp **100% Taxi Zones** và **99,92% Thời tiết ERA5**. |
-| **5. Dịch vụ AI & RAM (`Serving Health`)** | **`READY (200 OK)`** | Mô hình đóng băng (`fit_calls = 0`), container `fare-inference` dùng `~709 / 3072 MB RAM`. |
+| **5. Dịch vụ AI & RAM (`Serving Health`)** | **`READY (200 OK)`** | Mô hình đóng băng (`fit_calls = 0`), container `fare-inference` dùng `~850–930 / 3072 MB RAM`. |
 
-### 4.2. So sánh 5 Mô hình Học máy (Holdout Test 06/2025 — `80.770` chuyến) & Kiểm chứng Năm 2026 (`721.513` chuyến)
+### 4.2. So sánh 6 Cấu hình Mô hình (Holdout Test 06/2025 — `80.770` chuyến đồng hồ chuẩn `ratecode_id = 1`) & Kiểm chứng Năm 2026 (`721.513` chuyến)
 | Mô hình | Thuật toán Cốt lõi | Dùng Thời tiết | MAE 2025 (USD) ↓ | RMSE 2025 (USD) ↓ | R² 2025 (%) ↑ | P50 2025 (USD) ↓ | MAE Năm 2026 (USD) ↓ |
 | :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: |
 | **1. Trung vị toàn cục (`B0_global`)** | Thống kê cơ sở đơn giản | Không | `7,90` | `13,33` | `-13,22%` | `4,20` | `8,54` |
@@ -111,6 +111,20 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 | **4. Rừng Ngẫu nhiên (`M2 - RF`)** | Spark MLlib `RandomForestRegressor` | Có | `3,12` | `4,67` | `86,09%` | `2,24` | — |
 | **5. GBT + Thời tiết ERA5 (`M3-w`)** | Spark MLlib `GBTRegressor` | Có | `2,99` | `4,60` | `86,52%` | `2,11` | — |
 | **6. GBT Tối ưu (`M3-nw` — Đang dùng)** | **Spark MLlib `GBTRegressor` + JFK Rule** | **Không** | **`2,92`** | **`4,54`** | **`86,85%`** | **`2,05`** | **`3,08` (`R² = 83,0%`)** |
+
+### 4.3. Phạm vi của các con số: chuyến đồng hồ chuẩn và mọi loại chuyến
+Bảng 4.2 chỉ tính chuyến `ratecode_id = 1`, đúng phạm vi huấn luyện. Khi người dùng đặt xe, mô hình không biết trước loại ratecode, nên cần xem cả các nhóm còn lại. Bảng dưới chấm mẫu ngẫu nhiên 5% (`197.930` chuyến, sai số MAE khoảng `± 0,03 USD`) của `3.946.190` chuyến hợp lệ tháng 06/2025 bằng đúng `M3-nw` + quy tắc JFK. Nhóm `ratecode_id = 1` ra `2,93 USD`, khớp với `2,92 USD` của bảng 4.2.
+
+| Nhóm chuyến | Tỷ trọng | MAE (USD) | RMSE (USD) | R² | P50 (USD) |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| **Mọi loại chuyến** | **`100%`** | **`4,06`** | **`8,18`** | **`75,3%`** | **`2,36`** |
+| Đồng hồ chuẩn (`ratecode_id = 1`) | `69,3%` | `2,93` | `4,60` | `86,5%` | `2,04` |
+| Không có ratecode (`NULL`) | `25,5%` | `5,58` | `8,25` | `50,7%` | `3,91` |
+| `ratecode_id = 2`, tuyến JFK ↔ Manhattan (quy tắc 70 USD) | `2,6%` | `0,00` | `0,00` | — | `0,00` |
+| `ratecode_id = 2`, tuyến khác | `0,2%` | `44,01` | `49,13` | — | `57,25` |
+| Ratecode khác (`3, 4, 5, 6, 99`) | `2,3%` | `22,92` | `36,35` | `-23,3%` | `14,55` |
+
+Chuyến hợp lệ là chuyến có cước trong `(0; 500]` USD và vùng `1..263`; tháng 06/2025 có `4.254.377` chuyến, trong đó `277.468` chuyến cước không dương, `86` chuyến trên 500 USD và `32.145` chuyến vùng `264/265`. Tái lập bằng `scripts/eval_all_ratecodes_sample.py` và `scripts/eval_all_ratecodes_score.py`. Tập `721.513` chuyến năm 2026 lấy từ `.sandbox/pretrip-v2/pilot-2026-06-08-v23-01`, hiện không còn trên máy nên các số 2026 được giữ theo lần chạy gốc và chưa tái lập được.
 
 ---
 
@@ -139,7 +153,7 @@ nyc-taxi-bigdata/
 │   ├── ml/                        # Chuẩn bị mẫu phân tầng, huấn luyện Spark ML & HTTP Server
 │   ├── monitoring/                # Bộ thu thập 5 chỉ số giám sát vận hành Pipeline
 │   └── dashboard/                 # Giao diện Streamlit (Bản đồ Mapbox 2 chiều, Gợi ý giờ khởi hành, Đánh giá ML, Giám sát)
-└── tests/                         # Bộ kiểm thử tự động (1.449 bài test Python + 30 bài test frontend Node.js)
+└── tests/                         # Bộ kiểm thử tự động (1.472 bài test Python + 30 bài test frontend Node.js)
 ```
 
 ---
@@ -194,7 +208,7 @@ python scripts/package_gold_v3_bundle.py
 # Sao lưu PostgreSQL (Schema + Metadata hoặc Full Dump ra thư mục backups/)
 .\scripts\backup.ps1
 
-# Chạy toàn bộ 1.449 bài kiểm thử Python theo đúng profile GitHub Actions CI
+# Chạy toàn bộ 1.472 bài kiểm thử Python theo đúng profile GitHub Actions CI
 python scripts/ci_python.py
 
 # Chạy bộ kiểm thử giao diện người dùng (30 bài test frontend Node.js)

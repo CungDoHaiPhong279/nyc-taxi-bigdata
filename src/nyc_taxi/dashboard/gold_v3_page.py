@@ -341,9 +341,9 @@ def render_zone_weather_simulator(base_url: str) -> None:
 
 
 def render_model_evaluation_and_drift() -> None:
-    st.subheader("Đánh giá Độ chính xác 5 Mô hình & Kiểm chứng Thực tế Năm 2026")
+    st.subheader("Đánh giá Độ chính xác 6 Cấu hình Mô hình & Kiểm chứng Thực tế Năm 2026")
     st.caption(
-        "Dữ liệu huấn luyện từ 23,88 triệu chuyến Taxi năm 2025 (chia theo thời gian: Tháng 1–4 Huấn luyện, Tháng 5 Kiểm định, "
+        "Mô hình học trên mẫu 336.864 chuyến rút từ 23,88 triệu chuyến Taxi năm 2025 (chia theo thời gian: Tháng 1–4 Huấn luyện, Tháng 5 Kiểm định, "
         "Tháng 6 Kiểm thử độc lập) và kiểm chứng khả năng dùng lâu dài trên 721.513 chuyến mới của Năm 2026."
     )
 
@@ -354,12 +354,12 @@ def render_model_evaluation_and_drift() -> None:
         "Vượt trội cả 5 mô hình",
     )
     k2.metric(
-        "Sai số trung bình (MAE 2025)",
+        "MAE 2025 (chuyến đồng hồ chuẩn)",
         "2.92 USD / chuyến",
         "Giảm 13% lỗi so với B0 (3.35 USD)",
     )
     k3.metric(
-        "Độ chính xác R² (Holdout 2025)",
+        "R² Holdout 2025 (đồng hồ chuẩn)",
         "86.9%",
         "Giải thích 86.9% biến thiên giá cước",
     )
@@ -367,6 +367,11 @@ def render_model_evaluation_and_drift() -> None:
         "Kiểm nghiệm thực tế Năm 2026",
         "MAE 3.08 USD",
         "721.513 chuyến (R² đạt 83.0%)",
+    )
+    st.caption(
+        "Phạm vi: các số trên chỉ tính chuyến đồng hồ chuẩn (`ratecode_id = 1`, khoảng 69% chuyến hợp lệ). "
+        "Với mọi loại chuyến (mẫu 197.930 chuyến tháng 06/2025): **MAE 4.06 USD, R² 75.3%**, do chuyến không có ratecode "
+        "(25.5%) có MAE 5.58 USD và nhóm ratecode đặc biệt (2.3%) có MAE 22.92 USD."
     )
 
     metrics_rows = _query_model_metrics()
@@ -591,9 +596,9 @@ def render_model_evaluation_and_drift() -> None:
 
         st.info(
             "**Tóm tắt kiến trúc AI Smart Fare Advisor đang vận hành:**\n"
-            "- **Mô hình phục vụ:** Giá dùng `M3-nw` (**MAE = 2.92 USD/chuyến, R² = 86.85%**). `M3-w` (**MAE = 2.99 USD/chuyến, R² = 86.52%**) được giữ để đối chứng và mô phỏng thời tiết thủ công. Thời tiết tự lấy theo giờ đón chỉ để tham khảo.\n"
+            "- **Mô hình phục vụ:** Giá dùng `M3-nw` (**MAE = 2.92 USD/chuyến, R² = 86.85%** với chuyến đồng hồ chuẩn; **MAE = 4.06 USD, R² = 75.3%** với mọi loại chuyến). `M3-w` (**MAE = 2.99 USD/chuyến, R² = 86.52%**) được giữ để đối chứng và mô phỏng thời tiết thủ công. Thời tiết tự lấy theo giờ đón chỉ để tham khảo.\n"
             "- **Tích hợp Phụ phí Chính thức NYC TLC & Gợi ý Giờ đi:** Kết hợp cước đồng hồ ML với bảng kê các khoản phụ phí thực tế phát sinh "
-            "(đối soát khớp 100% với `analytics.fact_trip`) và chủ động đề xuất khung giờ lân cận có tổng giá cước thấp hơn."
+            "(đối chiếu 60.000 chuyến 06/2025: khớp đến từng xu 94,1%, sai lệch trung bình 0,11 USD) và chủ động đề xuất khung giờ lân cận có tổng giá cước thấp hơn."
         )
 
         with st.expander("📋 Xem bảng số liệu chi tiết của tất cả các Mô hình & Hành trình Liên Quận", expanded=False):
@@ -674,7 +679,7 @@ def render_pipeline_monitoring(base_url: str) -> None:
             st.success(
                 "**Bước 4: Kho PostgreSQL & AI**\n\n"
                 "🗄️ **23.886.265 dòng (Thất thoát = 0)**\n\n"
-                "Nạp thành công 100% vào PostgreSQL và phục vụ suy luận trực tuyến (<50ms)."
+                "Nạp thành công 100% vào PostgreSQL và phục vụ suy luận trực tuyến (khoảng 0,3–0,5 giây/lượt)."
             )
 
         st.divider()
