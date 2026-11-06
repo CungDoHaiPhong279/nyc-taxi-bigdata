@@ -128,7 +128,7 @@
   - **Tab 3 (`🩺 Giám sát Hệ thống & Dữ liệu`)**: Sơ đồ Luồng xử lý 4 bước Medallion + 5 Thẻ chỉ số vận hành + 2 Sơ đồ cột theo tháng (Sản lượng chuyến & Thời gian nạp PostgreSQL).
 5.3. **Chiến lược Đảm bảo Chất lượng & Kiểm thử Tự động (Automated Quality Assurance & CI/CD)**:
 - Kiểm thử toàn diện 2 tầng với tổng cộng **1.479 bài test tự động** (đạt tỷ lệ vượt qua **100% PASS**):
-  - **Tầng Backend Python (1.449 bài test)**: Thực thi qua `python scripts/ci_python.py` (Pytest + Streamlit AppTest) bao phủ pipeline PySpark Medallion, Star Schema PostgreSQL, đối soát số dòng (`row_delta = 0`), suy luận mô hình đóng băng (`fare-inference:8000`), Trợ lý AI Smart Fare Advisor và phân giải không gian Taxi Zones.
+  - **Tầng Backend Python (1.449 bài test)**: Thực thi qua `python scripts/ci_python.py` (Pytest + Streamlit AppTest) bao phủ pipeline PySpark Medallion, Star Schema PostgreSQL, đối soát số dòng (`row_delta = 0`), suy luận mô hình đóng băng (`fare-inference:8000`), Gợi ý giờ khởi hành (Smart Fare Advisor) và phân giải không gian Taxi Zones.
   - **Tầng Frontend Web / Mapbox (30 bài test Node.js)**: Thực thi qua `node --test tests/test_address_frontend.js tests/test_route_map_frontend.js` bao phủ tương tác bản đồ, debounce gõ địa chỉ, cô lập iframe an toàn, xử lý ghim A/B và cơ chế đồng bộ 2 chiều `external_sync`.
 
 ---
