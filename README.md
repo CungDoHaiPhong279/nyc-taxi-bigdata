@@ -14,7 +14,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 | **3. Xử lý Dữ liệu Lớn** | Pipeline **PySpark Batch ELT** xử lý **24,08M** dòng thô qua 4 tầng Medallion (`Raw -> Bronze -> Silver -> Gold`), lọc sạch `0,82%` dữ liệu bẩn, lưu trữ **23,88M** dòng sạch (khớp 100% bản đồ, 99,92% thời tiết ERA5). |
 | **4. Kho Dữ liệu Phục vụ** | **PostgreSQL 16 Star Schema** (`analytics.fact_trip`: 23,88M dòng, Zero-Loss), tối ưu Deferred Indexing giúp Dashboard truy vấn phân tích chỉ trong ~1–2 giây. |
 | **5. Mô hình Học máy (AI)** | **`GBTRegressor` (Chuỗi cây tăng cường độ dốc) trên Spark MLlib** kết hợp **Quy tắc cước cố định JFK 70 USD** (`Ratecode 2`). Vượt trội 4 mô hình đối chứng (Baseline B0, LR, RF, GBT-w) với **`MAE = 2,92 USD`** và **`R² = 86,85%`**. |
-| **6. Triển khai & Giao diện** | Microservice suy luận đóng băng (`fare-inference:8000`, chấm điểm đồng thời đường cong 24h trong ~150ms) + Giao diện Streamlit Bản đồ tương tác Mapbox 2 chiều + **Trợ lý Đặt xe AI (`ai_fare_advisor.py`)**: Đặt xe bằng ngôn ngữ tự nhiên, tự động lấy Dự báo Thời tiết NYC (`M3-w`), công khai Phụ phí chính thức NYC TLC và chủ động đề xuất khung giờ gần nhất có giá tốt hơn. |
+| **6. Triển khai & Giao diện** | Microservice suy luận đóng băng (`fare-inference:8000`, chấm điểm đồng thời đường cong 24h trong ~150ms) + Giao diện Streamlit Bản đồ tương tác Mapbox 2 chiều + **Bảng kê phụ phí và gợi ý giờ khởi hành (`ai_fare_advisor.py`)**: định giá bằng `M3-nw`, thời tiết tự động chỉ để tham khảo (`M3-w` chỉ chạy khi người dùng tự nhập thời tiết), công khai Phụ phí chính thức NYC TLC và chủ động đề xuất khung giờ gần nhất có giá tốt hơn. |
 
 ---
 
@@ -138,7 +138,7 @@ nyc-taxi-bigdata/
 │   ├── database/                  # Kết nối và nạp dữ liệu COPY vào PostgreSQL
 │   ├── ml/                        # Chuẩn bị mẫu phân tầng, huấn luyện Spark ML & HTTP Server
 │   ├── monitoring/                # Bộ thu thập 5 chỉ số giám sát vận hành Pipeline
-│   └── dashboard/                 # Giao diện Streamlit (Bản đồ Mapbox 2 chiều, Trợ lý AI Smart Fare Advisor, Đánh giá ML, Giám sát)
+│   └── dashboard/                 # Giao diện Streamlit (Bản đồ Mapbox 2 chiều, Gợi ý giờ khởi hành, Đánh giá ML, Giám sát)
 └── tests/                         # Bộ kiểm thử tự động (1.449 bài test Python + 30 bài test frontend Node.js)
 ```
 
@@ -163,7 +163,7 @@ docker compose -f docker-compose.yml -f docker-compose.inference.yml -f docker-c
 1. **Ứng dụng Web Streamlit (`http://127.0.0.1:8501`)**:
    - **Trang "Phân tích lịch sử"**: Bộ lọc theo Tháng & Quận, 4 thẻ KPI tổng quan (`23.886.265` chuyến), 3 biểu đồ phân bố theo Tháng/Giờ/Quận và 2 bảng đối chiếu Đa nguồn (**Thời tiết ERA5** & **Lịch nghỉ lễ Mỹ**).
    - **Trang "Ước tính cước" (Gồm 3 Tab trực quan)**:
-     - `🚕 Ước tính cước chuyến đi`: Đặt xe chuẩn trải nghiệm thực tế với 4 cách chọn điểm linh hoạt: (1) Nhập câu lệnh đặt xe bằng ngôn ngữ tự nhiên (**AI Quick-Book**), (2) Click/kéo thả trực tiếp ghim A/B trên bản đồ NYC Mapbox, (3) 1-click chọn nhanh cụm điểm nóng (Sân bay JFK/LGA, Times Square, Phố Wall...), (4) Gõ địa chỉ qua Mapbox Autocomplete. Hệ thống **tự động lấy Dự báo Thời tiết chính xác tại NYC (Open-Meteo ERA5)** theo giờ đón để kích hoạt mô hình có thời tiết **`M3-w`**, hiển thị **Bảng kê Tổng giá cước kèm các khoản Phụ phí chính thức NYC TLC thực tế phát sinh** (Giờ cao điểm `+$2.50`, Ban đêm `+$1.00`, Tắc đường Manhattan `+$2.50`, Sân bay `+$1.75`) và **AI chủ động đề xuất khung giờ gần nhất có mức giá tiết kiệm hơn**.
+     - `🚕 Ước tính cước chuyến đi`: Đặt xe chuẩn trải nghiệm thực tế với 3 cách chọn điểm linh hoạt: (1) Click/kéo thả trực tiếp ghim A/B trên bản đồ NYC Mapbox, (2) 1-click chọn nhanh cụm điểm nóng (Sân bay JFK/LGA, Times Square, Phố Wall...), (3) Gõ địa chỉ qua Mapbox Autocomplete. Giá được tính bằng mô hình không thời tiết **`M3-nw`**; hệ thống vẫn **tự động lấy Dự báo Thời tiết NYC (Open-Meteo ERA5)** theo giờ đón nhưng chỉ để tham khảo, còn **`M3-w`** chỉ chạy khi người dùng tự nhập thời tiết, hiển thị **Bảng kê Tổng giá cước kèm các khoản Phụ phí chính thức NYC TLC thực tế phát sinh** (Giờ cao điểm `+$2.50`, Ban đêm `+$1.00`, Tắc đường Manhattan `+$2.50`, Sân bay `+$1.75`) và **đề xuất khung giờ gần nhất có mức giá tiết kiệm hơn**.
      - `📊 Độ chính xác & So sánh Mô hình`: 4 thẻ KPI kết quả + 3 Sơ đồ trực quan (So sánh MAE giữa các mô hình; Đường Giá thực tế vs Giá AI dự đoán theo 24 giờ; Biểu đồ kiểm chứng độ ổn định sang Năm 2026).
      - `🩺 Giám sát Hệ thống & Dữ liệu`: Sơ đồ luồng Medallion 4 bước, 5 thẻ chỉ số vận hành và 2 biểu đồ cột theo tháng.
 2. **MLflow Tracking UI (`http://127.0.0.1:5000`)**: Quản lý tham số và chỉ số của các lần huấn luyện trong experiment `nyc-taxi-fare-gold-v3`.
@@ -180,13 +180,13 @@ python scripts/download_raw_data.py --all
 python scripts/build_bronze.py --all
 python scripts/build_silver.py --all
 python scripts/build_gold.py --all
-python scripts/load_postgres.py --execute
+python scripts/load_postgres.py --all --create-indexes --validate
 
 # Bước 2: Trích xuất mẫu phân tầng (bảo toàn 100% vùng hiếm), huấn luyện 5 mô hình & lưu vào PostgreSQL
 python scripts/prepare_gold_v3.py --execute
-python scripts/train_gold_v3.py --execute
-python scripts/write_gold_v3_predictions.py --execute
-python scripts/package_gold_v3_bundle.py --execute
+python scripts/train_gold_v3.py --tracking-uri http://localhost:5000
+python scripts/write_gold_v3_predictions.py
+python scripts/package_gold_v3_bundle.py
 ```
 
 ### 6.3. Sao lưu Cơ sở Dữ liệu & Chạy Kiểm thử Tự động (CI/CD)

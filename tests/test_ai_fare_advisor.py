@@ -490,5 +490,16 @@ def test_readme_b0_global_metrics_and_cli_flags_are_accurate():
 
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
     assert "python scripts/build_bronze.py --all" in readme
-    assert "python scripts/load_postgres.py --execute" in readme
     assert "| **1. Trung vị toàn cục (`B0_global`)** | Thống kê cơ sở đơn giản | Không | `7,90` | `13,33` | `-13,22%` | `4,20` |" in readme
+
+
+def test_readme_pipeline_commands_use_only_flags_the_script_defines():
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    commands = re.findall(r"^python scripts/(\w+\.py)(.*)$", (root / "README.md").read_text(encoding="utf-8"), re.M)
+    assert len(commands) >= 9
+    for script, args in commands:
+        source = (root / "scripts" / script).read_text(encoding="utf-8")
+        for flag in re.findall(r"--[\w-]+", args):
+            assert f'"{flag}"' in source, f"{script} has no {flag}"
