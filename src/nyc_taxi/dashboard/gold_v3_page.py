@@ -139,6 +139,10 @@ def _cached_model_metrics() -> list[dict[str, Any]]:
         eng.dispose()
 
 
+def _seconds_label(value: Any) -> str:
+    return "N/A" if value is None else f"{float(value):.1f}"
+
+
 def _query_model_metrics() -> list[dict[str, Any]]:
     try:
         return _cached_model_metrics()
@@ -799,9 +803,9 @@ def render_pipeline_monitoring(base_url: str) -> None:
         dash_mem = m5_dash_res.get("memory_current_mb")
         dash_lim = m5_dash_res.get("memory_limit_mb")
         ml_cohort = qual_metrics["metric_4_quality_and_rejects"].get("ml_gold_v3_cohort", {})
-        prep_s = ml_cohort.get("preparation_elapsed_seconds", "N/A")
-        train_s = ml_cohort.get("training_elapsed_seconds", "N/A")
-        startup_s = m5_srv.get("startup_seconds", "N/A")
+        prep_s = _seconds_label(ml_cohort.get("preparation_elapsed_seconds"))
+        train_s = _seconds_label(ml_cohort.get("training_elapsed_seconds"))
+        startup_s = _seconds_label(m5_srv.get("startup_seconds"))
         st.info(
             f"**Hiệu năng Huấn luyện & Phục vụ AI:**\n"
             f"- **Huấn luyện Spark ML:** Trích xuất mẫu phân tầng từ 23,88 triệu dòng mất **{prep_s} giây**; huấn luyện cả 5 mô hình mất **{train_s} giây** (số ghi nhận lúc huấn luyện).\n"
