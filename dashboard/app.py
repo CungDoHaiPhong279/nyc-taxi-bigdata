@@ -13,20 +13,20 @@ DEFAULT_WEATHER_MULTISOURCE_ROWS = [
     {
         "Điều kiện Thời tiết (ERA5)": "1. Trời quang / Khô ráo (0 mm/h)",
         "Tỷ trọng chuyến (%)": "81.2%",
-        "Giá cước TB (USD)": 17.91,
-        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 5.33,
+        "Giá cước TB (USD)": 19.43,
+        "Khoảng cách TB (km)": 5.48,
     },
     {
         "Điều kiện Thời tiết (ERA5)": "2. Mưa nhỏ & Mưa vừa (< 2 mm/h)",
         "Tỷ trọng chuyến (%)": "15.1%",
-        "Giá cước TB (USD)": 18.05,
-        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 5.24,
+        "Giá cước TB (USD)": 19.89,
+        "Khoảng cách TB (km)": 5.41,
     },
     {
         "Điều kiện Thời tiết (ERA5)": "3. Mưa lớn / Có tuyết (>= 2 mm/h)",
         "Tỷ trọng chuyến (%)": "3.7%",
-        "Giá cước TB (USD)": 17.06,
-        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 4.86,
+        "Giá cước TB (USD)": 18.76,
+        "Khoảng cách TB (km)": 5.00,
     },
 ]
 
@@ -34,20 +34,20 @@ DEFAULT_CALENDAR_MULTISOURCE_ROWS = [
     {
         "Nhóm Ngày (US Calendar)": "1. Ngày làm việc (Thứ 2 – Thứ 6)",
         "Tỷ trọng chuyến (%)": "68.7%",
-        "Giá cước TB (USD)": 17.90,
-        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 5.15,
+        "Giá cước TB (USD)": 19.43,
+        "Khoảng cách TB (km)": 5.33,
     },
     {
         "Nhóm Ngày (US Calendar)": "2. Cuối tuần (Thứ 7 & Chủ Nhật)",
         "Tỷ trọng chuyến (%)": "29.1%",
-        "Giá cước TB (USD)": 17.74,
-        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 5.59,
+        "Giá cước TB (USD)": 19.51,
+        "Khoảng cách TB (km)": 5.65,
     },
     {
         "Nhóm Ngày (US Calendar)": "3. Ngày nghỉ lễ Liên bang (Holiday)",
         "Tỷ trọng chuyến (%)": "2.2%",
-        "Giá cước TB (USD)": 19.95,
-        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 6.22,
+        "Giá cước TB (USD)": 20.37,
+        "Khoảng cách TB (km)": 6.36,
     },
 ]
 
@@ -133,8 +133,9 @@ def main() -> None:
     st.caption("Dashboard lịch sử · PostgreSQL · Ước tính mô hình nằm ở trang riêng, không thay thế số liệu thực tế")
     st.markdown(
         "`fare_amount` là **cước cơ bản, đơn vị USD**, không phải `total_amount`. "
-        "`trip_distance` có đơn vị **mile**. Giá trị fare **âm và 0 vẫn được giữ** "
-        "trong các chỉ số và biểu đồ phân tích."
+        "`trip_distance` có đơn vị **mile**. Giá cước TB chỉ tính cước trong khoảng (0; 500] USD và quãng đường TB chỉ tính "
+        "khoảng (0; 100] dặm, vì dữ liệu có hoàn tiền và lỗi đồng hồ. Tổng số chuyến, tổng doanh thu và biểu đồ vẫn giữ mọi bản ghi "
+        "(gồm 1.322.979 chuyến cước âm)."
     )
 
     try:

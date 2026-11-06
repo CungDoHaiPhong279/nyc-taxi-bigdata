@@ -33,7 +33,7 @@ def test_invalid_months_are_rejected(month):
         queries.DashboardFilters.from_selection([month])
 
 
-def test_all_groupings_share_bound_filters_without_excluding_negative_fares():
+def test_all_groupings_share_bound_filters_and_averages_skip_invalid_records():
     borough = "Queens'); DROP TABLE analytics.fact_trip; --"
     query, parameters = queries.build_aggregate_query(
         queries.DashboardFilters.from_selection(["2025-01"], [borough])
@@ -42,20 +42,19 @@ def test_all_groupings_share_bound_filters_without_excluding_negative_fares():
     assert borough not in sql
     assert parameters["boroughs"] == (borough,)
     assert sql.count("FROM analytics.fact_trip") == 1
-    assert sql.count("WHERE ") == 2  # month before buckets; borough after small join
+    assert sql.replace("FILTER (WHERE ", "").count("WHERE ") == 2  # month before buckets; borough after small join
     assert "GROUP BY GROUPING SETS" in sql
     assert "SELECT *" not in sql
     assert "etl_load_log" not in sql
     assert "AVG(" not in sql  # never average bucket averages
     assert "SUM(f.fare_amount) AS fare_sum" in sql
-    assert "COUNT(f.fare_amount) AS fare_count" in sql
-    assert "SUM(f.trip_distance) AS distance_sum" in sql
-    assert "COUNT(f.trip_distance) AS distance_count" in sql
-    assert "SUM(b.fare_sum) / NULLIF(SUM(b.fare_count), 0)" in sql
-    assert "SUM(b.distance_sum) / NULLIF(SUM(b.distance_count), 0)" in sql
-    assert "fare_amount >" not in sql and "fare_amount >=" not in sql
+    assert "SUM(b.valid_fare_sum) / NULLIF(SUM(b.valid_fare_count), 0)" in sql
+    assert "SUM(b.valid_distance_sum) / NULLIF(SUM(b.valid_distance_count), 0)" in sql
+    assert "FILTER (WHERE f.fare_amount > 0 AND f.fare_amount <= 500)" in sql
+    assert "FILTER (WHERE f.trip_distance > 0 AND f.trip_distance <= 100)" in sql
+    assert "COALESCE(SUM(b.fare_sum), 0) AS total_fare" in sql  # totals keep every row
     all_query, all_parameters = queries.build_aggregate_query(queries.DashboardFilters())
-    assert "WHERE " not in str(all_query)
+    assert "WHERE " not in str(all_query).replace("FILTER (WHERE ", "")
     assert all_parameters == {}
 
 
@@ -162,6 +161,7 @@ def test_postgres_readonly_weighted_aggregates_against_row_reference():
         (2025, 2, 8, 3, 20.0, None),
         (2025, 3, 10, 4, None, None),
         (2026, 2, 8, 2, 100.0, 1.0),
+        (2025, 1, 8, 1, 600.0, 386088.0),
     ]
     borough_by_location = {1: "Manhattan", 2: "Queens", 3: "Bronx", 4: "Staten Island"}
     fixtures = """WITH fact_fixture (
@@ -171,7 +171,7 @@ def test_postgres_readonly_weighted_aggregates_against_row_reference():
         (2025,1,8,1,0.0,NULL), (2025,1,8,1,NULL,5.0),
         (2025,1,9,2,-4.0,NULL), (2025,2,9,1,NULL,9.0),
         (2025,2,8,3,20.0,NULL), (2025,3,10,4,NULL,NULL),
-        (2026,2,8,2,100.0,1.0)
+        (2026,2,8,2,100.0,1.0), (2025,1,8,1,600.0,386088.0)
     ), location_fixture (location_id, borough) AS (VALUES
         (1,'Manhattan'), (2,'Queens'), (3,'Bronx'), (4,'Staten Island')
     ), """
@@ -209,9 +209,10 @@ def test_postgres_readonly_weighted_aggregates_against_row_reference():
                                 (not filters.months or f"{row[0]:04d}-{row[1]:02d}" in filters.months)
                                 and (not filters.boroughs or borough_by_location[row[3]] in filters.boroughs)]
                     fares = [row[4] for row in selected if row[4] is not None]
-                    distances = [row[5] for row in selected if row[5] is not None]
+                    valid_fares = [fare for fare in fares if 0 < fare <= 500]
+                    distances = [row[5] for row in selected if row[5] is not None and 0 < row[5] <= 100]
                     assert actual["total_trips"] == len(selected)
-                    expected_fare = math.fsum(fares) / len(fares) if fares else None
+                    expected_fare = math.fsum(valid_fares) / len(valid_fares) if valid_fares else None
                     expected_distance = math.fsum(distances) / len(distances) if distances else None
                     for key, expected in [("average_fare", expected_fare),
                                           ("average_distance", expected_distance)]:
@@ -244,3 +245,5 @@ def test_multisource_query_uses_calendar_date_id_and_reduces_fact_first():
     assert params["year_0"] == 2025
     assert params["month_0"] == 1
     assert params["boroughs"] == ("Manhattan",)
+    assert "SUM(f.fare_amount) FILTER (WHERE f.fare_amount > 0 AND f.fare_amount <= 500) AS fare_sum" in sql
+    assert "SUM(f.trip_distance) FILTER (WHERE f.trip_distance > 0 AND f.trip_distance <= 100)" in sql
