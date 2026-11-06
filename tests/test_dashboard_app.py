@@ -139,6 +139,13 @@ def test_empty_results_have_zero_kpis_and_no_charts(reader):
     assert len(app.get("vega_lite_chart")) == 0
 
 
+def test_multisource_fallback_is_labeled_as_static_figures(reader):
+    # A silent fallback once made the page show wrong shares as if they were live.
+    app = AppTest.from_file(str(APP)).run(timeout=10)
+    assert not app.exception
+    assert any("số tổng hợp cố định" in w.value for w in app.warning)
+
+
 def test_database_error_is_visible_and_retry_recovers(monkeypatch):
     reader = Mock(side_effect=[
         queries.DashboardQueryError("Không thể đọc PostgreSQL. Hãy thử lại."),

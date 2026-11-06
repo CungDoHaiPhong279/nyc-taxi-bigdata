@@ -20,7 +20,9 @@
 
 ---
 
-## 2. Kết quả So sánh 5 Cấu hình Mô hình trên Tập Validation (05/2025) và Test (06/2025)
+## 2. Kết quả So sánh 6 Cấu hình Mô hình trên Tập Validation (05/2025) và Test (06/2025)
+
+> **Phạm vi**: Các bảng trong mục 2 và 3 chỉ tính chuyến đồng hồ chuẩn (`ratecode_id = 1`). Kết quả trên mọi loại chuyến nằm ở mục 5.
 
 ### 2.1. Tập Validation (`2025-05`, `89.625` chuyến)
 
@@ -76,3 +78,22 @@
 
 > **Kết luận về Khả năng Dự báo Hiện tại (2026)**:
 > Mô hình huấn luyện từ tầng Gold 2025 giữ vững độ chính xác rất cao khi dự báo sang năm 2026 (**MAE tổng thể `= $3,08 USD`**, **sai số trung vị `P50 = $2,11 USD`**, **$R^2 = 0,8297$** trên `721.513` chuyến), vượt xa mô hình V2.2 cũ (`MAE = $4,44 USD`, `$R^2 = 0,5625`).
+
+Tập `721.513` chuyến năm 2026 lấy từ `.sandbox/pretrip-v2/pilot-2026-06-08-v23-01`, hiện không còn trên máy nên các số 2026 được giữ theo lần chạy gốc và chưa tái lập được.
+
+---
+
+## 5. Đánh giá trên Mọi loại Chuyến (Tháng 06/2025)
+
+Chấm mẫu ngẫu nhiên 5% (`197.930` chuyến, sai số MAE khoảng `± 0,03 USD`) của `3.946.190` chuyến hợp lệ tháng 06/2025 bằng đúng `M3-nw` + quy tắc JFK đang phục vụ:
+
+| Nhóm chuyến | Tỷ trọng | MAE (USD) | RMSE (USD) | R² | P50 (USD) |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| **Mọi loại chuyến** | **`100%`** | **`4,06`** | **`8,18`** | **`75,3%`** | **`2,36`** |
+| Đồng hồ chuẩn (`ratecode_id = 1`) | `69,3%` | `2,93` | `4,60` | `86,5%` | `2,04` |
+| Không có ratecode (`NULL`) | `25,5%` | `5,58` | `8,25` | `50,7%` | `3,91` |
+| `ratecode_id = 2`, tuyến JFK ↔ Manhattan (quy tắc 70 USD) | `2,6%` | `0,00` | `0,00` | — | `0,00` |
+| `ratecode_id = 2`, tuyến khác | `0,2%` | `44,01` | `49,13` | — | `57,25` |
+| Ratecode khác (`3, 4, 5, 6, 99`) | `2,3%` | `22,92` | `36,35` | `-23,3%` | `14,55` |
+
+Nhóm `ratecode_id = 1` ra `2,93 USD`, khớp với `2,9157 USD` ở mục 2.2 (chênh lệch do mục 2.2 còn loại chuyến thiếu thời tiết và dòng trùng). Chuyến hợp lệ có cước trong `(0; 500]` USD và vùng `1..263`; tháng 06/2025 có `4.254.377` chuyến, trong đó `277.468` chuyến cước không dương, `86` chuyến trên 500 USD và `32.145` chuyến vùng `264/265`. Tái lập bằng `scripts/eval_all_ratecodes_sample.py` và `scripts/eval_all_ratecodes_score.py`.

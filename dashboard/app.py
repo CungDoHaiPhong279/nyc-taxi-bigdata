@@ -12,42 +12,42 @@ CACHE_TTL_SECONDS = 300
 DEFAULT_WEATHER_MULTISOURCE_ROWS = [
     {
         "Điều kiện Thời tiết (ERA5)": "1. Trời quang / Khô ráo (0 mm/h)",
-        "Tỷ trọng chuyến (%)": "74.6%",
-        "Giá cước TB (USD)": 16.71,
-        "Khoảng cách tâm vùng TB (km)": 3.17,
+        "Tỷ trọng chuyến (%)": "81.2%",
+        "Giá cước TB (USD)": 17.91,
+        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 5.33,
     },
     {
         "Điều kiện Thời tiết (ERA5)": "2. Mưa nhỏ & Mưa vừa (< 2 mm/h)",
-        "Tỷ trọng chuyến (%)": "23.6%",
-        "Giá cước TB (USD)": 16.87,
-        "Khoảng cách tâm vùng TB (km)": 3.07,
+        "Tỷ trọng chuyến (%)": "15.1%",
+        "Giá cước TB (USD)": 18.05,
+        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 5.24,
     },
     {
         "Điều kiện Thời tiết (ERA5)": "3. Mưa lớn / Có tuyết (>= 2 mm/h)",
-        "Tỷ trọng chuyến (%)": "1.8%",
-        "Giá cước TB (USD)": 16.29,
-        "Khoảng cách tâm vùng TB (km)": 2.79,
+        "Tỷ trọng chuyến (%)": "3.7%",
+        "Giá cước TB (USD)": 17.06,
+        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 4.86,
     },
 ]
 
 DEFAULT_CALENDAR_MULTISOURCE_ROWS = [
     {
         "Nhóm Ngày (US Calendar)": "1. Ngày làm việc (Thứ 2 – Thứ 6)",
-        "Tỷ trọng chuyến (%)": "71.3%",
-        "Giá cước TB (USD)": 16.87,
-        "Khoảng cách tâm vùng TB (km)": 3.09,
+        "Tỷ trọng chuyến (%)": "68.7%",
+        "Giá cước TB (USD)": 17.90,
+        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 5.15,
     },
     {
         "Nhóm Ngày (US Calendar)": "2. Cuối tuần (Thứ 7 & Chủ Nhật)",
-        "Tỷ trọng chuyến (%)": "26.1%",
-        "Giá cước TB (USD)": 16.43,
-        "Khoảng cách tâm vùng TB (km)": 3.26,
+        "Tỷ trọng chuyến (%)": "29.1%",
+        "Giá cước TB (USD)": 17.74,
+        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 5.59,
     },
     {
         "Nhóm Ngày (US Calendar)": "3. Ngày nghỉ lễ Liên bang (Holiday)",
-        "Tỷ trọng chuyến (%)": "2.6%",
-        "Giá cước TB (USD)": 16.34,
-        "Khoảng cách tâm vùng TB (km)": 3.32,
+        "Tỷ trọng chuyến (%)": "2.2%",
+        "Giá cước TB (USD)": 19.95,
+        "Quãng đường TB (km, bỏ bản ghi > 100 dặm)": 6.22,
     },
 ]
 
@@ -86,6 +86,7 @@ def load_multisource_summary(months: tuple[str, ...], boroughs: tuple[str, ...])
     return {
         "weather": DEFAULT_WEATHER_MULTISOURCE_ROWS,
         "calendar": DEFAULT_CALENDAR_MULTISOURCE_ROWS,
+        "is_fallback": True,
     }
 
 
@@ -233,6 +234,11 @@ def main() -> None:
         "Số liệu đối chiếu từ tầng Medallion Gold (23,88 triệu chuyến khớp 99,92% thời tiết ERA5 và 100% lịch nghỉ lễ Mỹ):"
     )
     multisource = load_multisource_summary(active_months, active_boroughs)
+    if multisource.get("is_fallback"):
+        st.warning(
+            "Không lấy được số trực tiếp từ PostgreSQL (truy vấn này có thể vượt giới hạn 180 giây khi không lọc). "
+            "Bảng dưới là số tổng hợp cố định của toàn bộ 01–06/2025, không theo bộ lọc đang chọn."
+        )
     ms_col1, ms_col2 = st.columns(2)
     with ms_col1:
         st.markdown("##### Tác động của Điều kiện Thời tiết ERA5 đến Chuyến đi")
