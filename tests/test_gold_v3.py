@@ -367,3 +367,22 @@ def test_zone_simulator_sends_weather_only_when_entered_manually(monkeypatch):
     assert payloads[1]["temperature_2m"] == 22.0
     assert payloads[1]["wind_speed_10m"] == 12.0
     assert any(m.label == "Biến thể phục vụ" and m.value == "M3-w" for m in app.metric)
+
+
+def test_drift_chart_keeps_baseline_and_served_model():
+    from nyc_taxi.dashboard.gold_v3_page import _drift_chart_rows
+    rows = [
+        {"split": "drift_2026-06", "model_key": "B0_hierarchical_median"},
+        {"split": "drift_2026-06", "model_key": "M3_nw_gbt_no_weather"},
+        {"split": "test", "model_key": "M3_nw_gbt_no_weather"},
+    ]
+    assert [r["model_key"] for r in _drift_chart_rows(rows)] == ["B0_hierarchical_median", "M3_nw_gbt_no_weather"]
+    assert _drift_chart_rows([]) == []
+
+
+def test_model_labels_use_keys_written_to_the_database():
+    from pathlib import Path
+    from nyc_taxi.dashboard.gold_v3_page import MODEL_DISPLAY_LABELS
+    source = (Path(__file__).resolve().parents[1] / "scripts" / "write_gold_v3_predictions.py").read_text(encoding="utf-8")
+    for key in MODEL_DISPLAY_LABELS:
+        assert f'"{key}"' in source

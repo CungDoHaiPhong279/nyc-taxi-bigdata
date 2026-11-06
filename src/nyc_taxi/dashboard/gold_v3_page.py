@@ -38,12 +38,15 @@ from nyc_taxi.monitoring.metrics import (
 
 NYC_TZ = ZoneInfo("America/New_York")
 
+BASELINE_MODEL_KEY = "B0_hierarchical_median"
+SERVED_MODEL_KEY = "M3_nw_gbt_no_weather"
+
 MODEL_DISPLAY_LABELS: dict[str, str] = {
     "B0_global_median": "1. Trung vị toàn cục (Mốc cơ sở đơn giản)",
-    "B0_route_hour_median": "2. Thống kê theo Tuyến & Giờ (Baseline B0)",
+    "B0_hierarchical_median": "2. Thống kê theo Tuyến & Giờ (Baseline B0)",
     "M1_linear_regression": "3. Hồi quy Tuyến tính (Linear Regression - M1)",
     "M2_random_forest": "4. Rừng Ngẫu nhiên (Random Forest - M2)",
-    "M3_gbt_full_weather": "5. GBT + Thời tiết ERA5 (M3-w - Tích hợp tự động)",
+    "M3_gbt_weather": "5. GBT + Thời tiết ERA5 (M3-w - Đối chứng)",
     "M3_nw_gbt_no_weather": "6. GBT Tối ưu Không cần Thời tiết (M3-nw - Cốt lõi)",
 }
 
@@ -55,6 +58,15 @@ SPLIT_DISPLAY_LABELS: dict[str, str] = {
     "drift_2026-07": "Thực tế Tháng 07/2026",
     "drift_2026-08": "Thực tế Tháng 08/2026",
 }
+
+
+def _drift_chart_rows(metrics_rows: list[dict]) -> list[dict]:
+    return [
+        r
+        for r in metrics_rows
+        if str(r["split"]).startswith("drift_2026-")
+        and r["model_key"] in (BASELINE_MODEL_KEY, SERVED_MODEL_KEY)
+    ]
 
 
 def _clean_row(mapping_row: Any) -> dict[str, Any]:
@@ -363,7 +375,7 @@ def render_model_evaluation_and_drift() -> None:
         st.markdown("#### Sơ đồ 1: So sánh Sai số Trung bình (MAE — USD) giữa các Mô hình (Thấp hơn = Chính xác hơn)")
         st.caption(
             "Đánh giá trên tập Kiểm thử độc lập (Tháng 06/2025 — 80.770 chuyến chưa từng xuất hiện khi học). "
-            "Cột màu xanh đậm là họ mô hình **GBT (Gold V3 — M3-w & M3-nw)** đang chạy chính thức với sai số thấp nhất (**2.92 USD/chuyến**)."
+            "Cột màu xanh là mô hình đang phục vụ, **M3-nw** (**2.92 USD/chuyến** trên chuyến tính đồng hồ chuẩn)."
         )
 
         test_only = [r for r in metrics_rows if r["split"] == "test"]
@@ -373,7 +385,7 @@ def render_model_evaluation_and_drift() -> None:
                 m_key = str(r["model_key"])
                 mae_val = float(r["mae_usd"])
                 r2_pct = round(float(r["r2"]) * 100, 1)
-                is_best = m_key in ("M3_nw_gbt_no_weather", "M3_gbt_full_weather")
+                is_best = m_key == SERVED_MODEL_KEY
                 chart1_data.append(
                     {
                         "Mô hình": MODEL_DISPLAY_LABELS.get(m_key, str(r["model_name"])),
@@ -520,12 +532,7 @@ def render_model_evaluation_and_drift() -> None:
                 "Đem mô hình học từ năm 2025 chạy thử trên dữ liệu tương lai **Tháng 06, 07, 08/2026**: "
                 "Mô hình AI Gold V3 giữ sai số ổn định quanh mức **2.90 – 3.28 USD**, thấp hơn hẳn thống kê truyền thống."
             )
-            drift_rows = [
-                r
-                for r in metrics_rows
-                if r["split"] in ("drift_2026-06", "drift_2026-07", "drift_2026-08")
-                and r["model_key"] in ("B0_route_hour_median", "M3_nw_gbt_no_weather")
-            ]
+            drift_rows = _drift_chart_rows(metrics_rows)
             if drift_rows:
                 drift_chart_data = []
                 month_labels = {
@@ -534,7 +541,7 @@ def render_model_evaluation_and_drift() -> None:
                     "drift_2026-08": "Tháng 08/2026 (217.949 chuyến)",
                 }
                 for r in drift_rows:
-                    is_gbt = r["model_key"] == "M3_nw_gbt_no_weather"
+                    is_gbt = r["model_key"] == SERVED_MODEL_KEY
                     drift_chart_data.append(
                         {
                             "Tháng Năm 2026": month_labels.get(str(r["split"]), str(r["split"])),
@@ -584,8 +591,7 @@ def render_model_evaluation_and_drift() -> None:
 
         st.info(
             "**Tóm tắt kiến trúc AI Smart Fare Advisor đang vận hành:**\n"
-            "- **Tự động hóa Thời tiết Thực tế (`M3-w` + `M3-nw`):** Hệ thống đóng gói song song `M3-nw` (**MAE = 2.92 USD/chuyến, R² = 86.85%**) và `M3-w` (**MAE = 2.99 USD/chuyến, R² = 86.52%**), tự động truy xuất dự báo thời tiết 24h tại New York (Open-Meteo ERA5) "
-            "theo đúng ngày và giờ đón của khách mà không bắt người dùng tự nhập thời tiết.\n"
+            "- **Mô hình phục vụ:** Giá dùng `M3-nw` (**MAE = 2.92 USD/chuyến, R² = 86.85%**). `M3-w` (**MAE = 2.99 USD/chuyến, R² = 86.52%**) được giữ để đối chứng và mô phỏng thời tiết thủ công. Thời tiết tự lấy theo giờ đón chỉ để tham khảo.\n"
             "- **Tích hợp Phụ phí Chính thức NYC TLC & Gợi ý Giờ đi:** Kết hợp cước đồng hồ ML với bảng kê các khoản phụ phí thực tế phát sinh "
             "(đối soát khớp 100% với `analytics.fact_trip`) và chủ động đề xuất khung giờ lân cận có tổng giá cước thấp hơn."
         )
