@@ -8,14 +8,13 @@ Covers:
 3. Automatic NYC 24h Hourly Weather Lookup (live Open-Meteo parsing + offline seasonal fallback + TTL cache).
 4. Mapbox Real Driving Distance Refinement (intra-zone & detour adjustment).
 5. Counterfactual XAI & Nearest-Time-Window Savings Advisor (never suggests past hours in `now` or same-day mode).
-6. Natural Language Ride Booking Parser (Vietnamese & English, standard & reversed preposition order).
 7. 24h Horizon Feature Derivation (`derive_24h_horizon_features` with per-hour 24h weather).
 8. End-to-end Streamlit UI rendering & 1-click suggested hour application.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 import json
 from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
@@ -37,7 +36,6 @@ from nyc_taxi.dashboard.ai_fare_advisor import (
     compute_active_tlc_surcharges,
     compute_mapbox_distance_adjustment,
     fetch_nyc_hourly_weather,
-    parse_natural_language_booking,
 )
 from nyc_taxi.ml.gold_v3_inference import derive_24h_horizon_features
 
@@ -300,44 +298,6 @@ def test_build_fare_explanation_and_nearest_better_time_advisor_never_suggests_p
     assert advice_sched["nearest_better_option"]["hour"] == 15
 
 
-def test_parse_natural_language_booking_standard_and_reversed_order():
-    now_ref = datetime(2026, 10, 31, 14, 0, tzinfo=NYC_TZ)
-
-    # Standard order: "Từ A đi B"
-    res1 = parse_natural_language_booking(
-        "Đặt xe từ Times Square đi sân bay JFK lúc 6h sáng mai",
-        now_nyc=now_ref,
-    )
-    assert res1["ok"] is True
-    assert res1["pickup"]["location_id"] == 230
-    assert res1["dropoff"]["location_id"] == 132
-    assert res1["mode"] == "scheduled"
-    assert res1["pickup_date"] == date(2026, 11, 1)
-    assert res1["pickup_hour"] == 6
-    assert res1["pickup_minute"] == 0
-
-    # Reversed order: "Đi B từ A"
-    res_rev = parse_natural_language_booking(
-        "Đi sân bay JFK từ Times Square lúc 7h rưỡi tối mai",
-        now_nyc=now_ref,
-    )
-    assert res_rev["ok"] is True
-    assert res_rev["pickup"]["location_id"] == 230
-    assert res_rev["dropoff"]["location_id"] == 132
-    assert res_rev["pickup_hour"] == 19
-    assert res_rev["pickup_minute"] == 30
-
-    # English AM/PM expression: "6pm"
-    res_en = parse_natural_language_booking(
-        "From Wall Street to LaGuardia at 6pm tomorrow",
-        now_nyc=now_ref,
-    )
-    assert res_en["ok"] is True
-    assert res_en["pickup"]["location_id"] == 87
-    assert res_en["dropoff"]["location_id"] == 138
-    assert res_en["pickup_hour"] == 18
-
-
 def test_derive_24h_horizon_features_supports_24h_hourly_weather_array():
     dt = datetime(2025, 6, 15, 17, 30, tzinfo=NYC_TZ)
     compact_24h = [[15.0 + h * 0.5, 2.5 if h == 17 else 0.0, 0.0, 12.0] for h in range(24)]
@@ -359,7 +319,7 @@ def test_derive_24h_horizon_features_supports_24h_hourly_weather_array():
     assert rows[10]["precipitation"] == pytest.approx(0.0)
 
 
-def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkeypatch):
+def _gold_v3_app(monkeypatch):
     from streamlit.testing.v1 import AppTest
     from nyc_taxi.dashboard import address_page
     from nyc_taxi.dashboard.address_component import new_address_state
@@ -445,9 +405,16 @@ def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkey
         st_slot = new_address_state()
         st_slot["selected"] = {"label": f"Pin {slot}", "longitude": lon, "latitude": 40.76}
         app.session_state["address_" + slot] = st_slot
+    return app, predictor
 
+
+def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkeypatch):
+    app, predictor = _gold_v3_app(monkeypatch)
     app.run(timeout=15)
     assert not app.exception
+    button_keys = {b.key for b in app.button}
+    assert "gold_v3_ai_quick_book_btn" not in button_keys
+    assert not any(k.startswith("gold_v3_nl_sample_") for k in button_keys if k)
     app.button(key="address_estimate_submit").click().run(timeout=15)
     assert not app.exception
 
@@ -465,67 +432,12 @@ def test_gold_v3_address_page_auto_weather_and_smart_fare_advisor_receipt(monkey
     assert "undefined" not in md_joined
 
 
-
-def _real_tlc_zones():
-    from nyc_taxi.dashboard.geometry_assets import load_geometry_bundle
-
-    geom = load_geometry_bundle()
-    rows = []
-    for lid in geom.location_ids:
-        feature = geom.zone_feature(lid) or {}
-        props = feature.get("properties", {}) if isinstance(feature, dict) else {}
-        rows.append({"location_id": lid, "zone": props.get("zone", ""), "borough": props.get("borough", "")})
-    return rows
-
-
-def test_parse_natural_language_booking_matches_real_tlc_zone_names_without_crash():
-    """Regression: 'ZoneCentroidLookup' object has no attribute 'coords' when a TLC zone name matched."""
-    now_ref = datetime(2026, 11, 1, 12, 0, tzinfo=NYC_TZ)
-    zones = _real_tlc_zones()
-    assert any(z["zone"] == "Greenpoint" for z in zones)
-
-    # Two real TLC zone names -> both resolved to WGS84 centroids inside NYC
-    res = parse_natural_language_booking("Đặt xe từ Astoria đi Greenpoint lúc 9h sáng mai", now_nyc=now_ref, zones=zones)
-    assert res["ok"] is True
-    assert res["pickup"]["zone"] == "Astoria"
-    assert res["dropoff"]["zone"] == "Greenpoint"
-    for loc in (res["pickup"], res["dropoff"]):
-        assert -74.35 <= loc["longitude"] <= -73.65
-        assert 40.45 <= loc["latitude"] <= 40.95
-
-    # Unknown place + 'đi Greenpoint' -> Greenpoint is the DROPOFF, clear partial-match message, no exception
-    partial = parse_natural_language_booking("đặt xe từ queens college đi greenpoint", now_nyc=now_ref, zones=zones)
-    assert partial["ok"] is False
-    assert partial["pickup"] is None
-    assert partial["dropoff"]["zone"] == "Greenpoint"
-    assert "Điểm đến" in partial["error"] and "$" not in partial["error"]
-
-
-def test_nlp_vietnamese_toi_pronoun_or_preposition_does_not_force_pm():
-    now_ref = datetime(2026, 11, 2, 10, 0, tzinfo=NYC_TZ)
-    res = parse_natural_language_booking(
-        "Đặt xe cho tôi từ Times Square tới JFK lúc 6h sáng mai",
-        now_nyc=now_ref,
-    )
-    assert res["ok"] is True
-    assert res["pickup_hour"] == 6, f"Expected 6 AM, got {res['pickup_hour']}"
-
-
-def test_nlp_prefix_zone_names_do_not_double_match_single_mention():
-    now_ref = datetime(2026, 11, 2, 10, 0, tzinfo=NYC_TZ)
-    zones = [
-        {"location_id": 12, "zone": "Battery Park", "borough": "Manhattan"},
-        {"location_id": 13, "zone": "Battery Park City", "borough": "Manhattan"},
-        {"location_id": 132, "zone": "JFK Airport", "borough": "Queens"},
-    ]
-    res = parse_natural_language_booking(
-        "Từ Battery Park City đi JFK lúc 9h sáng mai",
-        now_nyc=now_ref,
-        zones=zones,
-    )
-    assert res["ok"] is True
-    assert res["pickup"]["location_id"] == 13
-    assert res["dropoff"]["location_id"] == 132
+def test_auto_trigger_estimate_still_runs_after_quick_book_removal(monkeypatch):
+    app, predictor = _gold_v3_app(monkeypatch)
+    app.session_state["_auto_trigger_estimate"] = True
+    app.run(timeout=15)
+    assert not app.exception
+    assert predictor.predict.call_count == 1
 
 
 def test_readme_b0_global_metrics_and_cli_flags_are_accurate():
