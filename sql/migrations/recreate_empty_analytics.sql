@@ -26,6 +26,7 @@ END
 $$;
 
 DROP VIEW IF EXISTS analytics.vw_trip_enriched;
+DROP MATERIALIZED VIEW IF EXISTS analytics.mv_multisource_summary;
 DROP TABLE IF EXISTS analytics.fact_trip;
 DROP TABLE IF EXISTS analytics.etl_load_log;
 DROP TABLE IF EXISTS analytics.dim_weather;

@@ -258,10 +258,11 @@ def validate_schema(connection: Any) -> None:
 
 
 def create_indexes(connection: Any) -> list[str]:
-    """Build deferred indexes and the non-materialized convenience view."""
+    """Build deferred indexes, the convenience view and the dashboard summary."""
     with connection.transaction():
         _sql_file(connection, "postload/create_indexes.sql")
         _sql_file(connection, "postload/create_views.sql")
+        _sql_file(connection, "postload/create_aggregates.sql")
     return list_indexes(connection)
 
 

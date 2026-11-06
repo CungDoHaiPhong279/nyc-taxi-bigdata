@@ -187,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
                 indexes = create_indexes(connection)
                 logger.info("Analytical indexes present: %s", ", ".join(indexes))
                 logger.info("Non-materialized analytics.vw_trip_enriched view is present")
+                logger.info("analytics.mv_multisource_summary rebuilt")
             if args.validate or args.all:
                 validate_schema(connection)
                 report = collect_validation_report(connection, list(gold.values()))
