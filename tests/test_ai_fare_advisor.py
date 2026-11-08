@@ -615,3 +615,55 @@ def test_readme_pipeline_commands_use_only_flags_the_script_defines():
         source = (root / "scripts" / script).read_text(encoding="utf-8")
         for flag in re.findall(r"--[\w-]+", args):
             assert f'"{flag}"' in source, f"{script} has no {flag}"
+
+
+def test_backtest_script_picks_the_same_scheduled_hour_as_the_app():
+    import importlib.util
+    from pathlib import Path
+    import numpy as np
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "eval_departure_advice.py"
+    spec = importlib.util.spec_from_file_location("eval_departure_advice", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    # Weekday (wk=0) route 161 -> 236: default mean 20.0 USD, n=400, var=4.0 (3*SE ~= 0.424 USD).
+    # - hour 1: offsets -2..-4 < 0 skipped; h=0 costs 22.0 (+2.0), h=2..5 cost 20.0 -> None (no suggestion).
+    # - hour 12: h=13 (+1) and h=11 (-1) both cost 18.0 (save 2.00 USD, score 1.60) -> tie-break picks h=13 (+1).
+    # - hour 17: rush hour (+2.50); h=13 (-4, earlier) saves 2.50 surcharge + 2.00 history = 4.50 USD (score ~1.286),
+    #   beating h=15 (-2, save 2.50, score 1.25) and h=16 (-1, save 1.00, score 0.80) -> picks h=13 (-4).
+    # - hour 22: offsets +2..+4 > 23 skipped; h=21 costs 23.0, h=18..19 add rush surcharge -> None (no suggestion).
+    means = {h: 20.0 for h in range(24)}
+    means.update({0: 22.0, 11: 18.0, 13: 18.0, 16: 19.0, 21: 23.0})
+    trips, variance = 400, 4.0
+
+    shape = (264, 264, 2, 24)
+    stats = {k: np.zeros(shape, np.float64) for k in ("hn", "hs", "hq")}
+    for h, mean_h in means.items():
+        stats["hn"][161, 236, 0, h] = trips
+        stats["hs"][161, 236, 0, h] = trips * mean_h
+        stats["hq"][161, 236, 0, h] = trips * (variance + mean_h * mean_h)
+
+    flat_curve = [{"hour": h, "fare_amount_usd": 20.0, "metered_ml_usd": 20.0} for h in range(24)]
+    history = {h: _hour_stats(mean_h, trips=trips, variance=variance) for h, mean_h in means.items()}
+    expected_hours = {1: None, 12: 13, 17: 13, 22: None}
+
+    for hour in (1, 12, 17, 22):
+        picked = module.choose(stats, {}, 161, 236, 0, hour, "history", mode="scheduled")
+        option = build_fare_explanation_and_advice(
+            prediction={**_BASE_PREDICTION, "hourly_curve": flat_curve},
+            pickup_zone=_ZONES[0],
+            dropoff_zone=_ZONES[1],
+            pickup_dt=datetime(2025, 6, 11, hour, 30, tzinfo=NYC_TZ),
+            mode="scheduled",
+            now_nyc=datetime(2025, 6, 1, tzinfo=NYC_TZ),
+            route_hour_history=history,
+        )["nearest_better_option"]
+
+        picked_hour = picked[1] if picked else None
+        app_hour = option["hour"] if option["has_better_nearby"] else None
+        assert picked_hour == app_hour == expected_hours[hour]
+        if picked:
+            assert picked[2] == pytest.approx(option["savings_usd"], abs=0.01)
+

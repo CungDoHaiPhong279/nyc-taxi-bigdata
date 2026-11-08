@@ -12,7 +12,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 | **1. Bài toán đặt ra** | **Dự báo cước trước chuyến đi (*Pre-trip Fare Estimation*)**: Ước tính cước cơ bản (`fare_amount`, USD) ngay khi khách chọn điểm đón/đến trên ứng dụng, trước khi xe lăn bánh. |
 | **2. Thách thức lớn nhất** | **Tuyệt đối tránh rò rỉ dữ liệu (*Zero Data Leakage*)**: Không dùng quãng đường hay thời gian di chuyển thực tế trên đồng hồ. Dự báo hoàn toàn dựa trên: khoảng cách tâm vùng Taxi Zones (*Haversine*), chu kỳ giờ/thứ/ngày lễ và thời tiết khí tượng ERA5. |
 | **3. Xử lý Dữ liệu Lớn** | Pipeline **PySpark Batch ELT** xử lý **24,08M** dòng thô qua 4 tầng Medallion (`Raw -> Bronze -> Silver -> Gold`), lọc sạch `0,82%` dữ liệu bẩn, lưu trữ **23,88M** dòng sạch (khớp 100% bản đồ, 99,92% thời tiết ERA5). |
-| **4. Kho Dữ liệu Phục vụ** | **PostgreSQL 16 Star Schema** (`analytics.fact_trip`: 23,88M dòng, Zero-Loss), tối ưu Deferred Indexing KPI Dashboard mất 1,2–4,7 giây khi đã có cache và 26–52 giây ở lần đầu; bảng đa nguồn đọc từ bảng tổng hợp sẵn `analytics.mv_multisource_summary` (`10.147` dòng) nên chỉ mất dưới 0,5 giây. |
+| **4. Kho Dữ liệu Phục vụ** | **PostgreSQL 16 Star Schema** (`analytics.fact_trip`: 23,88M dòng, Zero-Loss), tối ưu Deferred Indexing; KPI Dashboard đọc từ bảng tổng hợp sẵn `analytics.mv_kpi_buckets` (`34.802` dòng) nên câu SQL chỉ mất khoảng 0,04 giây cả ở lần đầu (trước đây 26–52 giây vì quét toàn bộ fact); bảng đa nguồn đọc từ bảng tổng hợp sẵn `analytics.mv_multisource_summary` (`10.147` dòng) nên chỉ mất dưới 0,5 giây. |
 | **5. Mô hình Học máy (AI)** | **`GBTRegressor` (Chuỗi cây tăng cường độ dốc) trên Spark MLlib** kết hợp **Quy tắc cước cố định JFK 70 USD** (`Ratecode 2`). Vượt trội 4 mô hình đối chứng (Baseline B0, LR, RF, GBT-w) với **`MAE = 2,92 USD`** và **`R² = 86,85%`** trên chuyến đồng hồ chuẩn (`ratecode_id = 1`); trên mọi loại chuyến là **`MAE = 4,06 USD`**, **`R² = 75,3%`** (xem mục 4.3). |
 | **6. Triển khai & Giao diện** | Microservice suy luận đóng băng (`fare-inference:8000`, chấm điểm đồng thời đường cong 24h trong khoảng 0,3–0,5 giây/lượt) + Giao diện Streamlit Bản đồ tương tác Mapbox 2 chiều + **Bảng kê phụ phí và gợi ý giờ khởi hành (`ai_fare_advisor.py`)**: định giá bằng `M3-nw`, thời tiết tự động chỉ để tham khảo (`M3-w` chỉ chạy khi người dùng tự nhập thời tiết), công khai Phụ phí chính thức NYC TLC và đề xuất khung giờ gần đó thường rẻ hơn, dựa trên phụ phí TLC và lịch sử tuyến (xem mục 4.4). |
 
@@ -133,6 +133,8 @@ Gợi ý giờ đi dựa trên hai nguồn: phụ phí TLC theo giờ (chắc ch
 
 Kiểm chứng ngược trên 300 tuyến đông nhất tháng 06/2025 (dữ liệu chưa dùng để dựng lịch sử), so với cước trung bình thực tế theo giờ:
 
+Chế độ "Đi ngay" (chỉ xét 1–4 giờ sau):
+
 | Gợi ý không nhờ phụ phí | Mô hình (cách cũ) | Lịch sử tuyến (hiện tại) |
 | :--- | ---: | ---: |
 | Số gợi ý | `765` | `1.147` |
@@ -142,7 +144,20 @@ Kiểm chứng ngược trên 300 tuyến đông nhất tháng 06/2025 (dữ li�
 | Mức hứa → thực tế (USD) | `0,64 → 0,82` | `1,01 → 0,99` |
 | Tương quan hứa và thực tế | `0,21` | `0,57` |
 
-Gợi ý nhờ né phụ phí đúng `99,7%`. Kiểm tra độc lập trên mọi tuyến, với lịch sử 01–04/2025 và tháng 05/2025, cho `86,6%` rẻ hơn thực sự, nhưng mức hứa cao hơn thực tế (`1,26 → 1,04 USD`). Đây là mức trung bình theo tháng và chỉ kiểm chứng chế độ "Đi ngay", không bảo đảm cho một chuyến cụ thể. Tái lập bằng `scripts/eval_departure_advice.py`.
+Gợi ý nhờ né phụ phí đúng `99,7%`. Kiểm tra độc lập trên mọi tuyến, với lịch sử 01–04/2025 và tháng 05/2025, cho `86,6%` rẻ hơn thực sự, nhưng mức hứa cao hơn thực tế (`1,26 → 1,04 USD`).
+
+Chế độ "Đặt lịch" (xét 1–4 giờ trước và sau), cùng 300 tuyến và tháng 06/2025, chỉ cách hiện tại:
+
+| Chỉ tiêu | Không nhờ phụ phí | Có né phụ phí |
+| :--- | ---: | ---: |
+| Số gợi ý | `2.467` | `1.720` |
+| Thực sự rẻ hơn | `91,0%` | `95,5%` |
+| Rẻ hơn rõ ràng về thống kê | `60,1%` | `80,5%` |
+| Làm tốn thêm từ 0,40 USD | `3,4%` | `2,4%` |
+| Mức hứa → thực tế (USD) | `1,46 → 1,49` | `2,01 → 2,02` |
+| Tương quan hứa và thực tế | `0,83` | — |
+
+Gợi ý né phụ phí ở chế độ này thấp hơn chế độ "Đi ngay" (`95,5%` so với `99,7%`) vì đi sớm hơn để né phụ phí đêm có thể rơi vào giờ chiều đông xe. Kiểm tra độc lập trên mọi tuyến với tháng 05/2025 cho `93,6%` gợi ý không nhờ phụ phí rẻ hơn thực sự (`1,72 → 1,83 USD`). Đây là mức trung bình theo tháng, không bảo đảm cho một chuyến cụ thể. Tái lập bằng `scripts/eval_departure_advice.py` (thêm `--mode scheduled` cho chế độ "Đặt lịch").
 
 ---
 

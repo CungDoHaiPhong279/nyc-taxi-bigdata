@@ -50,12 +50,13 @@
 | `analytics.fact_fare_prediction` | Bảng Fact lưu kết quả dự đoán của 5 mô hình ML | `170.395` | `prediction_id` (`89.625` dòng Validation + `80.770` dòng Test) |
 | `analytics.model_metrics` | Bảng tổng hợp kết quả đánh giá mô hình & Drift 2026 | `24` | `(model_key, split)` |
 | `analytics.mv_multisource_summary` | Materialized View tổng hợp sẵn theo Tháng × Vùng đón × Thời tiết × Loại ngày cho Dashboard | `10.147` | Dựng lại bằng `load_postgres.py --create-indexes` sau khi nạp dữ liệu |
+| `analytics.mv_kpi_buckets` | Materialized View gom chuyến theo Tháng × Giờ × Vùng đón cho KPI trang lịch sử | `34.802` | Tổng `23.886.265` chuyến, khớp `fact_trip` |
 | `analytics.mv_route_hour_fare` | Materialized View thống kê cước theo Tuyến × Loại ngày × Giờ (01–05/2025) cho gợi ý giờ đi | `69.217` | Mỗi khung giờ có ít nhất `30` chuyến |
 | `analytics.etl_load_log` | Nhật ký kiểm toán và đối soát quá trình nạp dữ liệu | `6` (fact) / `9` (tổng) | `100% status = 'loaded'`, `row_delta = 0` |
 
 2.3. **Tối ưu hóa Truy vấn & Sao lưu**:
 - Áp dụng kỹ thuật **Deferred Indexing** (tắt index khi `COPY` hàng loạt 23,88 triệu dòng, sau đó tạo B-Tree index bằng `sql/postload/create_indexes.sql`).
-- Truy vấn Dashboard sử dụng tiền tổng hợp theo cụm (`WITH buckets AS (...)`) kết hợp `GROUP BY GROUPING SETS` trong giao dịch `REPEATABLE READ, READ ONLY`, nhờ đó KPI tổng hợp 23,88 triệu dòng mất `1,2–4,7 giây` khi đã có cache và `26–52 giây` ở lần đầu. Bảng đa nguồn ban đầu phải nối toàn bộ fact với thời tiết và lịch, mất khoảng `1–2,7 phút` khi lọc một tháng và vượt giới hạn `180 giây` khi không lọc. Dự án xử lý bằng Materialized View `analytics.mv_multisource_summary` (`10.147` dòng, dựng lại trong `~32 giây` bằng `load_postgres.py --create-indexes`), giảm thời gian truy vấn xuống dưới `0,5 giây` và cho kết quả trùng khớp với truy vấn gốc.
+- Truy vấn Dashboard sử dụng tiền tổng hợp theo cụm (`WITH buckets AS (...)`) kết hợp `GROUP BY GROUPING SETS` trong giao dịch `REPEATABLE READ, READ ONLY`, nhưng vẫn mất `26–52 giây` ở lần đầu vì phải quét cả 23,88 triệu dòng. Phần gom nhóm `buckets` nay được tính sẵn thành `analytics.mv_kpi_buckets` (`34.802` dòng, tổng `23.886.265` chuyến), nên câu SQL KPI chỉ còn khoảng `0,04 giây` với mọi tháng và `0,01–0,17 giây` khi lọc một tháng và một borough, kết quả giữ nguyên. Bảng đa nguồn ban đầu phải nối toàn bộ fact với thời tiết và lịch, mất khoảng `1–2,7 phút` khi lọc một tháng và vượt giới hạn `180 giây` khi không lọc. Dự án xử lý bằng Materialized View `analytics.mv_multisource_summary` (`10.147` dòng, dựng lại trong `~32 giây` bằng `load_postgres.py --create-indexes`), giảm thời gian truy vấn xuống dưới `0,5 giây` và cho kết quả trùng khớp với truy vấn gốc.
 
 ---
 
@@ -133,6 +134,8 @@ Tập `721.513` chuyến năm 2026 lấy từ `.sandbox/pretrip-v2/pilot-2026-06
 
 Kiểm chứng ngược trên 300 tuyến đông nhất tháng 06/2025 (dữ liệu chưa dùng để dựng lịch sử), so với cước trung bình thực tế theo giờ:
 
+Chế độ "Đi ngay" (chỉ xét 1–4 giờ sau):
+
 | Gợi ý không nhờ phụ phí | Mô hình (cách cũ) | Lịch sử tuyến (hiện tại) |
 | :--- | ---: | ---: |
 | Số gợi ý | `765` | `1.147` |
@@ -142,7 +145,20 @@ Kiểm chứng ngược trên 300 tuyến đông nhất tháng 06/2025 (dữ li�
 | Mức hứa → thực tế (USD) | `0,64 → 0,82` | `1,01 → 0,99` |
 | Tương quan hứa và thực tế | `0,21` | `0,57` |
 
-Gợi ý nhờ né phụ phí đúng `99,7%`. Kiểm tra độc lập trên mọi tuyến, với lịch sử 01–04/2025 và tháng 05/2025, cho `86,6%` rẻ hơn thực sự, nhưng mức hứa cao hơn thực tế (`1,26 → 1,04 USD`). Đây là mức trung bình theo tháng và chỉ kiểm chứng chế độ "Đi ngay", không bảo đảm cho một chuyến cụ thể. Tái lập bằng `scripts/eval_departure_advice.py`.
+Gợi ý nhờ né phụ phí đúng `99,7%`. Kiểm tra độc lập trên mọi tuyến, với lịch sử 01–04/2025 và tháng 05/2025, cho `86,6%` rẻ hơn thực sự, nhưng mức hứa cao hơn thực tế (`1,26 → 1,04 USD`).
+
+Chế độ "Đặt lịch" (xét 1–4 giờ trước và sau), cùng 300 tuyến và tháng 06/2025, chỉ cách hiện tại:
+
+| Chỉ tiêu | Không nhờ phụ phí | Có né phụ phí |
+| :--- | ---: | ---: |
+| Số gợi ý | `2.467` | `1.720` |
+| Thực sự rẻ hơn | `91,0%` | `95,5%` |
+| Rẻ hơn rõ ràng về thống kê | `60,1%` | `80,5%` |
+| Làm tốn thêm từ 0,40 USD | `3,4%` | `2,4%` |
+| Mức hứa → thực tế (USD) | `1,46 → 1,49` | `2,01 → 2,02` |
+| Tương quan hứa và thực tế | `0,83` | — |
+
+Gợi ý né phụ phí ở chế độ này thấp hơn chế độ "Đi ngay" (`95,5%` so với `99,7%`) vì đi sớm hơn để né phụ phí đêm có thể rơi vào giờ chiều đông xe. Kiểm tra độc lập trên mọi tuyến với tháng 05/2025 cho `93,6%` gợi ý không nhờ phụ phí rẻ hơn thực sự (`1,72 → 1,83 USD`). Đây là mức trung bình theo tháng, không bảo đảm cho một chuyến cụ thể. Tái lập bằng `scripts/eval_departure_advice.py` (thêm `--mode scheduled` cho chế độ "Đặt lịch").
 
 ---
 

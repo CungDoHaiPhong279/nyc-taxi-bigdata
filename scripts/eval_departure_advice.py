@@ -6,6 +6,7 @@ replays the advice rule on the holdout month, and compares with that month's act
 Usage:
   python scripts/eval_departure_advice.py <out_dir> --holdout-month 6
   python scripts/eval_departure_advice.py <out_dir> --holdout-month 5
+  python scripts/eval_departure_advice.py <out_dir> --holdout-month 6 --mode scheduled
 
 To compare with the served model's hourly curve (June only), run this script once so it
 writes <out_dir>/advice_routes.json, run scripts/eval_departure_advice_curve.py, then run
@@ -71,13 +72,14 @@ def surcharge(weekend: int, hour: int) -> float:
     return (2.5 if (weekend == 0 and 16 <= hour < 20) else 0.0) + (1.0 if (hour >= 20 or hour < 6) else 0.0)
 
 
-def choose(stats, model, pu, do, wk, hour, source):
-    """The app's 'now' mode: forward 1..4 hours, savings at or above the minimum, best score."""
+def choose(stats, model, pu, do, wk, hour, source, mode="now"):
+    """The app's 'now' (forward 1..4h) or 'scheduled' (±1..±4h) mode: savings at or above the minimum, best score."""
     best = None
     now = cell(stats, "h", (pu, do, wk, hour))
-    for offset in (1, 2, 3, 4):
+    offsets = (1, 2, 3, 4) if mode == "now" else (1, -1, 2, -2, 3, -3, 4, -4)
+    for offset in offsets:
         later_hour = hour + offset
-        if later_hour > 23:
+        if not (0 <= later_hour <= 23):
             continue
         saved_surcharge = surcharge(wk, hour) - surcharge(wk, later_hour)
         estimate = 0.0
@@ -91,13 +93,13 @@ def choose(stats, model, pu, do, wk, hour, source):
                     estimate = diff
         saving = saved_surcharge + estimate
         if saving >= MIN_SAVING_USD:
-            score = saving / (offset * 0.75 + 0.5)
+            score = saving / (abs(offset) * 0.75 + 0.5)
             if best is None or score > best[0]:
                 best = (score, later_hour, saving, saved_surcharge)
     return best
 
 
-def evaluate(label, stats, model, routes, source) -> None:
+def evaluate(label, stats, model, routes, source, mode="now") -> None:
     records, cells = [], 0
     for pu, do in routes:
         for wk in (0, 1):
@@ -106,7 +108,7 @@ def evaluate(label, stats, model, routes, source) -> None:
                 if not actual or actual[0] < MIN_TRIPS:
                     continue
                 cells += 1
-                picked = choose(stats, model, pu, do, wk, hour, source)
+                picked = choose(stats, model, pu, do, wk, hour, source, mode=mode)
                 if not picked:
                     continue
                 later = cell(stats, "j", (pu, do, wk, picked[1]))
@@ -115,7 +117,7 @@ def evaluate(label, stats, model, routes, source) -> None:
                 diff = actual[1] - later[1]
                 records.append((picked[2], picked[3], diff + picked[3], diff,
                                 math.sqrt(actual[2] / actual[0] + later[2] / later[0])))
-    print(f"{label}: hours checked {cells}, suggestions {len(records)}")
+    print(f"{label} ({mode}): hours checked {cells}, suggestions {len(records)}")
     if not records:
         return
     r = np.array(records)
@@ -139,6 +141,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("out_dir", type=Path)
     parser.add_argument("--holdout-month", type=int, default=6, choices=range(2, 7))
+    parser.add_argument("--mode", choices=("now", "scheduled"), default="now")
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     cache = args.out_dir / f"advice_stats_{args.holdout_month:02d}.npz"
@@ -155,11 +158,11 @@ def main() -> None:
     curve_path = args.out_dir / "advice_model.json"
     if curve_path.exists() and args.holdout_month == 6:
         model = {(r[0], r[1], r[2], r[3]): r[4] for r in json.loads(curve_path.read_text(encoding="utf-8"))}
-        evaluate("300 busiest routes, served model curve", stats, model, busiest, "model")
-    evaluate("300 busiest routes, surcharges only", stats, {}, busiest, "none")
-    evaluate("300 busiest routes, surcharges and history", stats, {}, busiest, "history")
-    evaluate("all routes, surcharges only", stats, {}, everywhere, "none")
-    evaluate("all routes, surcharges and history", stats, {}, everywhere, "history")
+        evaluate("300 busiest routes, served model curve", stats, model, busiest, "model", mode=args.mode)
+    evaluate("300 busiest routes, surcharges only", stats, {}, busiest, "none", mode=args.mode)
+    evaluate("300 busiest routes, surcharges and history", stats, {}, busiest, "history", mode=args.mode)
+    evaluate("all routes, surcharges only", stats, {}, everywhere, "none", mode=args.mode)
+    evaluate("all routes, surcharges and history", stats, {}, everywhere, "history", mode=args.mode)
 
 
 if __name__ == "__main__":
