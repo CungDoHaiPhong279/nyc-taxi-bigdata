@@ -810,7 +810,7 @@ def render_pipeline_monitoring(base_url: str) -> None:
         startup_s = _seconds_label(m5_srv.get("startup_seconds"))
         st.info(
             f"**Hiệu năng Huấn luyện & Phục vụ AI:**\n"
-            f"- **Huấn luyện Spark ML:** Trích xuất mẫu phân tầng từ 23,88 triệu dòng mất **{prep_s} giây**; huấn luyện cả 5 mô hình mất **{train_s} giây** (số ghi nhận lúc huấn luyện).\n"
+            f"- **Huấn luyện Spark ML:** Trích xuất mẫu phân tầng từ 23,88 triệu dòng mất **{prep_s} giây**; huấn luyện 4 mô hình Spark ML mất **{train_s} giây** (số ghi nhận lúc huấn luyện).\n"
             f"- **Tài nguyên Container hiện tại:** Máy chủ suy luận `fare-inference` dùng **{inf_mem or 'N/A'} / {inf_lim or 'N/A'} MB RAM** "
             f"(mô hình chỉ nạp để dự đoán, luồng phục vụ không có bước huấn luyện; khởi động **{startup_s}s**); "
             f"Giao diện `dashboard` dùng **{dash_mem or 'N/A'} / {dash_lim or 'N/A'} MB RAM**."

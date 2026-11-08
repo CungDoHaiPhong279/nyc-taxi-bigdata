@@ -74,7 +74,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 
 ### 3.2. Thuật toán Học máy & Chỉ số Đánh giá Mô hình
 - **Phân biệt Nền tảng (Platform) vs. Mô hình (Model)**:
-  - **Nền tảng thực thi**: **Apache Spark (PySpark)** + **Spark MLlib** (bộ công cụ tính toán phân tán giúp huấn luyện song song trên hàng chục triệu bản ghi dữ liệu lớn).
+  - **Nền tảng thực thi**: **Apache Spark (PySpark)** + **Spark MLlib** (PySpark quét toàn bộ 23,88 triệu dòng ở bước chuẩn bị dữ liệu; mô hình được huấn luyện trên mẫu phân tầng `336.864` dòng, Spark chạy `local[2]` trên một máy).
   - **Mô hình / Thuật toán AI cụ thể**: **`GBTRegressor` (Gradient Boosted Trees)** — thuật toán chuỗi cây quyết định tăng cường độ dốc, mỗi cây kế tiếp học cách sửa sai số thặng dư của cây phía trước.
 - **Baseline `B0` (Mô hình Thống kê Cơ sở)**: Phương pháp tra cứu giá cước trung vị lịch sử theo cặp *(Vùng đón, Vùng trả, Khung giờ)* mà không dùng trí tuệ nhân tạo, dùng làm mốc chuẩn để chứng minh hiệu quả vượt trội của Học máy.
 - **`M1` (Linear Regression - Hồi quy Tuyến tính)**: Mô hình học máy cơ bản giả định mối quan hệ tuyến tính giữa các đặc trưng và giá cước.
@@ -97,7 +97,7 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 | Chỉ số Giám sát | Kết quả Thực nghiệm | Ý nghĩa & Ghi chú Kiểm chứng |
 | :--- | :--- | :--- |
 | **1. Trạng thái ETL (`Job Status`)** | **`6/6 PASS (100%)`** | Nạp thành công 100% cả 6 phân vùng tháng (`2025-01` → `2025-06`) và 3 bảng chiều vào PostgreSQL. |
-| **2. Thời gian xử lý (`Processing Time`)** | **`864 giây / tháng`** | Tổng nạp PostgreSQL `5.184s` (~4.600 dòng/giây); trích mẫu ML `28,3s`; huấn luyện 5 mô hình `100,2s`. |
+| **2. Thời gian xử lý (`Processing Time`)** | **`864 giây / tháng`** | Tổng nạp PostgreSQL `5.184s` (~4.600 dòng/giây); trích mẫu ML `28,3s`; huấn luyện 4 mô hình Spark ML `131,0s`. |
 | **3. Đối soát số dòng (`Reconciliation`)** | **`23.886.265 dòng`** | Khớp tuyệt đối giữa Silver/Gold Parquet và bảng `analytics.fact_trip` (`Chênh lệch = 0 / Zero-Loss`). |
 | **4. Tỷ lệ lọc dữ liệu bẩn (`Reject Rate`)** | **`0,82%` (`197.119` dòng)** | Lọc từ `24.083.384` dòng Raw; tầng Gold khớp **100% Taxi Zones** và **99,92% Thời tiết ERA5**. |
 | **5. Dịch vụ AI & RAM (`Serving Health`)** | **`READY (200 OK)`** | Mô hình đóng băng, luồng phục vụ không có bước huấn luyện; container `fare-inference` dùng `~850–930 / 3072 MB RAM`. |
@@ -105,12 +105,12 @@ Hệ thống tích hợp **24,08 triệu chuyến xe NYC Yellow Taxi (2025)** v�
 ### 4.2. So sánh 6 Cấu hình Mô hình (Holdout Test 06/2025 — `80.770` chuyến đồng hồ chuẩn `ratecode_id = 1`) & Kiểm chứng Năm 2026 (`721.513` chuyến)
 | Mô hình | Thuật toán Cốt lõi | Dùng Thời tiết | MAE 2025 (USD) ↓ | RMSE 2025 (USD) ↓ | R² 2025 (%) ↑ | P50 2025 (USD) ↓ | MAE Năm 2026 (USD) ↓ |
 | :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: |
-| **1. Trung vị toàn cục (`B0_global`)** | Thống kê cơ sở đơn giản | Không | `7,90` | `13,33` | `-13,22%` | `4,20` | `8,54` |
-| **2. Thống kê Tuyến & Giờ (`Baseline B0`)** | Nhóm theo Tuyến và Khung giờ | Không | `3,35` | `6,51` | `72,94%` | `2,10` | `3,53` |
-| **3. Hồi quy Tuyến tính (`M1 - LR`)** | Spark MLlib `LinearRegression` | Có | `3,21` | `4,81` | `85,21%` | `2,33` | — |
-| **4. Rừng Ngẫu nhiên (`M2 - RF`)** | Spark MLlib `RandomForestRegressor` | Có | `3,12` | `4,67` | `86,09%` | `2,24` | — |
-| **5. GBT + Thời tiết ERA5 (`M3-w`)** | Spark MLlib `GBTRegressor` | Có | `2,99` | `4,60` | `86,52%` | `2,11` | — |
-| **6. GBT Tối ưu (`M3-nw` — Đang dùng)** | **Spark MLlib `GBTRegressor` + JFK Rule** | **Không** | **`2,92`** | **`4,54`** | **`86,85%`** | **`2,05`** | **`3,08` (`R² = 83,0%`)** |
+| **1. Trung vị toàn cục (`B0_global`)** | Thống kê cơ sở đơn giản | Không | `7,90` | `13,33` | `-13,22%` | `4,20` | — |
+| **2. Thống kê Tuyến & Giờ (`Baseline B0`)** | Nhóm theo Tuyến và Khung giờ | Không | `3,35` | `6,51` | `72,94%` | `2,10` | `3,62` |
+| **3. Hồi quy Tuyến tính (`M1 - LR`)** | Spark MLlib `LinearRegression` | Có | `3,21` | `4,81` | `85,21%` | `2,36` | — |
+| **4. Rừng Ngẫu nhiên (`M2 - RF`)** | Spark MLlib `RandomForestRegressor` | Có | `3,12` | `4,67` | `86,09%` | `2,30` | — |
+| **5. GBT + Thời tiết ERA5 (`M3-w`)** | Spark MLlib `GBTRegressor` | Có | `2,99` | `4,60` | `86,52%` | `2,14` | — |
+| **6. GBT Tối ưu (`M3-nw` — Đang dùng)** | **Spark MLlib `GBTRegressor`** | **Không** | **`2,92`** | **`4,54`** | **`86,85%`** | **`2,05`** | **`3,08` (`R² = 83,0%`)** |
 
 ### 4.3. Phạm vi của các con số: chuyến đồng hồ chuẩn và mọi loại chuyến
 Bảng 4.2 chỉ tính chuyến `ratecode_id = 1`, đúng phạm vi huấn luyện. Khi người dùng đặt xe, mô hình không biết trước loại ratecode, nên cần xem cả các nhóm còn lại. Bảng dưới chấm mẫu ngẫu nhiên 5% (`197.930` chuyến, sai số MAE khoảng `± 0,03 USD`) của `3.946.190` chuyến hợp lệ tháng 06/2025 bằng đúng `M3-nw` + quy tắc JFK. Nhóm `ratecode_id = 1` ra `2,93 USD`, khớp với `2,92 USD` của bảng 4.2.
@@ -169,7 +169,7 @@ nyc-taxi-bigdata/
 ├── assets/taxi_zones/             # Bản đồ ranh giới 263 vùng NYC TLC (GeoJSON & Manifest)
 ├── config/                        # Cấu hình hệ thống, hợp đồng đặc trưng ML & 5 Metrics
 ├── dashboard/app.py               # Entrypoint ứng dụng Web Streamlit
-├── distribution/models/gold-v3/   # Gói mô hình Spark GBT Gold V3 đóng băng (24 file kèm SHA-256)
+├── distribution/models/gold-v3/   # Gói mô hình Spark GBT Gold V3 đóng băng (25 file kèm SHA-256)
 ├── k8s/                           # Bản kê khai Kubernetes (Deployment, Service, HPA, Probes)
 ├── reports/
 │   ├── FINAL_REPORT_OUTLINE.md    # Nội dung chi tiết 6 Chương Báo cáo Cuối kỳ

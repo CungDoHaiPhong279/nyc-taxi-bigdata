@@ -82,7 +82,7 @@ Giá cước TB chỉ tính cước trong `(0; 500]` USD và quãng đường TB
 
 3.3. **5 Chỉ số Giám sát Pipeline (DataOps & MLOps Monitoring)**:
 1. **Metric 1 — Trạng thái tác vụ ETL (`Job Status`)**: `6/6` phân vùng tháng (`2025-01` → `2025-06`) đạt trạng thái `LOADED` (`100% Healthy`).
-2. **Metric 2 — Thời gian xử lý (`Processing Time`)**: Tổng thời gian nạp PostgreSQL `5.184,25 giây` (trung bình `864,0 giây/tháng`); chuẩn bị mẫu ML `28,3 giây`; huấn luyện 5 mô hình Spark ML `100,2 giây`.
+2. **Metric 2 — Thời gian xử lý (`Processing Time`)**: Tổng thời gian nạp PostgreSQL `5.184,25 giây` (trung bình `864,0 giây/tháng`); chuẩn bị mẫu ML `28,3 giây`; huấn luyện 4 mô hình Spark ML `131,0 giây`.
 3. **Metric 3 — Đối soát số dòng (`Row Reconciliation`)**: `source_row_count = 23.886.265` khớp tuyệt đối `loaded_row_count = 23.886.265` (`row_delta = 0`, Zero-Loss).
 4. **Metric 4 — Tỷ lệ lọc dữ liệu bẩn (`Silver Reject Rate`)**: `0,82%` (`197.119 / 24.083.384` dòng).
 5. **Metric 5 — Sức khỏe Dịch vụ AI & Tài nguyên (`Serving Health & RAM`)**: Endpoint `http://fare-inference:8000/ready` phản hồi `200 OK`, mô hình đóng băng (luồng phục vụ không có bước huấn luyện), tiêu thụ `~850–930 MB / 3072 MB RAM` (container suy luận) và `~149 MB / 1024 MB RAM` (container giao diện).
@@ -91,7 +91,7 @@ Giá cước TB chỉ tính cước trong `(0; 500]` USD và quãng đường TB
 
 ### Chương 4: Huấn luyện & Đánh giá Mô hình Học máy Phân tán (Spark MLlib & MLflow)
 4.1. **Thiết kế Đặc trưng Trước chuyến đi (Zero Data Leakage)**:
-- Chỉ sử dụng thông tin biết trước khi xe lăn bánh: `pickup_location_id`, `dropoff_location_id`, `pickup_borough`, `dropoff_borough`, khoảng cách tâm vùng Haversine `zone_centroid_distance_km`, cờ nội vùng `is_same_zone`, chu kỳ giờ đón `hour_sin/hour_cos`, chu kỳ thứ trong tuần `dow_sin/dow_cos`, `is_weekend`, `is_holiday`, và các biến thời tiết ERA5 (`temperature_2m`, `precipitation`, `snowfall`, `wind_speed_10m`, `is_raining`, `is_heavy_rain`, `is_snowing`).
+- Chỉ sử dụng thông tin biết trước khi xe lăn bánh: vùng đón `pickup_zone` và vùng trả `dropoff_zone` (biến phân loại), khoảng cách tâm vùng Haversine `zone_centroid_distance_km`, cờ nội vùng `is_same_zone`, chu kỳ giờ đón `pickup_hour_sin/pickup_hour_cos`, chu kỳ thứ trong tuần `pickup_dow_sin/pickup_dow_cos`, `is_weekend`, `is_holiday` (10 đặc trưng của `M3-nw`); `M3-w` thêm 4 biến thời tiết ERA5 `temperature_2m`, `precipitation`, `snowfall`, `wind_speed_10m` (14 đặc trưng).
 - **Bảo toàn 100% vùng hoạt động**: Kỹ thuật lấy mẫu phân tầng bổ sung (`rare_zone_stratified_rows_added = 4.469`) đảm bảo tập Train phủ đủ `258/258` vùng đón và `259/259` vùng trả có phát sinh chuyến chuẩn, kết hợp fallback về toàn bộ `263/263` vùng bản đồ NYC.
 - **Quy tắc nghiệp vụ Sân bay JFK ↔ Manhattan (`Ratecode 2`)**: Phát hiện `574.524 / 574.602` chuyến (`99,9864%`) tuân theo mức giá cố định `70,00 USD` của NYC TLC, được tích hợp thành quy tắc chính xác tuyệt đối trước khi gọi cây quyết định.
 
@@ -101,9 +101,9 @@ Giá cước TB chỉ tính cước trong `(0; 500]` USD và quãng đường TB
 | :---: | :--- | :--- | :--- | :---: | ---: | ---: | ---: | ---: |
 | 1 | `B0_global_median` | Trung vị toàn cục (Mốc cơ sở đơn giản) | Không | `7,90 USD` | `13,33 USD` | `-13,22%` | `4,20 USD` |
 | 2 | `B0_hierarchical_median` | Thống kê theo Tuyến & Giờ (Baseline B0) | Không | `3,35 USD` | `6,51 USD` | `72,94%` | `2,10 USD` |
-| 3 | `M1_linear_regression` | Hồi quy Tuyến tính (`LinearRegression` — ElasticNet) | Có | `3,21 USD` | `4,81 USD` | `85,21%` | `2,33 USD` |
-| 4 | `M2_random_forest` | Rừng Ngẫu nhiên (`RandomForestRegressor` — 80 cây) | Có | `3,12 USD` | `4,67 USD` | `86,09%` | `2,24 USD` |
-| 5 | `M3_gbt_weather` | Gradient Boosted Trees + Thời tiết ERA5 (`M3-w`) | Có | `2,99 USD` | `4,60 USD` | `86,52%` | `2,11 USD` |
+| 3 | `M1_linear_regression` | Hồi quy Tuyến tính (`LinearRegression` — Ridge, `regParam = 0,1`) | Có | `3,21 USD` | `4,81 USD` | `85,21%` | `2,36 USD` |
+| 4 | `M2_random_forest` | Rừng Ngẫu nhiên (`RandomForestRegressor` — 30 cây) | Có | `3,12 USD` | `4,67 USD` | `86,09%` | `2,30 USD` |
+| 5 | `M3_gbt_weather` | Gradient Boosted Trees + Thời tiết ERA5 (`M3-w`) | Có | `2,99 USD` | `4,60 USD` | `86,52%` | `2,14 USD` |
 | **6** | **`M3_nw_gbt_no_weather`** | **GBT Tối ưu Không cần Thời tiết (`M3-nw` — Đang dùng)** | **Không** | **`2,92 USD`** | **`4,54 USD`** | **`86,85%`** | **`2,05 USD`** |
 
 4.3. **Phạm vi của các con số**: Bảng 4.2 chỉ gồm chuyến đồng hồ chuẩn. Chấm mẫu ngẫu nhiên 5% (`197.930` chuyến) của `3.946.190` chuyến hợp lệ tháng 06/2025 bằng `M3-nw` + quy tắc JFK cho kết quả:
