@@ -434,6 +434,24 @@ def test_a_later_hour_with_higher_fares_loses_its_surcharge_saving():
     assert option["savings_usd"] == pytest.approx(1.50)
 
 
+def test_message_explains_a_history_rise_that_reduces_the_saving():
+    dt = datetime(2025, 6, 11, 17, 30, tzinfo=NYC_TZ)
+    curve = [{"hour": h, "fare_amount_usd": 20.0, "metered_ml_usd": 20.0} for h in range(24)]
+    option = build_fare_explanation_and_advice(
+        prediction={**_BASE_PREDICTION, "hourly_curve": curve},
+        pickup_zone=_ZONES[0],
+        dropoff_zone=_ZONES[1],
+        pickup_dt=dt,
+        mode="now",
+        now_nyc=dt,
+        route_hour_history={17: _hour_stats(20.0), 20: _hour_stats(20.5), 21: _hour_stats(20.5)},
+    )["nearest_better_option"]
+    # 2.50 rush - 1.00 night - 0.50 history = 1.00 USD, and the message names every part.
+    assert option["hour"] == 20
+    assert option["savings_usd"] == pytest.approx(1.00)
+    assert "0.50 USD cước đồng hồ thường cao hơn" in option["message_vi"]
+
+
 def test_message_mentions_the_night_surcharge_a_later_hour_adds():
     dt = datetime(2025, 6, 11, 17, 30, tzinfo=NYC_TZ)
     curve = [{"hour": h, "fare_amount_usd": 20.0, "metered_ml_usd": 20.0} for h in range(24)]

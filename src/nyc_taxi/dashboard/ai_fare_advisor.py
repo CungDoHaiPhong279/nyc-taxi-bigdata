@@ -762,6 +762,10 @@ def _find_nearest_better_hour(
             reason_text = " và ".join(reasons) if reasons else "tổng phụ phí khung giờ này thấp hơn"
             if pt.get("has_overnight") and not by_hour[current_hour].get("has_overnight"):
                 reason_text += " (đã trừ Phụ phí Ban đêm 1.00 USD phải trả thêm)"
+            if history_saving is not None and history_saving < 0:
+                reason_text += (
+                    f" (đã trừ khoảng {-history_saving:.2f} USD cước đồng hồ thường cao hơn theo lịch sử tuyến này)"
+                )
             shift_text = (
                 f"lùi {offset} tiếng" if offset > 0 else f"đi sớm hơn {abs(offset)} tiếng"
             )
