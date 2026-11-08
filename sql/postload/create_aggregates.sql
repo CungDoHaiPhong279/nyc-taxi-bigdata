@@ -1,3 +1,20 @@
+-- Precomputed KPI buckets (first page load took 26-52s scanning all of fact_trip; filters match VALID_FARE_SQL/VALID_DISTANCE_SQL).
+DROP MATERIALIZED VIEW IF EXISTS analytics.mv_kpi_buckets;
+CREATE MATERIALIZED VIEW analytics.mv_kpi_buckets AS
+SELECT
+    f.source_year,
+    f.source_month,
+    f.pickup_hour,
+    f.pickup_location_id,
+    COUNT(*) AS trip_count,
+    SUM(f.fare_amount) AS fare_sum,
+    SUM(f.fare_amount) FILTER (WHERE f.fare_amount > 0 AND f.fare_amount <= 500) AS valid_fare_sum,
+    COUNT(*) FILTER (WHERE f.fare_amount > 0 AND f.fare_amount <= 500) AS valid_fare_count,
+    SUM(f.trip_distance) FILTER (WHERE f.trip_distance > 0 AND f.trip_distance <= 100) AS valid_distance_sum,
+    COUNT(*) FILTER (WHERE f.trip_distance > 0 AND f.trip_distance <= 100) AS valid_distance_count
+FROM analytics.fact_trip AS f
+GROUP BY f.source_year, f.source_month, f.pickup_hour, f.pickup_location_id;
+
 -- Precomputed multisource summary for the historical dashboard: joining every
 -- fact row to weather and calendar on each page load took over 180 seconds.
 -- Rebuilt by `load_postgres.py --create-indexes`; rerun after loading new months.

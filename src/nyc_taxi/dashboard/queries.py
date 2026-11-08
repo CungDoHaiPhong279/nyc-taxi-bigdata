@@ -68,8 +68,8 @@ def build_aggregate_query(filters: DashboardFilters) -> tuple[TextClause, dict[s
         borough_where = "WHERE pu.borough IN :boroughs"
         parameters["boroughs"] = filters.boroughs
 
-    # Ordinary GROUP BY permits partial/final parallel aggregation of the fact.
-    # Join only the small location/hour/month buckets, not every trip. Borough
+    # Read precomputed location/hour/month buckets from mv_kpi_buckets instead of
+    # scanning fact_trip. Join only the small buckets, not every trip. Borough
     # filtering is safe after this reduction because location_id is a bucket key.
     # Keep independent non-NULL counts: averaging bucket averages is incorrect.
     # GROUPING masks remain total=15, source month=3, pickup hour=13, borough=14.
@@ -78,15 +78,10 @@ def build_aggregate_query(filters: DashboardFilters) -> tuple[TextClause, dict[s
         WITH buckets AS (
             SELECT
                 f.source_year, f.source_month, f.pickup_hour, f.pickup_location_id,
-                COUNT(*) AS trip_count,
-                SUM(f.fare_amount) AS fare_sum,
-                SUM(f.fare_amount) FILTER (WHERE {VALID_FARE_SQL}) AS valid_fare_sum,
-                COUNT(*) FILTER (WHERE {VALID_FARE_SQL}) AS valid_fare_count,
-                SUM(f.trip_distance) FILTER (WHERE {VALID_DISTANCE_SQL}) AS valid_distance_sum,
-                COUNT(*) FILTER (WHERE {VALID_DISTANCE_SQL}) AS valid_distance_count
-            FROM analytics.fact_trip AS f
+                f.trip_count, f.fare_sum, f.valid_fare_sum, f.valid_fare_count,
+                f.valid_distance_sum, f.valid_distance_count
+            FROM analytics.mv_kpi_buckets AS f
             {month_where}
-            GROUP BY f.source_year, f.source_month, f.pickup_hour, f.pickup_location_id
         )
         SELECT
             CASE GROUPING(b.source_year, b.source_month, b.pickup_hour, pu.borough)
@@ -178,6 +173,10 @@ def fetch_dashboard(
         result["queried_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         return result
     except (SQLAlchemyError, OSError, ValueError, KeyError) as exc:
+        if getattr(getattr(exc, "orig", None), "sqlstate", None) == "42P01":
+            raise DashboardQueryError(
+                "Chưa có bảng tóm tắt KPI. Hãy chạy `python scripts/load_postgres.py --create-indexes` rồi tải lại trang."
+            ) from None
         if getattr(getattr(exc, "orig", None), "sqlstate", None) == "57014":
             raise DashboardQueryError(
                 "Truy vấn vượt giới hạn 180 giây. Hãy chọn ít tháng hoặc borough hơn rồi thử lại."
