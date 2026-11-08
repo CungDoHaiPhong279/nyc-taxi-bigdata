@@ -186,7 +186,12 @@ def main() -> None:
     columns[2].metric(
         "Quãng đường TB (Average Distance)", "—" if data["average_distance"] is None else f"{data['average_distance']:,.2f} mi"
     )
-    columns[3].metric("Tổng doanh thu cước (Total Fare)", f"${data['total_fare']:,.2f}")
+    columns[3].metric(
+        "Tổng cước thô (Total Fare)",
+        f"${data['total_fare']:,.2f}",
+        help="Cộng mọi chuyến, kể cả cước âm (hoàn tiền) và lỗi đồng hồ, để khớp với kho dữ liệu; "
+        "giá cước TB bên cạnh chỉ tính cước trong khoảng (0; 500] USD.",
+    )
     st.caption(
         f"Aggregate SQL: {data['query_seconds']:.2f} giây · "
         f"Snapshot UTC: {data['queried_at']} · Cache tối đa {CACHE_TTL_SECONDS // 60} phút."
@@ -232,7 +237,7 @@ def main() -> None:
     st.divider()
     st.subheader("4. Tổng hợp Tích hợp Đa nguồn Dữ liệu (Taxi × Thời tiết ERA5 × Lịch Nghỉ lễ)")
     st.caption(
-        "Số liệu đối chiếu từ tầng Medallion Gold (23,88 triệu chuyến khớp 99,92% thời tiết ERA5 và 100% lịch nghỉ lễ Mỹ):"
+        "Số liệu đối chiếu từ tầng Medallion Gold (23,88 triệu chuyến khớp 99,92% thời tiết ERA5 và 99,9999% lịch nghỉ lễ Mỹ; 24 chuyến có ngày đón lỗi ngoài năm 2025):"
     )
     multisource = load_multisource_summary(active_months, active_boroughs)
     if multisource.get("is_fallback"):

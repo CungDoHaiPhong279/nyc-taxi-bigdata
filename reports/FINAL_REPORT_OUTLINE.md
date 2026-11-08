@@ -74,9 +74,11 @@
 | **Theo Điều kiện Thời tiết ERA5** | 1. Trời quang / Khô ráo (`0 mm/h`) | `81,2%` | `19,43 USD` | `5,48 km` |
 | **Theo Điều kiện Thời tiết ERA5** | 2. Mưa nhỏ & Mưa vừa (`< 2 mm/h`) | `15,1%` | `19,89 USD` | `5,41 km` |
 | **Theo Điều kiện Thời tiết ERA5** | 3. Mưa lớn / Có tuyết (`>= 2 mm/h`) | `3,7%` | `18,76 USD` | `5,00 km` |
+| **Theo Điều kiện Thời tiết ERA5** | 4. Không có dữ liệu thời tiết (`20.246` chuyến tối 30/06) | `0,1%` | `20,01 USD` | `6,50 km` |
 | **Theo Lịch Nghỉ lễ (US Calendar)** | 1. Ngày làm việc (`Thứ 2 – Thứ 6`) | `68,7%` | `19,43 USD` | `5,33 km` |
 | **Theo Lịch Nghỉ lễ (US Calendar)** | 2. Cuối tuần (`Thứ 7 & Chủ Nhật`) | `29,1%` | `19,51 USD` | `5,65 km` |
 | **Theo Lịch Nghỉ lễ (US Calendar)** | 3. Ngày nghỉ lễ Liên bang (`US Holiday`) | `2,1%` | `20,37 USD` | `6,36 km` |
+| **Theo Lịch Nghỉ lễ (US Calendar)** | 4. Ngoài lịch 2025 (ngày đón lỗi, `24` chuyến) | `0,0%` | `20,64 USD` | `6,37 km` |
 
 Giá cước TB chỉ tính cước trong `(0; 500]` USD và quãng đường TB chỉ tính `(0; 100]` dặm. Trên toàn bộ `23.886.265` chuyến, cước TB là `19,48 USD` (`17,90 USD` nếu tính cả `1.322.979` chuyến cước âm) và quãng đường TB là `3,39 dặm` (`6,86 dặm` nếu tính cả bản ghi lỗi, lớn nhất `386.088 dặm`). Tổng số chuyến và tổng doanh thu vẫn giữ mọi bản ghi để đối soát khớp với kho dữ liệu.
 

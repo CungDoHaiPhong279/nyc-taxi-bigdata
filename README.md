@@ -195,7 +195,7 @@ nyc-taxi-bigdata/
 ## 6. Hướng dẫn Khởi chạy Nhanh (Quick Start)
 
 ### 6.1. Khởi chạy Hệ thống 4 Containers (PostgreSQL + MLflow + AI Inference + Streamlit UI)
-**Yêu cầu**: Cài đặt **Docker Desktop** và tạo file `.env` từ `.env.example` (điền `MAPBOX_ACCESS_TOKEN` để bật tính năng tìm địa chỉ và vẽ bản đồ đường đi thực tế).
+**Yêu cầu**: Cài đặt **Docker Desktop** và tạo file `.env` từ `.env.example` (điền `POSTGRES_PASSWORD`; muốn tìm địa chỉ và vẽ đường đi thực tế thì điền `MAPBOX_ACCESS_TOKEN` và đổi `FARE_ADDRESS_ENABLED=1`, `FARE_ADDRESS_ALLOW_NETWORK=1`, vì file mẫu tắt sẵn để không gửi dữ liệu ra ngoài).
 
 ```powershell
 # 1. Khởi động Kho dữ liệu PostgreSQL 16 và máy chủ MLflow
@@ -224,6 +224,7 @@ docker compose -f docker-compose.yml -f docker-compose.inference.yml -f docker-c
 Nếu muốn tự chạy lại từng bước xử lý dữ liệu lớn và huấn luyện mô hình:
 ```powershell
 # Bước 1: Tải dữ liệu thô & chạy pipeline Medallion (Raw -> Bronze -> Silver -> Gold -> PostgreSQL)
+python scripts/bootstrap_calendar.py   # tạo data/raw/calendar/calendar_2025.csv nếu chưa có
 python scripts/download_raw_data.py --all
 python scripts/build_bronze.py --all
 python scripts/build_silver.py --all

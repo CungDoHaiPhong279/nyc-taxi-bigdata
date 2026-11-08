@@ -29,6 +29,61 @@ def test_gold_v3_identity_and_jfk_flat_fare_rule() -> None:
     assert JFK_MANHATTAN_FLAT_FARE_USD == 70.0
 
 
+def test_served_bundle_matches_its_manifest_and_tampering_is_refused(tmp_path) -> None:
+    import json
+    import shutil
+    from pathlib import Path
+
+    import pytest
+
+    from nyc_taxi.ml.gold_v3_inference import verify_bundle
+
+    bundle = Path(__file__).resolve().parents[1] / "distribution" / "models" / "gold-v3"
+    verify_bundle(bundle)
+
+    (tmp_path / "zones.csv").write_text("LocationID\n1\n", encoding="utf-8")
+    shutil.copy(bundle / "artifact_manifest.json", tmp_path / "artifact_manifest.json")
+    manifest = json.loads((tmp_path / "artifact_manifest.json").read_text(encoding="utf-8"))
+    manifest["files"] = [e for e in manifest["files"] if e["path"] == "zones.csv"]
+    (tmp_path / "artifact_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="zones.csv"):
+        verify_bundle(tmp_path)
+
+
+def test_timed_out_prediction_recovers_when_spark_returns() -> None:
+    import threading
+    from pathlib import Path
+
+    import pytest
+
+    from nyc_taxi.ml.gold_v3_inference import FrozenGoldV3Predictor
+    from nyc_taxi.ml.inference import InferenceError
+    from nyc_taxi.ml.pretrip_v23_features import load_calendar, load_zone_centroids
+
+    predictor = FrozenGoldV3Predictor(Path("unused"), Path("unused"), Path("unused"))
+    predictor.calendar, predictor.centroids = load_calendar(), load_zone_centroids()
+    predictor.ready, predictor.status = True, "ready"
+    spark_returns = threading.Event()
+
+    def slow_spark(*_args):
+        try:
+            spark_returns.wait(5)
+            raise RuntimeError("job cancelled")
+        finally:
+            predictor._busy.release()
+
+    predictor._run_spark_predict = slow_spark
+    payload = {"pickup_location_id": 161, "dropoff_location_id": 236, "pickup_datetime": "2025-06-11T12:30:00"}
+    with pytest.raises(InferenceError) as caught:
+        predictor.predict(payload, timeout=0.05)
+    assert caught.value.code == "prediction_timeout"
+    assert predictor.ready is False  # fail closed while the job may still be running
+
+    spark_returns.set()
+    predictor._executor.shutdown(wait=True)
+    assert predictor.ready is True and predictor.status == "ready"
+
+
 def test_derive_single_trip_features_with_and_without_weather() -> None:
     dt = datetime(2025, 7, 4, 9, 30, 0)  # July 4th holiday
     base_only = derive_single_trip_features(

@@ -27,6 +27,8 @@ SELECT
     f.source_month,
     f.pickup_location_id,
     CASE
+        WHEN w.weather_id IS NULL
+            THEN '4. Không có dữ liệu thời tiết'
         WHEN COALESCE(w.precipitation, 0) >= 2.0 OR COALESCE(w.snowfall, 0) > 0
             THEN '3. Mưa lớn / Có tuyết (>= 2 mm/h)'
         WHEN COALESCE(w.precipitation, 0) > 0
@@ -34,6 +36,8 @@ SELECT
         ELSE '1. Trời quang / Khô ráo (0 mm/h)'
     END AS weather_bucket,
     CASE
+        WHEN c.date_id IS NULL
+            THEN '4. Ngoài lịch 2025 (ngày đón lỗi)'
         WHEN COALESCE(c.is_holiday, false)
             THEN '3. Ngày nghỉ lễ Liên bang (Holiday)'
         WHEN COALESCE(c.is_weekend, false)

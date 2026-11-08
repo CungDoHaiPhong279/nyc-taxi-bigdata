@@ -285,3 +285,5 @@ def test_multisource_query_uses_calendar_date_id_and_reduces_fact_first():
     assert f"FILTER (WHERE {queries.VALID_FARE_SQL}) AS fare_sum" in summary
     assert f"FILTER (WHERE {queries.VALID_DISTANCE_SQL}) * 1.60934" in summary
     assert "COALESCE(f.calendar_date_id, f.pickup_date)" in summary
+    # Unmatched trips get their own bucket instead of counting as dry weekdays.
+    assert "WHEN w.weather_id IS NULL" in summary and "WHEN c.date_id IS NULL" in summary

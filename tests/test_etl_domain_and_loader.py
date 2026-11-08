@@ -23,9 +23,16 @@ def test_calendar_marks_2025_us_holidays():
     assert rows["2025-03-12"]["holiday_name"] == ""
 
 
-def test_weather_download_end_date_covers_june_30_nyc_evening():
-    # 2025-06-30 23:00 EDT is 2025-07-01 03:00 UTC
-    assert download_raw_data.WEATHER_END >= date(2025, 7, 1)
+def test_weather_download_window_matches_bronze_and_loader():
+    # Covering the 30/06 New York evening needs 2025-07-01 here, in build_bronze.py and in the
+    # loader's 4,344 hours together, plus a rebuild; a lone change breaks rerunning the pipeline.
+    from nyc_taxi.database.loader import EXPECTED_DIMENSION_COUNTS
+
+    bronze = (Path(__file__).resolve().parents[1] / "scripts" / "build_bronze.py").read_text(encoding="utf-8")
+    end = download_raw_data.WEATHER_END
+    assert f"expected_end=date({end.year}, {end.month}, {end.day})" in bronze
+    hours = ((end - download_raw_data.WEATHER_START).days + 1) * 24
+    assert EXPECTED_DIMENSION_COUNTS["weather"] == hours
 
 
 def test_save_manifest_rejects_nan_values(tmp_path: Path):

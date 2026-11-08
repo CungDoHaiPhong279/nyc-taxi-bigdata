@@ -7,6 +7,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 import csv
 from datetime import datetime
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -191,6 +192,15 @@ def is_jfk_manhattan_flat_fare(
     )
 
 
+def verify_bundle(model_dir: Path) -> None:
+    """Refuse to serve a bundle whose files differ from its artifact_manifest.json."""
+    manifest = json.loads((model_dir / "artifact_manifest.json").read_text(encoding="utf-8"))
+    for entry in manifest["files"]:
+        digest = hashlib.sha256((model_dir / entry["path"]).read_bytes()).hexdigest()
+        if digest != entry["sha256"]:
+            raise ValueError(f"Bundle file does not match its manifest: {entry['path']}")
+
+
 class FrozenGoldV3Predictor:
     """Bounded Spark predictor for Gold V3 (M3 weather + M3-nw no-weather + JFK flat-fare)."""
 
@@ -226,6 +236,7 @@ class FrozenGoldV3Predictor:
         self._load_started = True
         tick = time.perf_counter()
         try:
+            verify_bundle(self.model_dir)
             self.calendar = load_calendar()
             self.centroids = load_zone_centroids()
             baselines_path = self.model_dir / "baselines.json"
@@ -373,6 +384,11 @@ class FrozenGoldV3Predictor:
         finally:
             self._busy.release()
 
+    def _recover_after_timeout(self, _future: Any) -> None:
+        if self.status == "failed:prediction_timeout" and not self._closed:
+            self.ready = True
+            self.status = "ready"
+
     def predict(self, payload: dict[str, Any], *, timeout: float = REQUEST_TIMEOUT_SECONDS) -> dict[str, Any]:
         if not self.ready or self._closed:
             raise InferenceError("model_not_ready")
@@ -447,13 +463,15 @@ class FrozenGoldV3Predictor:
             )
             preds = future.result(timeout=timeout)
         except FutureTimeout:
+            self.ready = False
+            self.status = "failed:prediction_timeout"
             if self.spark is not None:
                 try:
                     self.spark.sparkContext.cancelJobGroup("gold-v3-predict")
                 except Exception:
                     pass
-            self.ready = False
-            self.status = "failed:prediction_timeout"
+            # Serve again once the cancelled job returns; a wedged JVM never does.
+            future.add_done_callback(self._recover_after_timeout)
             raise InferenceError("prediction_timeout", 504) from None
         except Exception:
             raise InferenceError("prediction_failed") from None

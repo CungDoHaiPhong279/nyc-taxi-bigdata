@@ -25,7 +25,9 @@ from nyc_taxi.ingestion.weather import download_weather, weather_url
 
 logger = logging.getLogger("raw-data-download")
 WEATHER_START = date(2025, 1, 1)
-WEATHER_END = date(2025, 7, 1)
+# Must match build_bronze.py and the loader's 4,344 hours. Extending to 2025-07-01 would cover
+# the 20,246 trips after 19:00 New York time on 30/06, but needs those two changed and a rebuild.
+WEATHER_END = date(2025, 6, 30)
 
 
 def month_range(start: str, end: str) -> list[str]:
