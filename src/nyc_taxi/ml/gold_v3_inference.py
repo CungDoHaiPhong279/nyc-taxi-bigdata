@@ -192,6 +192,9 @@ def is_jfk_manhattan_flat_fare(
     )
 
 
+BUSY_WAIT_SECONDS = 10.0
+
+
 def verify_bundle(model_dir: Path) -> None:
     """Refuse to serve a bundle whose files differ from its artifact_manifest.json."""
     manifest = json.loads((model_dir / "artifact_manifest.json").read_text(encoding="utf-8"))
@@ -450,7 +453,8 @@ class FrozenGoldV3Predictor:
             "dropoff": derived["dropoff_zone"] not in self.known_dropoff,
         }
 
-        if not self._busy.acquire(blocking=False):
+        # Spark runs one job at a time; a prediction takes about 0.5 s, so queue briefly instead of failing.
+        if not self._busy.acquire(timeout=BUSY_WAIT_SECONDS):
             raise InferenceError("service_busy")
 
         tick = time.perf_counter()

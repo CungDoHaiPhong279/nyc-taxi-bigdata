@@ -50,6 +50,39 @@ def test_served_bundle_matches_its_manifest_and_tampering_is_refused(tmp_path) -
         verify_bundle(tmp_path)
 
 
+def test_concurrent_predictions_queue_instead_of_failing() -> None:
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    from pathlib import Path
+
+    from nyc_taxi.ml.gold_v3_inference import FrozenGoldV3Predictor
+    from nyc_taxi.ml.pretrip_v23_features import load_calendar, load_zone_centroids
+
+    predictor = FrozenGoldV3Predictor(Path("unused"), Path("unused"), Path("unused"))
+    predictor.calendar, predictor.centroids = load_calendar(), load_zone_centroids()
+    predictor.ready, predictor.status = True, "ready"
+    running = threading.Lock()
+    overlaps = []
+
+    def fake_spark(*_args):
+        try:
+            overlaps.append(not running.acquire(blocking=False))
+            time.sleep(0.1)
+            running.release()
+            return {"pred_weather": None, "pred_no_weather": 20.0,
+                    "horizon_weather": None, "horizon_no_weather": [20.0] * 24}
+        finally:
+            predictor._busy.release()
+
+    predictor._run_spark_predict = fake_spark
+    payload = {"pickup_location_id": 161, "dropoff_location_id": 236, "pickup_datetime": "2025-06-11T12:30:00"}
+    with ThreadPoolExecutor(3) as pool:
+        results = list(pool.map(lambda _: predictor.predict(payload), range(3)))
+    assert len(results) == 3 and overlaps == [False, False, False]  # all served, one Spark job at a time
+    predictor._executor.shutdown(wait=True)
+
+
 def test_timed_out_prediction_recovers_when_spark_returns() -> None:
     import threading
     from pathlib import Path
